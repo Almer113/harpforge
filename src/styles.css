@@ -680,7 +680,7 @@ select:focus, .search:focus { border-color: var(--brass); }
 /* ---------- Simple tab ---------- */
 .simpletab { display: flex; flex-direction: column; gap: 10px; font-family: var(--mono); }
 .st-line { display: flex; flex-wrap: wrap; column-gap: 26px; row-gap: 8px; }
-.st-measure { display: inline-flex; flex-wrap: wrap; gap: 10px; }
+.st-measure { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 .st-note {
   min-width: 34px; padding: 2px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent;
   font: inherit; font-size: 20px; font-weight: 700; line-height: 1.4; text-align: center; cursor: pointer;
@@ -691,5 +691,3 @@ select:focus, .search:focus { border-color: var(--brass); }
 .st-note:hover { background: var(--panel-2); }
 .st-note.selected { border-color: var(--brass); }
 .st-note.active { background: rgba(227, 169, 72, 0.18); border-color: var(--brass-2); }
-/* Holes of a chord: a hair-thin gap so "8 9 10" never reads as "8910". */
-.st-hole + .st-hole { margin-left: 0.26em; }
