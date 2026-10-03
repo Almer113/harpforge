@@ -399,6 +399,7 @@ select:focus, .search:focus { border-color: var(--brass); }
 .mi-name { font-weight: 600; }
 .mi-ext { color: var(--faint); font-family: var(--mono); font-size: 11.5px; margin-left: 4px; }
 .mi-hint { color: var(--muted); font-size: 12px; }
+.mi-loses { color: var(--faint); font-size: 11px; font-style: italic; }
 
 /* ---------- Modal ---------- */
 .modal-backdrop {

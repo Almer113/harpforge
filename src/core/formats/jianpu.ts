@@ -14,7 +14,7 @@
 //   [G7] w: @ |      chord symbols, lyrics, sections, bars — as in .htab
 
 import type { Harmonica } from '../instruments';
-import { mod12, parsePitchClass } from '../pitch';
+import { keyUsesFlats, mod12, parseKey, parsePitchClass, pitchClassName } from '../pitch';
 import type { BarEvent, NoteEvent, RestEvent, TabDoc, TabEvent, TabLine } from '../htab/types';
 import { splitLyrics } from '../htab/parser';
 import { eventMidis, keyFifths, notesMeta, type Imported } from './common';
@@ -314,7 +314,10 @@ export function writeJianpu(doc: TabDoc, harp?: Harmonica): string {
   const out: string[] = [];
   if (meta.title) out.push(`title: ${meta.title}`);
   if (meta.artist) out.push(`artist: ${meta.artist}`);
-  out.push(`1=${key} ${meta.time} ♩=${Math.round(meta.tempo)}`, '');
+  // "1=" names do, the relative major's tonic: a minor or modal key is written as its own line.
+  const mode = parseKey(key)?.mode ?? 'major';
+  if (mode !== 'major') out.push(`key: ${key}`);
+  out.push(`1=${pitchClassName(doPc, keyUsesFlats(key))} ${meta.time} ♩=${Math.round(meta.tempo)}`, '');
   for (const line of doc.lines) {
     if (line.section) out.push(`@ ${line.section}`);
     if (!line.events.length) continue;

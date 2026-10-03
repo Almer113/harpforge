@@ -2,21 +2,12 @@
 // text (Ultimate Guitar style). Both become a chord-sheet document: one rest per
 // chord (one bar long) carrying the chord symbol and the lyrics sung over it.
 
-import { isChordSymbol, parseChord } from '../chords';
-import { pitchClassName, prefersFlats } from '../pitch';
+import { isChordSymbol, isNoChord, parseChord, transposeChord } from '../chords';
+import { prefersFlats } from '../pitch';
 import { beatsPerBar, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine } from '../htab/types';
 import { notesMeta, type Imported } from './common';
 
-/** Transposes a chord symbol by semitones (keeps the quality; spells by key). */
-export function transposeChord(symbol: string, semis: number, flats = false): string {
-  if (!semis) return symbol;
-  const info = parseChord(symbol);
-  if (!info) return symbol;
-  const m = /^([A-G][#b♯♭]?)(.*?)(?:\/([A-G][#b♯♭]?))?$/.exec(symbol.trim())!;
-  const root = pitchClassName(info.root + semis, flats);
-  const bass = info.bass !== undefined ? '/' + pitchClassName(info.bass + semis, flats) : '';
-  return root + m[2] + bass;
-}
+export { transposeChord };
 
 const SECTION_DIRECTIVES: Record<string, string> = {
   soc: 'Chorus', start_of_chorus: 'Chorus',
@@ -74,10 +65,10 @@ export function parseChordPro(text: string): Imported {
       else if (name === 'tempo') meta.tempo = Math.max(20, Math.min(300, parseFloat(value) || meta.tempo));
       else if (name === 'time') meta.time = /^\d+\/\d+$/.test(value) ? value : meta.time;
       else if (name === 'capo') capo = parseInt(value, 10) || 0;
-      else if (SECTION_DIRECTIVES[name]) pendingSection = value || SECTION_DIRECTIVES[name];
-      else if (/^(start_of_|so)/.test(name) && !/tab|grid/.test(name)) pendingSection = value || name.replace(/^start_of_|^so/, '');
       else if (name === 'sot' || name === 'start_of_tab' || name === 'start_of_grid' || name === 'sog') inTab = true;
       else if (name === 'eot' || name === 'end_of_tab' || name === 'end_of_grid' || name === 'eog') inTab = false;
+      else if (SECTION_DIRECTIVES[name]) pendingSection = value || SECTION_DIRECTIVES[name];
+      else if (/^(start_of_|so)/.test(name)) pendingSection = value || name.replace(/^start_of_|^so/, '');
       else if (name === 'comment' || name === 'c' || name === 'ci' || name === 'comment_italic') pendingSection = value;
       continue;
     }
@@ -91,7 +82,8 @@ export function parseChordPro(text: string): Imported {
     while ((m = segRe.exec(line))) {
       parts[parts.length - 1].text += line.slice(last, m.index);
       const sym = m[1].trim().replace(/^\*/, '');
-      if (parseChord(sym)) parts.push({ sym, text: '' });
+      if (isNoChord(sym)) parts.push({ sym: 'N.C.', text: '' });
+      else if (parseChord(sym)) parts.push({ sym, text: '' });
       last = m.index + m[0].length;
     }
     parts[parts.length - 1].text += line.slice(last);
@@ -119,7 +111,7 @@ export function parseChordPro(text: string): Imported {
       const ev: RestEvent = { kind: 'rest', beats: beats[k] };
       if (sg.sym) {
         const flats = prefersFlats(meta.key) || /b/.test(sg.sym.slice(1, 2));
-        ev.chord = transposeChord(sg.sym, capo, flats);
+        ev.chord = isNoChord(sg.sym) ? 'N.C.' : transposeChord(sg.sym, capo, flats);
       }
       if (sg.text) ev.lyric = sg.text;
       events.push(ev);
@@ -156,6 +148,8 @@ export function chordsOverLyricsToChordPro(text: string): string {
   const src = text.replace(/\r\n?/g, '\n').replace(/\t/g, '    ').split('\n');
   const out: string[] = [];
   let i = 0;
+  // Lines read as the title or artist, so they aren't sung as lyrics too.
+  const used = new Set<number>();
 
   // Title / artist / capo / key from the top of the sheet.
   for (let k = 0; k < Math.min(src.length, 12); k++) {
@@ -163,12 +157,19 @@ export function chordsOverLyricsToChordPro(text: string): string {
     let m = /^(.+?)\s+(?:chords|tabs?|ukulele chords)\s+by\s+(.+)$/i.exec(l);
     if (m) {
       out.push(`{title: ${m[1].trim()}}`, `{artist: ${m[2].trim()}}`);
+      used.add(k);
       continue;
     }
     m = /^(?:title|song)\s*:\s*(.+)$/i.exec(l);
-    if (m) out.push(`{title: ${m[1].trim()}}`);
+    if (m) {
+      out.push(`{title: ${m[1].trim()}}`);
+      used.add(k);
+    }
     m = /^(?:artist|by)\s*:\s*(.+)$/i.exec(l);
-    if (m) out.push(`{artist: ${m[1].trim()}}`);
+    if (m) {
+      out.push(`{artist: ${m[1].trim()}}`);
+      used.add(k);
+    }
   }
   for (const l of src) {
     const capo = /\bcapo\s*:?\s*(\d+)/i.exec(l) ?? /\bcapo\s+(?:on\s+)?(\d+)(?:st|nd|rd|th)?\s+fret/i.exec(l);
@@ -186,14 +187,19 @@ export function chordsOverLyricsToChordPro(text: string): string {
   }
   if (!out.some((l) => l.startsWith('{title'))) {
     // Only a line standing alone above the song (before any section or chords) can be the title.
-    const head: string[] = [];
-    for (const l of src) {
+    const head: { l: string; k: number }[] = [];
+    for (let k = 0; k < src.length; k++) {
+      const l = src[k];
       if (/^\s*(```|~~~)/.test(l)) continue;
-      if (isChordLine(l) || SECTION_RE.test(l)) break;
-      if (l.trim()) head.push(l.trim());
+      // Stop at the song: chords (over the lyrics or inline like "[G]words") or a section.
+      if (isChordLine(l) || SECTION_RE.test(l) || /\[[A-G][^\]]*\]/.test(l)) break;
+      if (l.trim()) head.push({ l: l.trim(), k });
     }
-    const first = head.find((l) => !/^(capo|key|tuning|tempo|bpm|description|difficulty|author)\b/i.test(l));
-    if (first && first.length < 60 && head.length <= 4) out.push(`{title: ${first}}`);
+    const first = head.find((h) => !/^(capo|key|tuning|tempo|bpm|description|difficulty|author)\b/i.test(h.l));
+    if (first && first.l.length < 60 && head.length <= 4) {
+      out.push(`{title: ${first.l}}`);
+      used.add(first.k);
+    }
   }
 
   let inDiagrams = false;
@@ -201,6 +207,7 @@ export function chordsOverLyricsToChordPro(text: string): string {
     const line = src[i];
     const trimmed = line.trim();
     if (
+      used.has(i) ||
       !trimmed ||
       /^(```|~~~)/.test(trimmed) ||
       /^(capo|key|tuning|tempo|bpm|description|difficulty|author|strumming|rating|transpose)\b/i.test(trimmed) ||
@@ -241,7 +248,7 @@ export function chordsOverLyricsToChordPro(text: string): string {
       let m: RegExpExecArray | null;
       while ((m = re.exec(line))) {
         const sym = m[0].replace(/[(),]/g, '');
-        if (isChordSymbol(sym)) chords.push({ col: m.index, sym });
+        if (isChordSymbol(sym) || isNoChord(sym)) chords.push({ col: m.index, sym: isNoChord(sym) ? 'N.C.' : sym });
       }
       if (next !== undefined && next.trim() && !isChordLine(next) && !SECTION_RE.test(next)) {
         // Merge the chord line into the lyric line at the chord columns.

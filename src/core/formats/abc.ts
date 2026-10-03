@@ -51,9 +51,14 @@ export function parseAbc(text: string): Imported {
 
   const setMeter = (v: string) => {
     const t = v.trim();
-    if (t === 'C') meta.time = '4/4';
-    else if (t === 'C|') meta.time = '2/2';
-    else if (/^\d+\/\d+$/.test(t)) meta.time = t;
+    const time = t === 'C' ? '4/4' : t === 'C|' ? '2/2' : /^\d+\/\d+$/.test(t) ? t : null;
+    if (!time) return;
+    if (inBody) {
+      // A tab has one time signature: keep the first (note lengths don't change with M:).
+      if (time !== meta.time) warnOnce(`The time signature changes to ${time} during the tune; the tab keeps ${meta.time}.`);
+      return;
+    }
+    meta.time = time;
     if (!unitSet) {
       const [n, d] = meta.time.split('/').map(Number);
       unit = n / d < 0.75 ? 1 / 16 : 1 / 8;
@@ -64,7 +69,9 @@ export function parseAbc(text: string): Imported {
     if (!k || /^(none|HP|Hp)/.test(k)) return;
     const f = keyFifths(k);
     if (f !== null) fifths = f;
-    meta.key = k.replace(/\s+(clef|transpose|octave|middle)=.*$/, '').trim();
+    const name = k.replace(/\s+(clef|transpose|octave|middle)=.*$/, '').trim();
+    if (!inBody || !meta.key) meta.key = name;
+    else if (name !== meta.key) warnOnce(`The key changes to ${name} during the tune; the song key stays ${meta.key}.`);
   };
   const setField = (field: string, value: string) => {
     const v = value.trim();
@@ -111,9 +118,12 @@ export function parseAbc(text: string): Imported {
     }
   };
 
-  const attachLyrics = (textLine: string) => {
+  let lyricRest: (NoteEvent | null)[] = [];
+  let lastField = '';
+  const attachLyrics = (textLine: string, continued = false) => {
     // Tokenize: syllables separated by spaces or hyphens; _ * skip; | to next bar (approximate: ignored).
-    const notes = pendingLyricNotes;
+    const notes = continued ? lyricRest : pendingLyricNotes;
+    if (!continued && !notes.length && lastField === 'w') warnOnce('Only the first verse of the lyrics was imported.');
     let k = 0;
     const re = /(\\-|[^\s\-_*|~]|~)+-?|[_*]|\|/g;
     let m: RegExpExecArray | null;
@@ -127,6 +137,7 @@ export function parseAbc(text: string): Imported {
       const target = notes[k++];
       if (target && !target.tied) target.lyric = tok.replace(/\\-/g, '-').replace(/~/g, ' ');
     }
+    lyricRest = notes.slice(k);
     pendingLyricNotes = [];
   };
 
@@ -158,9 +169,15 @@ export function parseAbc(text: string): Imported {
     const line = raw.replace(/(^|[^\\])%.*$/, '$1');
     const trimmed = line.trim();
     if (!trimmed) continue;
-    const field = /^([A-Za-z]):(.*)$/.exec(trimmed);
+    // "+:" continues the field above it (most often a long lyrics line).
+    const field = /^([A-Za-z+]):(.*)$/.exec(trimmed);
     if (field && !/^[|[]/.test(trimmed)) {
       const [, f, v] = field;
+      if (f === '+') {
+        if (lastField === 'w' && (!currentVoice || currentVoice === firstVoice)) attachLyrics(v, true);
+        continue;
+      }
+      lastField = f;
       if (f === 'w') {
         // A line of harmonica holes (as HarpForge writes under the staff) is the tab, not lyrics.
         const hole = String.raw`<?(?:\\-)?\d{1,2}'{0,3}o?`;
@@ -182,6 +199,7 @@ export function parseAbc(text: string): Imported {
       continue;
     }
     if (!inBody) continue;
+    lastField = '';
     if (currentVoice && firstVoice && currentVoice !== firstVoice) continue;
 
     // Music line
@@ -232,6 +250,15 @@ export function parseAbc(text: string): Imported {
     };
 
     while (i < s.length) {
+      // Music of another voice ("[V:2] ..." on the same line) is skipped up to the next voice change.
+      if (currentVoice && firstVoice && currentVoice !== firstVoice) {
+        const next = s.indexOf('[V:', i);
+        if (next < 0) break;
+        const inline = /^\[V:([^\]]*)\]/.exec(s.slice(next));
+        if (inline) setField('V', inline[1]);
+        i = next + (inline ? inline[0].length : 3);
+        continue;
+      }
       const c = s[i];
       if (/\s/.test(c) || c === '`' || c === 'y' || c === '\\') {
         i++;
@@ -295,7 +322,14 @@ export function parseAbc(text: string): Imported {
         const m = /^(:*\[?\|+\]?:*|:+\|*:*|\[\d[\d,-]*|\[\|)\d*/.exec(s.slice(i));
         const tok = m ? m[0] : c;
         i += tok.length;
+        if (/^\[\d/.test(tok) || /\|\d/.test(tok)) warnOnce('1st/2nd endings were written out in a row (a tab has no endings): check the repeats.');
         if (/^\[\d/.test(tok)) continue; // ending marker
+        if (/^:+\|*:+$/.test(tok) || /^:\|+:$/.test(tok)) {
+          // "::" / ":|:" — the end of one repeat and the start of the next.
+          events.push({ kind: 'bar', style: 'repeat-end' }, { kind: 'bar', style: 'repeat-start' });
+          barAcc = {};
+          continue;
+        }
         let style: BarEvent['style'] = 'single';
         if (tok.startsWith(':') && tok.endsWith(':')) style = 'repeat-end';
         else if (tok.startsWith(':')) style = 'repeat-end';
@@ -343,7 +377,11 @@ export function parseAbc(text: string): Imported {
       // Note
       const nm = /^([\^=_]*)([A-Ga-g])([,']*)(\d*\/*\d*)/.exec(s.slice(i));
       if (nm) {
-        const midi = pitchOf(nm[1], nm[2], nm[3]);
+        let midi = pitchOf(nm[1], nm[2], nm[3]);
+        // A note tied over a bar line keeps its accidental ("^F-|F" is F# both times).
+        const ln = lastNote as PendingNote | null; // set inside pushNote
+        const prev = ln?.ev.sounds[0];
+        if (tieOpen && !nm[1] && prev?.type === 'pitch' && ln!.ev.sounds.length === 1 && Math.abs(prev.midi - midi) <= 2 && sameLetter(prev.midi, midi)) midi = prev.midi;
         const beats = unit * 4 * durationOf(nm[4]);
         i += nm[0].length;
         pushNote({ kind: 'note', sounds: [{ type: 'pitch', midi }], beats }, midi);
@@ -379,6 +417,13 @@ export function parseAbc(text: string): Imported {
 
   if (!inBody) warnings.push('No "K:" line found — is this an ABC file?');
   return { doc: { meta, lines }, warnings, format: 'ABC' };
+}
+
+/** Whether two pitches within a whole step are spellings of the same note letter (F / F#, B / Bb). */
+function sameLetter(a: number, b: number): boolean {
+  const letterOf = (m: number) => 'CCDDEFFGGAAB'[((m % 12) + 12) % 12];
+  const flatOf = (m: number) => 'CDDEEFGGAABB'[((m % 12) + 12) % 12];
+  return letterOf(a) === letterOf(b) || flatOf(a) === flatOf(b) || letterOf(a) === flatOf(b) || flatOf(a) === letterOf(b);
 }
 
 // ---- Export ---------------------------------------------------------------------

@@ -74,6 +74,9 @@ export function parseChord(symbol: string): ChordInfo | null {
   return { symbol: s, root, intervals, tones: intervals.map((i) => mod12(root + i)), bass };
 }
 
+/** "N.C." (no chord): a silent bar in a chord sheet. */
+export const isNoChord = (symbol: string) => /^N\.?C\.?$/i.test(symbol.trim());
+
 /** Whether a word looks like a chord symbol (for chord-over-lyrics detection). */
 export function isChordSymbol(word: string): boolean {
   const w = word.replace(/^\(|\)$/g, '');
@@ -174,8 +177,8 @@ export function findHarmonicaChord(harp: Harmonica, chord: ChordInfo): Harmonica
 }
 
 /** A chord symbol moved by `semis` semitones: "G7" + 2 → "A7", "C/E" + 1 → "Db/F" (with flats). Unknown symbols are kept. */
-export function transposeChord(symbol: string, semis: number, flats: boolean): string {
-  if (!parseChord(symbol)) return symbol;
+export function transposeChord(symbol: string, semis: number, flats = false): string {
+  if (!semis || !parseChord(symbol)) return symbol;
   const move = (name: string) => pitchClassName(mod12(parsePitchClass(name.replace('♯', '#').replace('♭', 'b'))! + semis), flats);
   return symbol.trim().replace(/^([A-G][#b♯♭]?)(.*?)(?:\/([A-G][#b♯♭]?))?$/, (_, root: string, rest: string, bass?: string) => move(root) + rest + (bass ? '/' + move(bass) : ''));
 }

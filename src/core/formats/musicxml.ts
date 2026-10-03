@@ -1,11 +1,11 @@
 // MusicXML (partwise) import & export. Import reads the first part and first voice.
 
 import { strFromU8, unzipSync } from 'fflate';
-import { parseChord } from '../chords';
+import { isNoChord, parseChord } from '../chords';
 import type { Harmonica } from '../instruments';
 import { holeSoundText } from '../htab/serializer';
-import { beatsPerBar, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine } from '../htab/types';
-import { pitchClassName } from '../pitch';
+import { beatsPerBar, type BarStyle, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine } from '../htab/types';
+import { parseKey, pitchClassName } from '../pitch';
 import type { HoleSound } from '../types';
 import { eventMidis, keyFifths, notesMeta, spell, type Imported } from './common';
 
@@ -59,8 +59,22 @@ export function parseMusicXml(xml: string): Imported {
   let tempoSet = false;
   let measuresInLine = 0;
   let explicitBreaks = false;
+  let timeSet = false;
+  // Position in the measure, and how far our voice has got: notes stacked under it
+  // after a <backup> (another voice without a <voice> tag) are skipped.
+  let pos = 0;
+  let end = 0;
+  const warned = new Set<string>();
+  const warnOnce = (w: string) => {
+    if (!warned.has(w)) {
+      warned.add(w);
+      warnings.push(w);
+    }
+  };
 
   for (const measure of [...part.getElementsByTagName('measure')]) {
+    pos = 0;
+    end = 0;
     const print = child(measure, 'print');
     if (print && (print.getAttribute('new-system') === 'yes' || print.getAttribute('new-page') === 'yes') && events.length) {
       explicitBreaks = true;
@@ -82,14 +96,38 @@ export function parseMusicXml(xml: string): Imported {
           }
           const beats = text(el, 'beats');
           const beatType = text(el, 'beat-type');
-          if (beats && beatType) meta.time = `${beats}/${beatType}`;
+          if (beats && beatType) {
+            // A tab has one time signature: keep the first.
+            if (!timeSet) meta.time = `${beats}/${beatType}`;
+            else if (`${beats}/${beatType}` !== meta.time) warnOnce(`The time signature changes to ${beats}/${beatType} during the piece; the tab keeps ${meta.time}.`);
+            timeSet = true;
+          }
+          break;
+        }
+        case 'backup': {
+          pos -= parseFloat(text(el, 'duration') ?? '0') / divisions;
+          break;
+        }
+        case 'forward': {
+          // A forward in our own voice is a silent stretch (a hidden rest).
+          const beats = parseFloat(text(el, 'duration') ?? '0') / divisions;
+          const v = text(el, 'voice');
+          if ((!v || v === voice) && pos >= end - 1e-6 && beats > 0) {
+            events.push({ kind: 'rest', beats });
+            last = null;
+            end = pos + beats;
+          }
+          pos += beats;
           break;
         }
         case 'direction':
         case 'sound': {
           const sound = el.nodeName === 'sound' ? el : child(el, 'sound');
-          const tempo = sound?.getAttribute('tempo');
-          if (tempo && !tempoSet) {
+          const perMinute = el.nodeName === 'direction' ? text(el, 'per-minute') : undefined;
+          const unit = el.nodeName === 'direction' ? text(el, 'beat-unit') : undefined;
+          const unitBeats = unit === 'half' ? 2 : unit === 'eighth' ? 0.5 : unit === 'whole' ? 4 : 1;
+          const tempo = sound?.getAttribute('tempo') ?? (perMinute ? String(parseFloat(perMinute) * unitBeats * (child(el, 'beat-unit-dot') ? 1.5 : 1)) : undefined);
+          if (tempo && !tempoSet && parseFloat(tempo) > 0) {
             meta.tempo = Math.round(parseFloat(tempo));
             tempoSet = true;
           }
@@ -98,6 +136,10 @@ export function parseMusicXml(xml: string): Imported {
           break;
         }
         case 'harmony': {
+          if (child(el, 'kind')?.textContent?.trim() === 'none') {
+            pendingChord = 'N.C.';
+            break;
+          }
           const root = text(el, 'root-step');
           if (!root) break;
           const alter = parseFloat(text(el, 'root-alter') ?? '0');
@@ -114,10 +156,18 @@ export function parseMusicXml(xml: string): Imported {
           if (child(el, 'grace') || child(el, 'cue')) break;
           const v = text(el, 'voice') ?? '1';
           voice ??= v;
-          if (v !== voice) break;
           const isChord = !!child(el, 'chord');
           const dur = parseFloat(text(el, 'duration') ?? '0');
           const beats = dur / divisions;
+          const at = pos;
+          if (!isChord) pos += beats;
+          if (v !== voice) break;
+          // Behind where our voice has got to: a second layer of music (after a <backup>).
+          if (!isChord && at < end - 1e-6) {
+            warnOnce('Only the top line of music was imported (the part has several layers).');
+            break;
+          }
+          if (!isChord) end = Math.max(end, pos);
           const pitchEl = child(el, 'pitch');
           let midi: number | null = null;
           if (pitchEl) {
@@ -154,7 +204,8 @@ export function parseMusicXml(xml: string): Imported {
           const ev: NoteEvent = { kind: 'note', sounds: [{ type: 'pitch', midi }], beats };
           if (pendingChord) ev.chord = pendingChord;
           pendingChord = undefined;
-          const lyric = [...el.getElementsByTagName('lyric')].find((l) => (l.getAttribute('number') ?? '1') === '1');
+          const all = [...el.getElementsByTagName('lyric')].filter((l) => l.getAttribute('name') !== 'tab');
+          const lyric = all.find((l) => (l.getAttribute('number') ?? '1') === '1') ?? all[0];
           if (lyric) {
             const t = text(lyric, 'text');
             const syl = text(lyric, 'syllabic');
@@ -198,9 +249,34 @@ function noteType(beats: number): { type: string; dots: number } | null {
   return null;
 }
 
+/** How to notate a length: a plain (dotted) note, a tuplet note (triplets, quintuplets…), or neither. */
+function notation(beats: number): { type: string; dots: number; tuplet?: [number, number] } | null {
+  const plain = noteType(beats);
+  if (plain) return plain;
+  for (const [actual, normal] of [[3, 2], [5, 4], [6, 4], [7, 4], [3, 4]] as [number, number][]) {
+    const t = noteType((beats * actual) / normal);
+    if (t) return { ...t, tuplet: [actual, normal] };
+  }
+  return null;
+}
+
+/** Splits a length nobody can write as one note into notatable pieces (to be tied). */
+function splitLength(beats: number): number[] {
+  const out: number[] = [];
+  let left = beats;
+  const sizes = [4, 3, 2, 1.5, 1, 0.75, 0.5, 0.375, 0.25, 0.125];
+  for (let guard = 0; left > 1e-6 && guard < 32; guard++) {
+    const size = sizes.find((s) => s <= left + 1e-6) ?? left;
+    out.push(Math.min(size, left));
+    left -= Math.min(size, left);
+  }
+  return out;
+}
+
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 function harmonyXml(symbol: string): string {
+  if (isNoChord(symbol)) return '<harmony><root><root-step>C</root-step></root><kind text="N.C.">none</kind></harmony>';
   const info = parseChord(symbol);
   if (!info) return '';
   const m = /^([A-G])([#b]?)(.*?)(?:\/([A-G])([#b]?))?$/.exec(symbol.replace('♯', '#').replace('♭', 'b'));
@@ -211,42 +287,87 @@ function harmonyXml(symbol: string): string {
   return `<harmony><root><root-step>${m[1]}</root-step>${alter(m[2])}</root><kind text="${esc(m[3])}">${kind}</kind>${bass}</harmony>`;
 }
 
+type Piece = { beats: number; ev: NoteEvent | RestEvent; tieStart: boolean; tieStop: boolean; first: boolean };
+type XmlMeasure = { pieces: Piece[]; endBar?: BarStyle; startBar?: BarStyle; section?: string };
+
+/**
+ * Measures as the tab draws them (its own bar lines, so pickups and short bars stay);
+ * a tab without bar lines, or a bar that's too long, is cut into bars of the time signature.
+ */
+function measuresOf(doc: TabDoc, bpb: number): XmlMeasure[] {
+  const measures: XmlMeasure[] = [{ pieces: [] }];
+  let lastPiece: Piece | null = null;
+  let room = bpb;
+  let pendingSection: string | undefined;
+  const cur = () => measures[measures.length - 1];
+  for (const l of doc.lines) {
+    if (l.section) pendingSection = l.section;
+    for (const e of l.events) {
+      if (e.kind === 'bar') {
+        if (!cur().pieces.length) {
+          if (e.style === 'repeat-start') cur().startBar = e.style;
+          else if (measures.length > 1) measures[measures.length - 2].endBar = e.style;
+          continue;
+        }
+        cur().endBar = e.style;
+        measures.push({ pieces: [] });
+        room = bpb;
+        continue;
+      }
+      if (e.beats <= 0) continue;
+      if (pendingSection !== undefined && !cur().pieces.length) {
+        cur().section = pendingSection;
+        pendingSection = undefined;
+      }
+      let left = e.beats;
+      let first = true;
+      while (left > 1e-6) {
+        // Bars are the tab's own; one holding more than the time signature allows is split.
+        if (room <= 1e-6) {
+          measures.push({ pieces: [] });
+          room = bpb;
+        }
+        const take = Math.min(left, room);
+        left -= take;
+        room -= take;
+        const piece: Piece = { beats: take, ev: e, tieStart: left > 1e-6, tieStop: !first, first };
+        // A tied note: the previous piece ties into this one.
+        if (first && e.kind === 'note' && e.tied && lastPiece) {
+          lastPiece.tieStart = true;
+          piece.tieStop = true;
+        }
+        cur().pieces.push(piece);
+        lastPiece = piece;
+        first = false;
+      }
+    }
+  }
+  if (!cur().pieces.length && measures.length > 1) measures.pop();
+  // Lengths no note value can show are written as tied pieces.
+  for (const m of measures) {
+    m.pieces = m.pieces.flatMap((p) => {
+      if (notation(p.beats)) return [p];
+      const parts = splitLength(p.beats);
+      return parts.map((b, k) => ({ ...p, beats: b, first: p.first && k === 0, tieStop: k > 0 || p.tieStop, tieStart: k < parts.length - 1 || p.tieStart }));
+    });
+  }
+  return measures;
+}
+
+const BARLINE: Partial<Record<BarStyle, string>> = {
+  double: '<barline location="right"><bar-style>light-light</bar-style></barline>',
+  final: '<barline location="right"><bar-style>light-heavy</bar-style></barline>',
+  'repeat-end': '<barline location="right"><bar-style>light-heavy</bar-style><repeat direction="backward"/></barline>',
+};
+
 /** Writes partwise MusicXML 3.1 with lyrics, chord symbols and the tab as a second lyric line. */
 export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
   const { meta } = doc;
   const bpb = beatsPerBar(meta);
   const fifths = keyFifths(meta.key) ?? 0;
+  const mode = parseKey(meta.key)?.mode ?? 'major';
   const [beatsNum, beatType] = meta.time.split('/');
-
-  // Flatten to timed items, then split into measures (tying notes across bar lines).
-  type Item = { beats: number; ev: NoteEvent | RestEvent };
-  const items: Item[] = [];
-  for (const l of doc.lines) for (const e of l.events) if (e.kind !== 'bar' && e.beats > 0) items.push({ beats: e.beats, ev: e });
-  const measures: { beats: number; ev: NoteEvent | RestEvent; tieStart: boolean; tieStop: boolean; first: boolean }[][] = [[]];
-  let lastPiece: (typeof measures)[number][number] | null = null;
-  let room = bpb;
-  for (const it of items) {
-    let left = it.beats;
-    let first = true;
-    while (left > 1e-6) {
-      if (room <= 1e-6) {
-        measures.push([]);
-        room = bpb;
-      }
-      const take = Math.min(left, room);
-      left -= take;
-      room -= take;
-      const piece = { beats: take, ev: it.ev, tieStart: left > 1e-6, tieStop: !first, first };
-      // A tied note: the previous piece ties into this one.
-      if (first && it.ev.kind === 'note' && it.ev.tied && lastPiece) {
-        lastPiece.tieStart = true;
-        piece.tieStop = true;
-      }
-      measures[measures.length - 1].push(piece);
-      lastPiece = piece;
-      first = false;
-    }
-  }
+  const measures = measuresOf(doc, bpb);
 
   const out: string[] = [];
   out.push('<?xml version="1.0" encoding="UTF-8"?>');
@@ -257,17 +378,25 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
   out.push('<part-list><score-part id="P1"><part-name>Harmonica</part-name><score-instrument id="P1-I1"><instrument-name>Harmonica</instrument-name></score-instrument><midi-instrument id="P1-I1"><midi-program>23</midi-program></midi-instrument></score-part></part-list>');
   out.push('<part id="P1">');
   let wordOpen = false;
+  // A short first bar is a pickup: numbered 0 and marked implicit, as notation programs expect.
+  const firstLen = measures[0]?.pieces.reduce((a, p) => a + p.beats, 0) ?? 0;
+  const pickup = measures.length > 1 && firstLen > 1e-6 && firstLen < bpb - 1e-6;
   measures.forEach((m, mi) => {
-    out.push(`<measure number="${mi + 1}">`);
+    const num = pickup ? mi : mi + 1;
+    out.push(`<measure number="${num}"${pickup && mi === 0 ? ' implicit="yes"' : ''}>`);
     if (mi === 0) {
-      out.push(`<attributes><divisions>${DIVISIONS}</divisions><key><fifths>${fifths}</fifths></key><time><beats>${beatsNum}</beats><beat-type>${beatType}</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>`);
+      out.push(`<attributes><divisions>${DIVISIONS}</divisions><key><fifths>${fifths}</fifths><mode>${mode}</mode></key><time><beats>${beatsNum}</beats><beat-type>${beatType}</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>`);
       out.push(`<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${Math.round(meta.tempo)}</per-minute></metronome></direction-type><sound tempo="${Math.round(meta.tempo)}"/></direction>`);
     }
-    for (const n of m) {
+    if (m.startBar === 'repeat-start') out.push('<barline location="left"><bar-style>heavy-light</bar-style><repeat direction="forward"/></barline>');
+    if (m.section) out.push(`<direction placement="above"><direction-type><rehearsal>${esc(m.section)}</rehearsal></direction-type></direction>`);
+    for (const n of m.pieces) {
       if (n.first && n.ev.chord) out.push(harmonyXml(n.ev.chord));
       const dur = Math.round(n.beats * DIVISIONS);
-      const t = noteType(n.beats);
-      const typeXml = t ? `<type>${t.type}</type>${'<dot/>'.repeat(t.dots)}` : '';
+      const t = notation(n.beats);
+      const typeXml = t
+        ? `<type>${t.type}</type>${'<dot/>'.repeat(t.dots)}${t.tuplet ? `<time-modification><actual-notes>${t.tuplet[0]}</actual-notes><normal-notes>${t.tuplet[1]}</normal-notes></time-modification>` : ''}`
+        : '';
       const midis = n.ev.kind === 'note' ? eventMidis(n.ev, harp) : [];
       if (!midis.length) {
         out.push(`<note><rest/><duration>${dur}</duration>${typeXml}</note>`);
@@ -294,10 +423,10 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
         out.push(`<note>${k > 0 ? '<chord/>' : ''}${pitch}<duration>${dur}</duration>${tieXml}${typeXml}${tiedXml}${lyrics}</note>`);
       });
     }
-    if (mi === measures.length - 1) out.push('<barline location="right"><bar-style>light-heavy</bar-style></barline>');
+    const end = m.endBar ?? (mi === measures.length - 1 ? 'final' : 'single');
+    if (BARLINE[end]) out.push(BARLINE[end]!);
     out.push('</measure>');
   });
   out.push('</part>', '</score-partwise>');
   return out.join('\n') + '\n';
 }
-

@@ -40,6 +40,7 @@ export function ExportMenu({ text, small = false, label = 'Export' }: { text?: s
             >
               <span className="mi-name">{f.name} <span className="mi-ext">.{f.ext}</span></span>
               <span className="mi-hint">{f.hint}</span>
+              {f.loses && <span className="mi-loses">{f.loses}</span>}
             </button>
           ))}
         </div>

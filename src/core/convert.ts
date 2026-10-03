@@ -14,7 +14,7 @@ import {
   type HarmonicaSpec,
 } from './instruments';
 import { keyUsesFlats, midiToName, mod12, parseKey, parsePitchClass, transposeKey } from './pitch';
-import { findHarmonicaChord, parseChord, transposeChord } from './chords';
+import { findHarmonicaChord, isNoChord, parseChord, transposeChord } from './chords';
 import type { NoteEvent, RestEvent, TabDoc, TabEvent, TabMeta } from './htab/types';
 import type { Breath, HoleSound, Sound } from './types';
 
@@ -474,8 +474,14 @@ export function chordSheetToTab(doc: TabDoc, harp: Harmonica, pattern: StrumPatt
         events.push({ ...e });
         continue;
       }
+      if (isNoChord(e.chord)) {
+        events.push({ ...e });
+        previous = null;
+        continue;
+      }
       const found = lookup(e.chord);
-      previous = found ?? previous;
+      // Words after a chord that can't be played aren't played over an older chord either.
+      previous = found;
       if (!found) {
         missing.add(e.chord);
         stats.unplayable++;
