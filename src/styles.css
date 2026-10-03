@@ -703,3 +703,20 @@ select:focus, .search:focus { border-color: var(--brass); }
 .insp-note { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 0 10px; }
 .lib-backup { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -4px 0 14px; }
 .lib-backup span { margin-right: auto; }
+
+/* Key change: keep the holes or the notes? */
+.picker-key { position: relative; display: flex; }
+.key-choice {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 50; width: 300px;
+  display: flex; flex-direction: column; gap: 8px; padding: 12px;
+  background: var(--panel); border: 1px solid var(--brass); border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.kc-option {
+  display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 8px 10px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); cursor: pointer;
+}
+.kc-option:hover, .kc-option:focus-visible { border-color: var(--brass-2); }
+.kc-title { font-weight: 700; }
+.kc-desc { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.key-choice > .btn { align-self: flex-end; }

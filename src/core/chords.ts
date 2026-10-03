@@ -1,7 +1,7 @@
 // Chord symbols ("G7", "F#m7b5", "C/E") and finding playable harmonica chords.
 
 import type { Harmonica } from './instruments';
-import { mod12, parsePitchClass } from './pitch';
+import { mod12, parsePitchClass, pitchClassName } from './pitch';
 import type { Breath, HoleSound } from './types';
 
 export interface ChordInfo {
@@ -171,4 +171,11 @@ export function findHarmonicaChord(harp: Harmonica, chord: ChordInfo): Harmonica
     }
   }
   return best;
+}
+
+/** A chord symbol moved by `semis` semitones: "G7" + 2 → "A7", "C/E" + 1 → "Db/F" (with flats). Unknown symbols are kept. */
+export function transposeChord(symbol: string, semis: number, flats: boolean): string {
+  if (!parseChord(symbol)) return symbol;
+  const move = (name: string) => pitchClassName(mod12(parsePitchClass(name.replace('♯', '#').replace('♭', 'b'))! + semis), flats);
+  return symbol.trim().replace(/^([A-G][#b♯♭]?)(.*?)(?:\/([A-G][#b♯♭]?))?$/, (_, root: string, rest: string, bass?: string) => move(root) + rest + (bass ? '/' + move(bass) : ''));
 }

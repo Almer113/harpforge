@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from 'react';
-import { FAMILIES, keysFor, tuningsFor, type Family } from '../core/instruments';
+import { useEffect, useMemo, useState } from 'react';
+import { FAMILIES, getHarmonica, keysFor, tuningsFor, type Family, type HarmonicaSpec } from '../core/instruments';
 import { startRecording, stopRecording } from '../live/recorder';
-import { setHarmonica, shiftOctave } from '../state/actions';
-import { octaveOptions } from '../core/convert';
+import { isKeyChange, keyDistance, setHarmonica, shiftOctave } from '../state/actions';
+import { guessTonic, harpForPosition, octaveOptions, positionFor, positionName } from '../core/convert';
+import { mod12, transposeKey } from '../core/pitch';
 import { stop, togglePlay } from '../state/playback';
 import { useApp, useParsed } from '../state/store';
 
@@ -12,12 +13,33 @@ export function HarmonicaPicker() {
   const up = octaves.find((o) => o.shift === 12)!;
   const down = octaves.find((o) => o.shift === -12)!;
   const { family, tuning, key } = harp.spec;
-  const setFamily = (f: Family) => {
-    const keys = keysFor(f);
-    setHarmonica({ family: f, tuning: tuningsFor(f)[0].id, key: keys.includes(key) ? key : 'C' });
+  // A key change on the same kind of harp asks: keep the holes or keep the notes?
+  const [pending, setPending] = useState<HarmonicaSpec | null>(null);
+  const tonic = useMemo(() => guessTonic(doc, harp), [doc, harp]);
+  const position = tonic !== undefined && family !== 'chromatic' ? positionFor(key, tonic) : undefined;
+
+  const change = (spec: HarmonicaSpec) => {
+    if (isKeyChange(spec)) setPending(spec);
+    else setHarmonica(spec);
   };
+  const setFamily = (f: Family) => {
+    // Keep the key if the new family has it, else the key with the same pitch (Low F → F).
+    const keys = keysFor(f);
+    const same = keys.find((k) => k === key) ?? keys.find((k) => mod12(getHarmonica({ family: f, key: k }).holes[0].blow) === mod12(harp.holes[0].blow));
+    setHarmonica({ family: f, tuning: tuningsFor(f)[0].id, key: same ?? 'C' });
+  };
+  const setPosition = (n: number) => {
+    if (tonic === undefined) return;
+    const pc = harpForPosition(tonic, n);
+    const keys = keysFor(family);
+    // Prefer a standard key; Low/High only when it's the current one or the only match.
+    const match = keys.filter((k) => mod12(getHarmonica({ family, tuning, key: k }).holes[0].blow) === pc);
+    const next = match.find((k) => k === key) ?? match.find((k) => !/Low|High/.test(k)) ?? match[0];
+    if (next) setHarmonica({ family, tuning, key: next }, 'notes');
+  };
+
   return (
-    <div className="picker" title="Changing the key keeps the holes (transposes). Changing type or tuning re-tabs to keep the notes.">
+    <div className="picker" title="Pick the harmonica this tab is for">
       <label>
         <span>Harmonica</span>
         <select value={family} onChange={(e) => setFamily(e.target.value as Family)}>
@@ -34,14 +56,30 @@ export function HarmonicaPicker() {
           ))}
         </select>
       </label>
-      <label>
-        <span>Key</span>
-        <select value={key} onChange={(e) => setHarmonica({ family, tuning, key: e.target.value })}>
-          {keysFor(family).map((k) => (
-            <option key={k} value={k}>{k}</option>
-          ))}
-        </select>
-      </label>
+      <div className="picker-key">
+        <label>
+          <span>Key</span>
+          <select value={pending?.key ?? key} onChange={(e) => change({ family, tuning, key: e.target.value })}>
+            {keysFor(family).map((k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+        </label>
+        {pending && <KeyChoice from={harp.spec} to={pending} songKey={doc.meta.key} onClose={() => setPending(null)} />}
+      </div>
+      {position !== undefined && (
+        <label title="Position: which note of the harp the song is centred on. 1st = the harp's own key, 2nd = cross harp (blues), 3rd = minor/dorian. Changing it picks the harp that plays the song in that position.">
+          <span>Position</span>
+          <select value={position} onChange={(e) => setPosition(parseInt(e.target.value, 10))}>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>
+                {positionName(n)}
+                {n === 2 ? ' (cross)' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <div className="octave-ctl">
         <span>Octave</span>
         <div className="seg">
@@ -49,6 +87,40 @@ export function HarmonicaPicker() {
           <button disabled={!up.possible} onClick={() => shiftOctave(12)} title={up.note} aria-label="Octave up">▲</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Asks how to switch to a harp in another key: same tab (transpose) or same music (re-tab). */
+function KeyChoice({ from, to, songKey, onClose }: { from: HarmonicaSpec; to: HarmonicaSpec; songKey?: string; onClose: () => void }) {
+  const semis = keyDistance(from, to);
+  const movedKey = songKey ? transposeKey(songKey, semis) : undefined;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  // "an A harp", "an F harp", "a G harp"
+  const harpName = `${/^[AEF]/.test(to.key) ? 'an' : 'a'} ${to.key} harp`;
+  const pick = (keep: 'holes' | 'notes') => {
+    onClose();
+    setHarmonica(to, keep);
+  };
+  return (
+    <div className="key-choice" role="dialog" aria-label={`Switch to ${harpName}`}>
+      <b>Switch to {harpName}</b>
+      <button className="kc-option" onClick={() => pick('holes')} autoFocus>
+        <span className="kc-title">Keep the holes</span>
+        <span className="kc-desc">
+          The tab stays the same; it sounds {Math.abs(semis)} semitone{Math.abs(semis) === 1 ? '' : 's'} {semis > 0 ? 'higher' : 'lower'}
+          {movedKey ? `, in ${movedKey}` : ''}. Chord symbols move too.
+        </span>
+      </button>
+      <button className="kc-option" onClick={() => pick('notes')}>
+        <span className="kc-title">Keep the notes</span>
+        <span className="kc-desc">Re-tab for the {to.key} harp so the song still sounds {songKey ? `in ${songKey}` : 'the same'}.</span>
+      </button>
+      <button className="btn small ghost" onClick={onClose}>Cancel</button>
     </div>
   );
 }

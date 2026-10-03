@@ -47,3 +47,46 @@ export function prefersFlats(keyName: string | undefined): boolean {
   const root = keyName.replace(/^(Low|High)\s+/i, '').replace(/m(in(or)?)?$/i, '');
   return /b/.test(root.slice(1)) || root === 'F';
 }
+
+export type Mode = 'major' | 'minor' | 'dorian' | 'mixolydian' | 'lydian' | 'phrygian' | 'locrian';
+
+const MODE_WORDS: Record<string, Mode> = {
+  '': 'major', maj: 'major', ion: 'major', min: 'minor', m: 'minor', aeo: 'minor',
+  dor: 'dorian', mix: 'mixolydian', lyd: 'lydian', phr: 'phrygian', loc: 'locrian',
+};
+
+/**
+ * Reads a key name: "G", "Em", "F# minor", "Bbmaj", "Edor", "D Mixolydian", "A major".
+ * Returns the tonic's pitch class and the mode, or null.
+ */
+export function parseKey(name: string | undefined): { tonic: number; mode: Mode; root: string } | null {
+  if (!name) return null;
+  const m = /^\s*(?:(?:Low|High)\s+)?([A-G])([#b♯♭]?)\s*([A-Za-z]*)\s*$/.exec(name);
+  if (!m) return null;
+  const word = m[3].toLowerCase();
+  const mode = word === 'm' ? 'minor' : MODE_WORDS[word.slice(0, 3)];
+  if (!mode || (word.length > 3 && !/^(major|minor|ionian|aeolian|dorian|mixolydian|lydian|phrygian|locrian)$/.test(word))) return null;
+  const root = m[1] + (m[2] === '♯' ? '#' : m[2] === '♭' ? 'b' : m[2]);
+  return { tonic: parsePitchClass(root)!, mode, root };
+}
+
+const MODE_SUFFIX: Record<Mode, string> = { major: '', minor: 'm', dorian: ' dorian', mixolydian: ' mixolydian', lydian: ' lydian', phrygian: ' phrygian', locrian: ' locrian' };
+
+const MODE_OFFSET: Record<Mode, number> = { major: 0, dorian: 2, phrygian: 4, lydian: 5, mixolydian: 7, minor: 9, locrian: 11 };
+
+/** Whether a key is written with flats (F, Bb, Eb… majors, and modes/minors that share their notes). */
+export function keyUsesFlats(name: string | undefined): boolean {
+  const k = parseKey(name);
+  if (!k) return prefersFlats(name);
+  if (k.root.length > 1) return k.root.endsWith('b');
+  return [5, 10, 3, 8, 1].includes(mod12(k.tonic - MODE_OFFSET[k.mode]));
+}
+
+/** A key moved by `semis` semitones, written the usual way ("G" + 2 → "A", "Em" + 1 → "Fm"). */
+export function transposeKey(name: string, semis: number): string {
+  const k = parseKey(name);
+  if (!k) return name;
+  const pc = mod12(k.tonic + semis);
+  const flats = [5, 10, 3, 8, 1].includes(mod12(pc - MODE_OFFSET[k.mode]));
+  return pitchClassName(pc, flats) + MODE_SUFFIX[k.mode];
+}

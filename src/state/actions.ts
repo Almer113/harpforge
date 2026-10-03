@@ -1,6 +1,6 @@
 // User-level actions shared by several pages.
 
-import { retab } from '../core/convert';
+import { guessTonic, positionFor, positionName, retab, transposeDoc } from '../core/convert';
 import { setMetaFields } from '../core/htab/meta';
 import { splitHeader } from '../core/htab/parser';
 import { replaceLines } from '../core/edit/splice';
@@ -12,29 +12,52 @@ import { persistStorage, saveTab } from '../storage/library';
 import { stop } from './playback';
 import { getParsed, isDirty, useApp } from './store';
 
+/** Whether switching to `spec` is only a key change (same holes, other pitches), so the user can choose. */
+export function isKeyChange(spec: HarmonicaSpec): boolean {
+  const p = getParsed(useApp.getState().text);
+  const sameLayout = spec.family === p.harp.spec.family && spec.tuning === p.harp.spec.tuning && spec.key !== p.harp.spec.key;
+  return sameLayout && p.doc.lines.some((l) => l.events.some((e) => e.kind === 'note'));
+}
+
+/** Semitones between two harps of the same layout (Low/High keys included). */
+export function keyDistance(from: HarmonicaSpec, to: HarmonicaSpec): number {
+  return getHarmonica(to).holes[0].blow - getHarmonica(from).holes[0].blow;
+}
+
 /**
- * Switches the document's harmonica. Changing only the key keeps the holes (the
- * classic way tabs transpose); changing family or tuning re-tabs to keep the pitches.
+ * Switches the document's harmonica.
+ * - `holes`: keep the tab as it is (only possible within the same layout); the music
+ *   moves to the new key, and the song key and chord symbols move with it.
+ * - `notes`: keep the music; the tab is rewritten for the new harmonica.
+ * Changing family or tuning always keeps the notes.
  */
-export function setHarmonica(spec: HarmonicaSpec) {
+export function setHarmonica(spec: HarmonicaSpec, keep: 'holes' | 'notes' = 'notes') {
   const s = useApp.getState();
   const p = getParsed(s.text);
   const to = getHarmonica(spec);
   if (specId(to.spec) === specId(p.harp.spec)) return;
-  const fields = { harmonica: to.spec.family, tuning: to.spec.tuning, harpKey: to.spec.key };
+  const fields: Record<string, string | number | undefined> = { harmonica: to.spec.family, tuning: to.spec.tuning, harpKey: to.spec.key };
   const sameLayout = to.spec.family === p.harp.spec.family && to.spec.tuning === p.harp.spec.tuning;
+  const header = s.text.slice(0, splitHeader(s.text).bodyStart);
   stop();
-  if (sameLayout) {
-    s.setText(setMetaFields(s.text, fields));
-    useApp.setState({ keyOffset: 0 });
+  useApp.setState({ keyOffset: 0 });
+  if (sameLayout && keep === 'holes') {
+    const semis = keyDistance(p.harp.spec, to.spec);
+    const moved = transposeDoc(p.doc, semis);
+    if (moved.meta.key) fields.key = moved.meta.key;
+    const body = replaceLines(s.text, moved.lines);
+    s.setText(setMetaFields(header, fields) + body + (body ? '\n' : ''));
+    if (p.doc.lines.some((l) => l.events.some((e) => e.kind === 'note')))
+      s.notify(`Same holes on ${to.name}${moved.meta.key ? ` — the song is now in ${moved.meta.key}` : ''}, chords moved too.`);
     return;
   }
   const r = retab(p.doc, p.harp, to);
-  const header = s.text.slice(0, splitHeader(s.text).bodyStart);
+  // The song stays in its key, so its position on the new harp changes.
+  const tonic = guessTonic(p.doc, p.harp);
+  if (p.doc.meta.position !== undefined) fields.position = tonic !== undefined && to.spec.family !== 'chromatic' ? positionName(positionFor(to.spec.key, tonic)!) : undefined;
   // Only the lines whose notes changed are rewritten; comments and spacing stay.
   const body = replaceLines(s.text, r.doc.lines);
   s.setText(setMetaFields(header, fields) + body + (body ? '\n' : ''));
-  useApp.setState({ keyOffset: 0 });
   if (r.stats.unplayable)
     s.notify(`Re-tabbed for ${to.name} — ${r.stats.unplayable} note(s) don't fit this harmonica and are kept as note names (e.g. A#4).`);
   else if (r.warnings.length) s.notify(`Re-tabbed for ${to.name} — ${r.warnings.join('; ')}.`);

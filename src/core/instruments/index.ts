@@ -317,11 +317,18 @@ export function soundPitch(harp: Harmonica, s: HoleSound): number | null {
   return base;
 }
 
-/** Relative difficulty of a technique; used when choosing between equivalent tabs. */
+/**
+ * Relative difficulty of a technique, in tiers players would recognise: plain notes,
+ * the everyday half-step draw bends (-1' -2' -3' -4' -6', the core of blues harp), deeper
+ * draw bends, blow bends (8–10), overblows and, hardest, overdraws (7–10).
+ */
 export function soundCost(s: HoleSound): number {
-  if (s.over) return 4;
+  if (s.over) return s.breath === 'draw' ? 5 : 3.5;
   let c = 0;
-  if (s.bend > 0) c += 1.6 + 0.8 * (s.bend - 1);
+  if (s.bend > 0) {
+    if (s.breath === 'draw') c += s.bend === 1 ? 0.6 : 1.2 + 0.4 * (s.bend - 2);
+    else c += 1.5 + 0.6 * (s.bend - 1);
+  }
   if (s.slide) c += 0.3;
   return c;
 }

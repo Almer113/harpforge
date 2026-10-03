@@ -13,8 +13,8 @@ import {
   type Harmonica,
   type HarmonicaSpec,
 } from './instruments';
-import { midiToName, mod12, parsePitchClass } from './pitch';
-import { findHarmonicaChord, parseChord } from './chords';
+import { keyUsesFlats, midiToName, mod12, parseKey, parsePitchClass, transposeKey } from './pitch';
+import { findHarmonicaChord, parseChord, transposeChord } from './chords';
 import type { NoteEvent, RestEvent, TabDoc, TabEvent, TabMeta } from './htab/types';
 import type { Breath, HoleSound, Sound } from './types';
 
@@ -287,6 +287,37 @@ export interface Suggestion {
   position?: number;
 }
 
+/**
+ * Moves a tab by `semis` semitones while keeping its holes (what changing to a harp in
+ * another key does): note names, chord symbols and the song key move with it.
+ */
+export function transposeDoc(doc: TabDoc, semis: number): TabDoc {
+  const key = doc.meta.key ? transposeKey(doc.meta.key, semis) : undefined;
+  const flats = keyUsesFlats(key);
+  const moveChord = (c: string | undefined) => (c ? transposeChord(c, semis, flats) : c);
+  const meta = cloneMeta(doc.meta);
+  if (key) meta.key = key;
+  return {
+    meta,
+    lines: doc.lines.map((l) => ({
+      ...l,
+      events: l.events.map((e): TabEvent => {
+        if (e.kind === 'bar') return { ...e };
+        if (e.kind === 'rest') return { ...e, chord: moveChord(e.chord) };
+        return { ...e, chord: moveChord(e.chord), sounds: e.sounds.map((x) => (x.type === 'pitch' ? { ...x, midi: x.midi + semis } : x)) };
+      }),
+    })),
+  };
+}
+
+const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
+export const positionName = (n: number) => ORDINALS[n - 1] ?? `${n}th`;
+
+/** The harp key (pitch class) that plays a song in `tonic` in the given position. */
+export function harpForPosition(tonic: number, position: number): number {
+  return mod12(tonic - (position - 1) * 7);
+}
+
 /** Position number for playing in `songTonic` on a diatonic in `harpKey`. */
 export function positionFor(harpKey: string, songTonicPc: number): number | undefined {
   const pc = parsePitchClass(harpKey.replace(/^(Low|High)\s+/i, ''));
@@ -294,12 +325,10 @@ export function positionFor(harpKey: string, songTonicPc: number): number | unde
   return mod12((songTonicPc - pc) * 7) + 1;
 }
 
-function guessTonic(doc: TabDoc, sourceHarp?: Harmonica): number | undefined {
-  if (doc.meta.key) {
-    const pc = parsePitchClass(doc.meta.key.replace(/m(in(or)?)?$/i, '').trim());
-    if (pc !== null) return pc;
-  }
-  // Fall back to the last note of the song.
+/** The song's tonic: from its key ("Em", "D dorian", "A major"), or else the lowest pitch of its last note. */
+export function guessTonic(doc: TabDoc, sourceHarp?: Harmonica): number | undefined {
+  const key = parseKey(doc.meta.key);
+  if (key) return key.tonic;
   for (let l = doc.lines.length - 1; l >= 0; l--) {
     const evs = doc.lines[l].events;
     for (let e = evs.length - 1; e >= 0; e--) {
@@ -313,32 +342,55 @@ function guessTonic(doc: TabDoc, sourceHarp?: Harmonica): number | undefined {
   return undefined;
 }
 
+/**
+ * How much less likely a player is to own or pick a harmonica, before looking at the
+ * song: standard Richter diatonics come first, in the positions people actually play
+ * (1st, 2nd, then 3rd); special tunings, low/high keys, chromatics and tremolos after.
+ */
+function preferenceFor(spec: HarmonicaSpec, position: number | undefined, bluesy: boolean): number {
+  if (spec.family === 'chromatic') return spec.tuning === 'solo-12' ? 1.2 : 1.6;
+  if (spec.family !== 'diatonic') return 1 + (position !== undefined && position !== 1 ? 0.8 : 0);
+  let p = 0;
+  if (spec.tuning !== 'richter') p += 1.2;
+  if (/Low|High/.test(spec.key)) p += 0.5;
+  if (position !== undefined) {
+    // Blues is 2nd-position country ("cross harp"); otherwise 1st position wins a tie.
+    if (position === 2) p += bluesy ? -0.6 : 0.1;
+    else if (position !== 1) p += position === 3 ? 0.3 : position === 4 || position === 12 ? 0.6 : 1.2;
+  }
+  return p;
+}
+
+/** Whether a melody has the blues sound: a minor third and a flat seventh (or flat fifth) over a major-ish tonic. */
+function soundsBluesy(doc: TabDoc, tonic: number | undefined, sourceHarp?: Harmonica): boolean {
+  if (tonic === undefined) return false;
+  const seen = new Set<number>();
+  for (const l of doc.lines) for (const e of l.events) if (e.kind === 'note' && !e.tied) for (const m of eventPitches(e, sourceHarp)) if (m !== null) seen.add(mod12(m - tonic));
+  return seen.has(3) && (seen.has(10) || seen.has(6)) && seen.has(7);
+}
+
 export function suggestHarmonicas(doc: TabDoc, opts: { sourceHarp?: Harmonica; limit?: number; families?: string[] } = {}): Suggestion[] {
   const tonic = guessTonic(doc, opts.sourceHarp);
+  const bluesy = soundsBluesy(doc, tonic, opts.sourceHarp);
   const results: Suggestion[] = [];
   for (const spec of allSpecs()) {
     if (opts.families && !opts.families.includes(spec.family)) continue;
     const harp = getHarmonica(spec);
+    const position = tonic !== undefined ? positionFor(spec.key, tonic) : undefined;
+    const preference = preferenceFor(spec, position, bluesy);
     let best: Suggestion | null = null;
-    const position = spec.family === 'diatonic' && tonic !== undefined ? positionFor(spec.key, tonic) : undefined;
-    // Prefer what most players own: standard Richter diatonics in common positions.
-    let preference = 0;
-    if (spec.family === 'chromatic') preference += spec.tuning === 'solo-12' ? 1 : 1.5;
-    else {
-      if (spec.tuning !== 'richter') preference += 0.8;
-      if (/Low|High/.test(spec.key)) preference += 0.6;
-      if (position !== undefined) preference += position <= 2 ? 0 : position === 3 ? 0.4 : 1.2;
-    }
     for (const shift of [0, -12, 12]) {
       const r = notesToTab(doc, harp, { shift, sourceHarp: opts.sourceHarp });
-      // Octave choice matters little on a harmonica, so it's only a tie-breaker.
-      const score = r.stats.cost + Math.abs(shift) / 24 + 3 * r.stats.reducedChords + preference;
-      if (!best || score < best.score) {
-        best = { spec, name: harmonicaName(spec), shift, score, stats: r.stats };
-      }
+      const st = r.stats;
+      const count = Math.max(1, st.notes + st.unplayable);
+      // Averaged per note, so a long song doesn't drown out the preference: the
+      // difficulty of the techniques and movement, plus missing notes and thinned chords.
+      const perNote = Math.max(0, st.cost - 25 * st.unplayable) / count;
+      const score = perNote * 6 + (st.unplayable / count) * 40 + (st.reducedChords / count) * 10 + Math.abs(shift) / 48 + preference;
+      if (!best || score < best.score) best = { spec, name: harmonicaName(spec), shift, score, stats: st };
     }
     if (best) {
-      best.position = position;
+      best.position = spec.family === 'chromatic' ? undefined : position;
       results.push(best);
     }
   }
@@ -483,10 +535,8 @@ export function suggestForChordSheet(doc: TabDoc, opts: { limit?: number; famili
 }
 
 function guessTonicFromChords(doc: TabDoc): number | undefined {
-  if (doc.meta.key) {
-    const pc = parsePitchClass(doc.meta.key.replace(/m(in(or)?)?$/i, '').trim());
-    if (pc !== null) return pc;
-  }
+  const key = parseKey(doc.meta.key);
+  if (key) return key.tonic;
   for (const l of doc.lines) for (const e of l.events) if (e.kind !== 'bar' && e.chord) {
     const c = parseChord(e.chord);
     if (c) return c.root;
