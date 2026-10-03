@@ -14,9 +14,34 @@ interface Props {
   onSelect?: (scoreIndex: number, ev: NoteEvent) => void;
 }
 
-/** A note's holes; a chord's holes sit side by side ("456", "-1-2-3"). */
-function tokenText(ev: NoteEvent): string {
-  return ev.sounds.map((s) => (s.type === 'hole' ? holeSoundText(s) : soundText(s))).join('');
+/** One hole, with two-digit hole numbers underlined so "8910" reads as 8 · 9 · 10. */
+function HoleText({ text }: { text: string }) {
+  const m = /^(<?-?)(\d+)(.*)$/.exec(text);
+  if (!m || m[2].length < 2) return <>{text}</>;
+  return (
+    <>
+      {m[1]}
+      <span className="st-two">{m[2]}</span>
+      {m[3]}
+    </>
+  );
+}
+
+/**
+ * A note's holes; a chord's holes sit side by side. A draw chord gets one minus sign
+ * ("-123"); a chord mixing blow and draw keeps one per hole.
+ */
+function Token({ ev }: { ev: NoteEvent }) {
+  const holes = ev.sounds.every((s) => s.type === 'hole');
+  const allDraw = holes && ev.sounds.length > 1 && ev.sounds.every((s) => s.type === 'hole' && s.breath === 'draw');
+  return (
+    <>
+      {allDraw && '-'}
+      {ev.sounds.map((s, k) => (
+        <HoleText key={k} text={s.type === 'hole' ? holeSoundText(s, allDraw) : soundText(s)} />
+      ))}
+    </>
+  );
 }
 
 function breathClass(ev: NoteEvent): string {
@@ -65,7 +90,7 @@ export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect }:
                     className={`st-note ${breathClass(ev)} ${active ? 'active' : ''} ${selected ? 'selected' : ''}`}
                     onClick={() => idx !== undefined && onSelect?.(idx, ev)}
                   >
-                    {tokenText(ev)}
+                    <Token ev={ev} />
                   </button>
                 );
               })}

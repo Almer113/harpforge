@@ -691,3 +691,5 @@ select:focus, .search:focus { border-color: var(--brass); }
 .st-note:hover { background: var(--panel-2); }
 .st-note.selected { border-color: var(--brass); }
 .st-note.active { background: rgba(227, 169, 72, 0.18); border-color: var(--brass-2); }
+/* Two-digit holes (10, 11, 12 …) are underlined so runs of holes stay readable. */
+.st-two { display: inline-block; line-height: 1.15; border-bottom: 2px solid currentColor; margin: 0 1px; }
