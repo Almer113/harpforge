@@ -186,3 +186,27 @@ D4 | G4~ {B4 G4} | B4~ A4 | G4~ E4 | D4~ D4 | G4~ {B4 G4} | B4~ A4 | D5~~ | D5~ 
     expect(top[0].stats.bends).toBe(0);
   });
 });
+
+describe('tremolo & octave harmonicas', () => {
+  it('builds Hohner layouts in C', () => {
+    const ocean = getHarmonica({ family: 'tremolo', tuning: 'asian-24', key: 'C' });
+    expect(ocean.holes).toHaveLength(12);
+    expect(ocean.voicing).toBe('tremolo');
+    expect(midiToName(ocean.holes[0].blow)).toBe('G3');
+    expect(midiToName(ocean.holes[11].draw)).toBe('B6');
+    const comet = getHarmonica({ family: 'octave', tuning: 'comet-20', key: 'C' });
+    expect(comet.voicing).toBe('octave');
+    expect(midiToName(comet.holes[0].blow)).toBe('E4');
+  });
+  it('transposes to other keys and has no bends', () => {
+    const g = getHarmonica({ family: 'tremolo', tuning: 'richter-20', key: 'G' });
+    expect(midiToName(g.holes[0].blow)).toBe('G3');
+    expect(maxBend(g, 3, 'draw')).toBe(0);
+    expect(soundPitch(g, holeSound(3, 'draw', { bend: 1 }))).toBeNull();
+  });
+  it('plays Frère Jacques on an Asian tremolo without missing notes', () => {
+    const doc = parseHtab('---\nharmonica: tremolo\ntuning: asian-24\n---\n2 -1 3 2 | 3 -2 4~ | {4 -3} {4 -2} 3 2 | 2 1 2~').doc;
+    const { issues } = buildScore(doc, harmonicaFromMeta(doc.meta));
+    expect(issues).toEqual([]);
+  });
+});

@@ -4,7 +4,7 @@ import { TabView } from '../components/TabView';
 import { useHarmonicaKeyboard } from '../live/useHarmonicaKeyboard';
 import { previewEvent } from '../state/playback';
 import { useApp, useParsed } from '../state/store';
-import { rangeLabel } from '../core/instruments';
+import { rangeLabel, type Harmonica as HarmonicaT } from '../core/instruments';
 
 export function PlayPage() {
   useHarmonicaKeyboard(true);
@@ -35,7 +35,7 @@ export function PlayPage() {
 
       <div className={`stage ${recording ? 'is-recording' : ''}`}>
         <Harmonica />
-        <KeyHelp hasSlide={parsed.harp.hasSlide} holes={parsed.harp.holes.length} />
+        <KeyHelp harp={parsed.harp} />
       </div>
 
       <div className="sheet">
@@ -58,16 +58,18 @@ export function PlayPage() {
   );
 }
 
-function KeyHelp({ hasSlide, holes }: { hasSlide: boolean; holes: number }) {
+function KeyHelp({ harp }: { harp: HarmonicaT }) {
+  const { hasSlide, bendable, overblows } = harp;
+  const holes = harp.holes.length;
   return (
     <div className="keyhelp">
       <span><kbd>1</kbd>…<kbd>0</kbd> blow</span>
       <span><kbd>Q</kbd>…<kbd>P</kbd> draw</span>
-      {!hasSlide && <span><kbd>Shift</kbd> bend (hold to go deeper)</span>}
-      {!hasSlide && <span><kbd>Alt</kbd> overblow / overdraw</span>}
+      {bendable && <span><kbd>Shift</kbd> bend (hold to go deeper)</span>}
+      {overblows && <span><kbd>Alt</kbd> overblow / overdraw</span>}
       {hasSlide && <span><kbd>Space</kbd> slide</span>}
       {holes > 12 && <span><kbd>←</kbd><kbd>→</kbd> move keys</span>}
-      <span>Mouse: drag sideways to glide{!hasSlide ? ', drag out to bend' : ''}</span>
+      <span>Mouse: drag sideways to glide{bendable ? ', drag out to bend' : ''}</span>
       <span><kbd>Enter</kbd> play/pause</span>
     </div>
   );

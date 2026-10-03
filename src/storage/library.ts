@@ -4,7 +4,7 @@ import Dexie, { type Table } from 'dexie';
 import { parseHtab } from '../core/htab/parser';
 import { harmonicaName } from '../core/instruments';
 import { specFromMeta } from '../core/score';
-import { DEMOS } from '../demo/songs';
+import { DEMOS, DEMO_VERSION } from '../demo/songs';
 
 export interface SavedTab {
   id: string;
@@ -62,14 +62,16 @@ export async function deleteTab(id: string): Promise<void> {
 
 const SEEDED_KEY = 'harpforge:seeded';
 
-/** Adds the demo songs on first launch. */
+/** Adds demo songs on first launch, and any demos added since the last visit. */
 export async function seedDemos(): Promise<void> {
+  let seen = 0;
   try {
-    if (localStorage.getItem(SEEDED_KEY)) return;
-    localStorage.setItem(SEEDED_KEY, '1');
+    seen = parseInt(localStorage.getItem(SEEDED_KEY) ?? '0', 10) || 0;
+    if (seen >= DEMO_VERSION) return;
+    localStorage.setItem(SEEDED_KEY, String(DEMO_VERSION));
   } catch {
     return;
   }
-  if ((await db.tabs.count()) > 0) return;
-  for (const text of [...DEMOS].reverse()) await saveTab(text);
+  const fresh = DEMOS.filter((d) => d.since > seen);
+  for (const d of [...fresh].reverse()) await saveTab(d.text);
 }

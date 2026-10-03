@@ -138,7 +138,7 @@ export function Harmonica() {
 
       <div
         ref={ref}
-        className="harp"
+        className={`harp voicing-${harp.voicing}`}
         style={{ ['--hole-w' as string]: holeWidth }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

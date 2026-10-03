@@ -24,41 +24,79 @@ function getMaster(): Tone.Gain {
   return master;
 }
 
+export type Voicing = 'single' | 'tremolo' | 'octave';
+
+interface Layer {
+  cents: number;
+  level: number;
+}
+
+// Reeds sounding per note. Tremolo reeds are tuned slightly apart so they beat;
+// octave harmonicas add a reed an octave below the written note.
+const VOICINGS: Record<Voicing, Layer[]> = {
+  single: [{ cents: 0, level: 1 }],
+  tremolo: [
+    { cents: -9, level: 0.72 },
+    { cents: 9, level: 0.72 },
+  ],
+  octave: [
+    { cents: 0, level: 0.85 },
+    { cents: -1200, level: 0.6 },
+  ],
+};
+
+let voicing: Voicing = 'single';
+
+export function setVoicing(v: Voicing) {
+  voicing = v;
+}
+
+const freqOf = (midi: number, cents: number) => midiToFreq(midi + cents / 100);
+
 class Voice {
-  private osc: Tone.Oscillator;
+  private oscs: Tone.Oscillator[];
+  private layers: Layer[];
   private noise: Tone.Noise;
   private filter: Tone.Filter;
   private noiseFilter: Tone.Filter;
   private env: Tone.AmplitudeEnvelope;
   private disposed = false;
 
-  constructor(private level = 1) {
+  constructor(level = 1) {
+    this.layers = VOICINGS[voicing];
     this.env = new Tone.AmplitudeEnvelope({ attack: 0.028, decay: 0.15, sustain: 0.82, release: RELEASE }).connect(getMaster());
     this.filter = new Tone.Filter({ type: 'lowpass', frequency: 3000, Q: 0.6 }).connect(this.env);
-    this.osc = new Tone.Oscillator({ type: 'custom', partials: PARTIALS, volume: -6 + 20 * Math.log10(this.level) }).connect(this.filter);
+    this.oscs = this.layers.map(
+      (l) => new Tone.Oscillator({ type: 'custom', partials: PARTIALS, volume: -6 + 20 * Math.log10(level * l.level) }).connect(this.filter),
+    );
     this.noiseFilter = new Tone.Filter({ type: 'bandpass', frequency: 1500, Q: 1.2 }).connect(this.env);
     this.noise = new Tone.Noise({ type: 'pink', volume: -32 }).connect(this.noiseFilter);
   }
 
   start(midi: number, time: number, glideFrom?: number) {
+    const glide = glideFrom !== undefined ? 0.09 : 0.035;
+    this.oscs.forEach((osc, i) => {
+      const { cents } = this.layers[i];
+      const f = freqOf(midi, cents);
+      // Start from the unbent pitch for bends, or a tiny scoop into the note.
+      const from = glideFrom !== undefined ? freqOf(glideFrom, cents) : f * 0.992;
+      osc.frequency.setValueAtTime(from, time);
+      osc.frequency.exponentialRampToValueAtTime(f, time + glide);
+      osc.start(time);
+    });
     const f = midiToFreq(midi);
-    const from = glideFrom !== undefined ? midiToFreq(glideFrom) : f * 0.992; // a tiny scoop into the note
-    this.osc.frequency.setValueAtTime(from, time);
-    this.osc.frequency.exponentialRampToValueAtTime(f, time + (glideFrom !== undefined ? 0.09 : 0.035));
     const cutoff = Math.min(6500, f * 7);
     this.filter.frequency.setValueAtTime(cutoff * 0.45, time);
     this.filter.frequency.exponentialRampToValueAtTime(cutoff, time + 0.07);
     this.noiseFilter.frequency.setValueAtTime(Math.min(5000, f * 2), time);
-    this.osc.start(time);
     this.noise.start(time);
     this.env.triggerAttack(time);
   }
 
   setPitch(midi: number, ramp = 0.035) {
     if (this.disposed) return;
-    const f = midiToFreq(midi);
-    this.osc.frequency.rampTo(f, ramp);
-    this.filter.frequency.rampTo(Math.min(6500, f * 7), ramp);
+    this.oscs.forEach((osc, i) => osc.frequency.rampTo(freqOf(midi, this.layers[i].cents), ramp));
+    this.filter.frequency.rampTo(Math.min(6500, midiToFreq(midi) * 7), ramp);
   }
 
   stop(time: number) {
@@ -71,7 +109,7 @@ class Voice {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    for (const n of [this.osc, this.noise, this.filter, this.noiseFilter, this.env]) n.dispose();
+    for (const n of [...this.oscs, this.noise, this.filter, this.noiseFilter, this.env]) n.dispose();
   }
 }
 

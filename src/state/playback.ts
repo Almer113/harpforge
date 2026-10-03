@@ -76,8 +76,12 @@ export async function previewEvent(index: number) {
   setTimeout(() => onEvent(index, false), secs * 1000);
 }
 
+// The sound follows the current harmonica (single reed, tremolo, octave).
+engine.setVoicing(getParsed(useApp.getState().text).harp.voicing);
+
 // Live reactions to settings while playing.
 useApp.subscribe((s, prev) => {
+  if (s.text !== prev.text) engine.setVoicing(getParsed(s.text).harp.voicing);
   if (s.speed !== prev.speed && s.play !== 'stopped') {
     engine.setTempo(getParsed(s.text).doc.meta.tempo * s.speed);
   }

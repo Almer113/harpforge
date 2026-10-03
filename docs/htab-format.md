@@ -13,10 +13,9 @@ Optional front matter between `---` lines. Unknown fields are kept as-is.
 ---
 title: Oh! Susanna
 artist: Stephen Foster
-harmonica: diatonic      # diatonic | chromatic
-tuning: richter          # richter, paddy-richter, country, melody-maker, harmonic-minor,
-                         # solo-10, solo-12, solo-14, solo-16
-harp-key: C              # key of the harmonica (G…F#, Low C…Low F#, High G)
+harmonica: diatonic      # diatonic | chromatic | tremolo | octave
+tuning: richter          # see the table below
+harp-key: C              # key of the harmonica (G…F#; diatonic also Low C…Low F#, High G)
 key: G                   # key of the song (optional)
 position: 2              # optional
 tempo: 100               # beats per minute
@@ -25,6 +24,16 @@ time: 4/4
 ```
 
 Defaults: `diatonic`, `richter`, harp key `C`, tempo 100, time 4/4.
+
+| harmonica | tunings |
+| --- | --- |
+| `diatonic` | `richter`, `paddy-richter`, `country`, `melody-maker`, `harmonic-minor` |
+| `chromatic` | `solo-12`, `solo-10`, `solo-14`, `solo-16` |
+| `tremolo` | `asian-24` (Ocean Star), `scale-24`, `echo-24` (Echo 48 / Big Valley), `richter-20` (Golden Melody), `echo-16` (Echo 32) |
+| `octave` | `lieblinge-24` (Unsere Lieblinge 48), `comet-20` (Comet 40), `lieblinge-16` (Unsere Lieblinge 32) |
+
+Tremolo and octave hole numbers follow Hohner's charts: each number is one
+blow/draw pair of the physical double holes, so `4 -4` reads like a diatonic tab.
 Aliases accepted on import: `instrument` = `harmonica`, `bpm` = `tempo`, `meter` = `time`.
 
 ## Body

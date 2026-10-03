@@ -50,7 +50,33 @@ time: 4/4
 [C] 2 2 -2 3 | [G] 3 -2 2 -1 | [C] 1 1 -1 2 | [G] {-1~~ 1} [C] 1~ |]
 `;
 
-export const DEMOS = [TWINKLE, SHUFFLE, ODE_TO_JOY];
+export const FRERE_JACQUES = `---
+title: Frère Jacques
+artist: Traditional
+harmonica: tremolo
+tuning: asian-24
+harp-key: C
+tempo: 104
+time: 4/4
+---
+2 -1 3 2 | 2 -1 3 2 |
+w: Are you sleep-ing, are you sleep-ing,
+3 -2 4~ | 3 -2 4~ |
+w: Bro-ther John, Bro-ther John?
+{4 -3} {4 -2} 3 2 | {4 -3} {4 -2} 3 2 |
+w: Morn-ing bells are ring-ing, morn-ing bells are ring-ing,
+2 1 2~ | 2 1 2~ |]
+w: Ding, dang, dong! Ding, dang, dong!
+`;
+
+/** Demo songs with the library version that introduced them. */
+export const DEMOS: { text: string; since: number }[] = [
+  { text: TWINKLE, since: 1 },
+  { text: SHUFFLE, since: 1 },
+  { text: ODE_TO_JOY, since: 1 },
+  { text: FRERE_JACQUES, since: 2 },
+];
+export const DEMO_VERSION = 2;
 
 export const BLANK = `---
 title: Untitled

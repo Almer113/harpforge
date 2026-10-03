@@ -2,10 +2,13 @@
 // blow and draw pitch of each, plus which techniques the family supports.
 // Adding a tuning or a family means adding data here, not new logic.
 
-import { midiToName, parsePitchClass } from '../pitch';
+import { midiToName, parseNoteName, parsePitchClass } from '../pitch';
 import type { Breath, HoleSound } from '../types';
 
-export type Family = 'diatonic' | 'chromatic';
+export type Family = 'diatonic' | 'chromatic' | 'tremolo' | 'octave';
+
+/** How many reeds sound per note, and how they're tuned against each other. */
+export type Voicing = 'single' | 'tremolo' | 'octave';
 
 export interface HoleDef {
   hole: number;
@@ -26,6 +29,7 @@ export interface Harmonica {
   hasSlide: boolean;
   bendable: boolean;
   overblows: boolean;
+  voicing: Voicing;
 }
 
 interface TuningDef {
@@ -122,27 +126,83 @@ function shiftedSolo14(): { blow: number[]; draw: number[] } {
 
 const CHROMATIC_KEYS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
 
+// ---- Tremolo & octave (Wiener system) -----------------------------------
+//
+// Hole numbers follow Hohner's charts: each number is a blow/draw pair of the
+// physical double holes, so tabs read like diatonic tabs. Layouts are written in
+// the key of C as note names and stored as offsets from C4.
+// Sources: Hohner tuning chart (2025), Wikipedia "Tremolo harmonica".
+
+function layout(blow: string, draw: string): { blow: number[]; draw: number[] } {
+  const parse = (row: string) => row.split(/\s+/).map((n) => parseNoteName(n)! - 60);
+  return { blow: parse(blow), draw: parse(draw) };
+}
+
+const TREMOLO_TUNINGS: TuningDef[] = [
+  {
+    id: 'asian-24', name: 'Asian 24 (Ocean Star)', family: 'tremolo',
+    ...layout('G3 C4 E4 G4 C5 E5 G5 C6 E6 G6 C7 E7', 'D4 F4 A4 B4 D5 F5 A5 B5 D6 F6 A6 B6'),
+  },
+  {
+    id: 'scale-24', name: 'Scale-tuned 24', family: 'tremolo',
+    ...layout('C4 E4 G4 C5 C5 E5 G5 C6 C6 E6 G6 C7', 'D4 F4 A4 B4 D5 F5 A5 B5 D6 F6 A6 B6'),
+  },
+  {
+    id: 'echo-24', name: 'Echo 48 / Big Valley', family: 'tremolo',
+    ...layout('E3 G3 C4 E4 G4 C5 E5 G5 C6 E6 G6 C7', 'G3 B3 D4 F4 A4 B4 D5 F5 A5 B5 D6 F6'),
+  },
+  {
+    id: 'richter-20', name: 'Golden Melody (Richter 20)', family: 'tremolo',
+    ...layout('C4 E4 G4 C5 E5 G5 C6 E6 G6 C7', 'D4 G4 B4 D5 F5 A5 B5 D6 F6 A6'),
+  },
+  {
+    id: 'echo-16', name: 'Echo 32', family: 'tremolo',
+    ...layout('E4 G4 C5 E5 G5 C6 E6 G6', 'G4 B4 D5 F5 A5 B5 D6 F6'),
+  },
+];
+
+// Octave harmonicas: the listed pitch is the main reed; a second reed sounds an octave lower.
+const OCTAVE_TUNINGS: TuningDef[] = [
+  {
+    id: 'lieblinge-24', name: 'Unsere Lieblinge 48', family: 'octave',
+    ...layout('C4 E4 G4 C5 E5 G5 C6 E6 G6 C7 E7 G7', 'D4 G4 B4 D5 F5 A5 B5 D6 F6 A6 B6 D7'),
+  },
+  {
+    id: 'comet-20', name: 'Comet 40', family: 'octave',
+    ...layout('E4 G4 C5 E5 G5 C6 E6 G6 C7 E7', 'G4 B4 D5 F5 A5 B5 D6 F6 A6 B6'),
+  },
+  {
+    id: 'lieblinge-16', name: 'Unsere Lieblinge 32', family: 'octave',
+    ...layout('E4 G4 C5 E5 G5 C6 E6 G6', 'G4 B4 D5 F5 A5 B5 D6 F6'),
+  },
+];
+
+const DOUBLE_REED_KEYS = ['G', 'Ab', 'A', 'Bb', 'B', 'C', 'Db', 'D', 'Eb', 'E', 'F', 'F#'];
+
 // ---- Registry -----------------------------------------------------------
 
 export const FAMILIES: { id: Family; name: string }[] = [
   { id: 'diatonic', name: 'Diatonic' },
   { id: 'chromatic', name: 'Chromatic' },
+  { id: 'tremolo', name: 'Tremolo' },
+  { id: 'octave', name: 'Octave' },
 ];
 
-const ALL_TUNINGS = [...DIATONIC_TUNINGS, ...CHROMATIC_TUNINGS];
+const FAMILY_IDS = FAMILIES.map((f) => f.id);
+
+const ALL_TUNINGS = [...DIATONIC_TUNINGS, ...CHROMATIC_TUNINGS, ...TREMOLO_TUNINGS, ...OCTAVE_TUNINGS];
 
 export function tuningsFor(family: Family): { id: string; name: string }[] {
   return ALL_TUNINGS.filter((t) => t.family === family).map(({ id, name }) => ({ id, name }));
 }
 
 export function keysFor(family: Family): string[] {
-  return family === 'diatonic' ? DIATONIC_KEYS.map((k) => k.key) : CHROMATIC_KEYS;
+  if (family === 'diatonic') return DIATONIC_KEYS.map((k) => k.key);
+  return family === 'chromatic' ? CHROMATIC_KEYS : DOUBLE_REED_KEYS;
 }
 
 export function defaultSpec(family: Family = 'diatonic'): HarmonicaSpec {
-  return family === 'diatonic'
-    ? { family, tuning: 'richter', key: 'C' }
-    : { family, tuning: 'solo-12', key: 'C' };
+  return { family, tuning: ALL_TUNINGS.find((t) => t.family === family)!.id, key: 'C' };
 }
 
 function keyBase(family: Family, key: string): number | null {
@@ -155,12 +215,15 @@ function keyBase(family: Family, key: string): number | null {
     return pc >= 7 ? 48 + pc : 60 + pc;
   }
   const pc = parsePitchClass(key);
-  return pc === null ? null : 60 + pc;
+  if (pc === null) return null;
+  if (family === 'chromatic') return 60 + pc;
+  // Tremolo/octave layouts are written in C; G–B keys sit below C, Db–F# above.
+  return pc >= 7 ? 48 + pc : 60 + pc;
 }
 
 /** Normalizes loosely written specs (unknown values fall back to defaults). */
 export function normalizeSpec(partial: Partial<HarmonicaSpec>): HarmonicaSpec {
-  const family: Family = partial.family === 'chromatic' ? 'chromatic' : 'diatonic';
+  const family: Family = FAMILY_IDS.includes(partial.family as Family) ? (partial.family as Family) : 'diatonic';
   const def = defaultSpec(family);
   const tuning = ALL_TUNINGS.some((t) => t.family === family && t.id === partial.tuning) ? partial.tuning! : def.tuning;
   const key = partial.key && keyBase(family, partial.key) !== null ? canonicalKey(family, partial.key) : def.key;
@@ -189,6 +252,7 @@ export function getHarmonica(partial: Partial<HarmonicaSpec>): Harmonica {
     hasSlide: spec.family === 'chromatic',
     bendable: spec.family === 'diatonic',
     overblows: spec.family === 'diatonic',
+    voicing: spec.family === 'tremolo' ? 'tremolo' : spec.family === 'octave' ? 'octave' : 'single',
   };
   cache.set(id, harp);
   return harp;
@@ -203,7 +267,8 @@ export function harmonicaName(spec: HarmonicaSpec): string {
   if (spec.family === 'diatonic') {
     return tuning && tuning.id !== 'richter' ? `${spec.key} Diatonic · ${tuning.name}` : `${spec.key} Diatonic`;
   }
-  return `${spec.key} Chromatic · ${tuning?.name ?? spec.tuning}`;
+  const family = FAMILIES.find((f) => f.id === spec.family)!.name;
+  return `${spec.key} ${family} · ${tuning?.name ?? spec.tuning}`;
 }
 
 /** Every harmonica we know about, for "which harmonica fits this song best?". */

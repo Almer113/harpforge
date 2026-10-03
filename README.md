@@ -13,7 +13,8 @@ npm run build
 
 ## What's in v0.1
 
-- **Play** — a virtual harmonica (diatonic all keys + 5 tunings, chromatic 10/12/14/16 holes).
+- **Play** — a virtual harmonica: diatonic (all keys + 5 tunings), chromatic (10/12/14/16 holes),
+  tremolo (5 layouts incl. Asian 24 / Ocean Star) and octave (3 layouts), each with its own sound.
   Keyboard: `1…0 - =` blow, `Q…P [ ]` draw, hold `Shift` to bend (deeper the longer you hold),
   `Alt` overblow/overdraw, `Space` chromatic slide, `Enter` play/pause, `Esc` stop.
   Mouse: top half blows, bottom half draws, drag sideways to glide, drag outward to bend.
@@ -43,7 +44,7 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 ## Roadmap
 
 1. ~~Core model, `.htab`, conversion~~ · ~~Playable harmonica~~ · ~~Tab view + autoplay, record, editor, library~~
-2. Tremolo & octave harmonicas
+2. ~~Tremolo & octave harmonicas~~ (numbered-notation / jianpu tabs for Asian tremolo still to come)
 3. ABC / ChordPro / MusicXML / MIDI import & export, staff view
 4. PDF chord-sheet import (then guitar tabs)
 5. Microphone input, practice mode, MIDI keyboard, share links, sampled harmonica sound
