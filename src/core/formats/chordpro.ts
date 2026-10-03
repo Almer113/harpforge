@@ -31,22 +31,39 @@ export function parseChordPro(text: string): Imported {
   const lines: TabLine[] = [];
   let capo = 0;
   let pendingSection: string | undefined;
-  let lastEvent: RestEvent | null = null;
-  let orphanLyric = '';
+  let seenChord = false;
+  let orphanLyric = ''; // lyrics before the very first chord: sung over it
   let inTab = false;
   const bars = () => beatsPerBar(meta);
 
-  const appendLyric = (txt: string) => {
-    const t = txt.trim();
-    if (!t) return;
-    if (lastEvent) lastEvent.lyric = lastEvent.lyric ? `${lastEvent.lyric} ${t}` : t;
-    else orphanLyric = orphanLyric ? `${orphanLyric} ${t}` : t;
+  /**
+   * Beats for each part of a line, from how much is sung over it: a typical lyric
+   * line is about two bars; chord-only lines get a bar per chord.
+   */
+  const allocate = (segs: { chars: number; isChord: boolean }[]): number[] => {
+    const bpb = bars();
+    if (segs.every((sg) => sg.chars === 0)) return segs.map(() => bpb);
+    const total = segs.reduce((a, sg) => a + Math.max(1, sg.chars), 0);
+    const chordCount = segs.filter((sg) => sg.isChord).length;
+    const nBars = Math.max(Math.min(4, Math.max(1, Math.round(total / 22))), Math.ceil(chordCount / 2));
+    const totalBeats = nBars * bpb;
+    const mins = segs.map((sg) => (sg.isChord ? Math.min(2, bpb) : 1));
+    const beats = segs.map((sg, k) => Math.max(mins[k], Math.round((totalBeats * Math.max(1, sg.chars)) / total)));
+    let diff = totalBeats - beats.reduce((a, b) => a + b, 0);
+    while (diff !== 0) {
+      const byLength = beats.map((_, k) => k).sort((a, b) => beats[b] - beats[a]);
+      const k = diff > 0 ? byLength[0] : byLength.find((j) => beats[j] > mins[j]);
+      if (k === undefined) break;
+      beats[k] += diff > 0 ? 1 : -1;
+      diff += diff > 0 ? -1 : 1;
+    }
+    return beats;
   };
 
   for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
     const line = raw.replace(/\s+$/, '');
     const trimmed = line.trim();
-    if (trimmed.startsWith('#')) continue;
+    if (trimmed.startsWith('#') || /^(```|~~~)/.test(trimmed)) continue;
     const dir = /^\{\s*([A-Za-z_]+)\s*(?::\s*(.*?))?\s*\}$/.exec(trimmed);
     if (dir) {
       const name = dir[1].toLowerCase();
@@ -64,44 +81,51 @@ export function parseChordPro(text: string): Imported {
       else if (name === 'comment' || name === 'c' || name === 'ci' || name === 'comment_italic') pendingSection = value;
       continue;
     }
-    if (inTab) continue;
-    if (!trimmed) continue;
+    if (inTab || !trimmed) continue;
 
-    // Split "[G]Some [C]words" into segments.
+    // Split "Words [G]some [C]words" into a lead-in and chord parts.
+    const parts: { sym?: string; text: string }[] = [{ text: '' }];
     const segRe = /\[([^\]]+)\]/g;
-    const segments: { chord?: string; text: string }[] = [];
     let last = 0;
     let m: RegExpExecArray | null;
-    let pendingChord: string | undefined;
     while ((m = segRe.exec(line))) {
-      const before = line.slice(last, m.index);
-      if (pendingChord !== undefined || before) segments.push({ chord: pendingChord, text: before });
-      pendingChord = m[1].trim();
+      parts[parts.length - 1].text += line.slice(last, m.index);
+      const sym = m[1].trim().replace(/^\*/, '');
+      if (parseChord(sym)) parts.push({ sym, text: '' });
       last = m.index + m[0].length;
     }
-    segments.push({ chord: pendingChord, text: line.slice(last) });
+    parts[parts.length - 1].text += line.slice(last);
+    const lead = parts[0].text.trim().replace(/\s+/g, ' ');
+    const chordParts = parts.slice(1);
 
-    const chordSegments = segments.filter((sg) => sg.chord && parseChord(sg.chord.replace(/^\*/, '')));
-    if (!chordSegments.length) {
-      // A line of lyrics with no chords (or only non-chord annotations).
-      appendLyric(segments.map((sg) => sg.text).join(''));
-      continue;
-    }
-    const events: TabEvent[] = [];
-    for (const sg of segments) {
-      const sym = sg.chord?.replace(/^\*/, '');
-      if (!sym || !parseChord(sym)) {
-        appendLyric(sg.text);
-        continue;
-      }
-      const flats = prefersFlats(meta.key) || /b/.test(sym.slice(1, 2));
-      const ev: RestEvent = { kind: 'rest', beats: bars(), chord: transposeChord(sym, capo, flats) };
-      const lyric = (orphanLyric ? orphanLyric + ' ' : '') + sg.text.trim();
+    if (!seenChord) {
+      // Lyrics before the first chord of the song are sung over that first chord.
+      if (lead) orphanLyric = orphanLyric ? `${orphanLyric} ${lead}` : lead;
+      if (!chordParts.length) continue;
+      chordParts[0].text = orphanLyric + (orphanLyric ? ' ' : '') + chordParts[0].text.trim();
       orphanLyric = '';
-      if (lyric) ev.lyric = lyric.replace(/\s+/g, ' ');
-      events.push(ev, { kind: 'bar', style: 'single' });
-      lastEvent = ev;
     }
+    // A lead-in (or a whole line without chords) continues the previous chord.
+    const segs: { sym?: string; text: string }[] = [];
+    if (seenChord && lead) segs.push({ text: lead });
+    for (const cp of chordParts) segs.push({ sym: cp.sym, text: cp.text.trim().replace(/\s+/g, ' ') });
+    if (!segs.length) continue;
+    seenChord = true;
+
+    const beats = allocate(segs.map((sg) => ({ chars: sg.text.length, isChord: !!sg.sym })));
+    const chordOnly = segs.every((sg) => !sg.text);
+    const events: TabEvent[] = [];
+    segs.forEach((sg, k) => {
+      const ev: RestEvent = { kind: 'rest', beats: beats[k] };
+      if (sg.sym) {
+        const flats = prefersFlats(meta.key) || /b/.test(sg.sym.slice(1, 2));
+        ev.chord = transposeChord(sg.sym, capo, flats);
+      }
+      if (sg.text) ev.lyric = sg.text;
+      events.push(ev);
+      if (chordOnly) events.push({ kind: 'bar', style: 'single' });
+    });
+    if (!chordOnly) events.push({ kind: 'bar', style: 'single' });
     const tl: TabLine = { events };
     if (pendingSection !== undefined) {
       tl.section = pendingSection;
@@ -161,8 +185,15 @@ export function chordsOverLyricsToChordPro(text: string): string {
     }
   }
   if (!out.some((l) => l.startsWith('{title'))) {
-    const first = src.find((l) => l.trim() && !isChordLine(l) && !SECTION_RE.test(l));
-    if (first && first.trim().length < 60) out.push(`{title: ${first.trim()}}`);
+    // Only a line standing alone above the song (before any section or chords) can be the title.
+    const head: string[] = [];
+    for (const l of src) {
+      if (/^\s*(```|~~~)/.test(l)) continue;
+      if (isChordLine(l) || SECTION_RE.test(l)) break;
+      if (l.trim()) head.push(l.trim());
+    }
+    const first = head.find((l) => !/^(capo|key|tuning|tempo|bpm|description|difficulty|author)\b/i.test(l));
+    if (first && first.length < 60 && head.length <= 4) out.push(`{title: ${first}}`);
   }
 
   let inDiagrams = false;
@@ -171,6 +202,7 @@ export function chordsOverLyricsToChordPro(text: string): string {
     const trimmed = line.trim();
     if (
       !trimmed ||
+      /^(```|~~~)/.test(trimmed) ||
       /^(capo|key|tuning|tempo|bpm|description|difficulty|author|strumming|rating|transpose)\b/i.test(trimmed) ||
       /\b(chords|tabs?)\s+by\b/i.test(trimmed) ||
       /^[\dxXoO\s|.,-]+$/.test(trimmed) || // chord-diagram fingerings like "342" or "x32010"

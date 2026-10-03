@@ -480,7 +480,7 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
       }
       const body = midis.length === 1 ? noteText(midis[0]) : `[${midis.map(noteText).join('')}]`;
       parts.push(`${prefix}${chord}${body}${len}`);
-      if (withLyrics) lyr.push(ev.lyric ? ev.lyric.replace(/\s+/g, '~') : '*');
+      if (withLyrics) lyr.push(ev.lyric ? ev.lyric.trim().replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-') : '*');
       tabs.push(tabToken(ev));
     }
 

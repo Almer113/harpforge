@@ -391,14 +391,25 @@ export function chordSheetToTab(doc: TabDoc, harp: Harmonica, pattern: StrumPatt
   };
   const stats: ConvertStats = { notes: 0, bends: 0, overblows: 0, slides: 0, unplayable: 0, reducedChords: 0, cost: 0 };
   const missing = new Set<string>();
+  let previous: ReturnType<typeof findHarmonicaChord> = null;
   const lines = doc.lines.map((l) => {
     const events: TabEvent[] = [];
     for (const e of l.events) {
+      // Words sung before the line's first chord carry on the previous chord.
+      if (e.kind === 'rest' && !e.chord && e.lyric && e.beats > 0 && previous) {
+        const sounds = previous.sounds;
+        patternBeats(e.beats, pattern).forEach((beats, k) => {
+          events.push({ kind: 'note', sounds, beats, lyric: k === 0 ? e.lyric : undefined, src: e.src });
+          stats.notes++;
+        });
+        continue;
+      }
       if (e.kind !== 'rest' || !e.chord || e.beats <= 0) {
         events.push({ ...e });
         continue;
       }
       const found = lookup(e.chord);
+      previous = found ?? previous;
       if (!found) {
         missing.add(e.chord);
         stats.unplayable++;
@@ -434,19 +445,24 @@ export function chordSheetToTab(doc: TabDoc, harp: Harmonica, pattern: StrumPatt
 /** Ranks harmonicas by how well they cover a chord sheet's chords. */
 export function suggestForChordSheet(doc: TabDoc, opts: { limit?: number; families?: string[] } = {}): Suggestion[] {
   const tonic = guessTonicFromChords(doc);
+  const chordEvents = doc.lines.reduce((n, l) => n + l.events.filter((e) => e.kind === 'rest' && e.chord && e.beats > 0).length, 0);
   const results: Suggestion[] = [];
   for (const spec of allSpecs()) {
     if (opts.families && !opts.families.includes(spec.family)) continue;
     const harp = getHarmonica(spec);
     const r = chordSheetToTab(doc, harp, 'hold');
     const position = spec.family === 'diatonic' && tonic !== undefined ? positionFor(spec.key, tonic) : undefined;
+    // Prefer what most players own (standard Richter diatonics) unless another harp
+    // plays the chords clearly better. Costs are averaged per chord, so long songs
+    // don't drown out that preference.
     let preference = 0;
     if (spec.family !== 'diatonic') preference += 2;
     else {
-      if (spec.tuning !== 'richter') preference += 1.5;
+      if (spec.tuning !== 'richter') preference += 3;
       if (/Low|High/.test(spec.key)) preference += 0.6;
     }
-    results.push({ spec, name: harmonicaName(spec), shift: 0, score: r.stats.cost + preference, stats: r.stats, position });
+    const perChord = (r.stats.cost / Math.max(1, chordEvents)) * 4;
+    results.push({ spec, name: harmonicaName(spec), shift: 0, score: perChord + preference, stats: r.stats, position });
   }
   results.sort((a, b) => a.score - b.score);
   return results.slice(0, opts.limit ?? 10);

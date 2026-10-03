@@ -104,7 +104,7 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, on
                         {showNoteNames && sev && !sev.rest && (
                           <span className="card-note">{sev.midis.map((x) => (x === null ? '?' : midiToName(x, flats))).join(' ')}</span>
                         )}
-                        <span className="card-lyric">{ev.kind === 'note' ? ev.lyric ?? '' : ''}</span>
+                        <span className="card-lyric">{ev.lyric ?? ''}</span>
                       </button>
                     );
                   })}

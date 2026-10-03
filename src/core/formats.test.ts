@@ -126,9 +126,11 @@ just words
     expect(doc.meta.title).toBe('Song');
     expect(warnings[0]).toMatch(/Capo 2/);
     const evs = doc.lines.flatMap((l) => l.events).filter((e) => e.kind === 'rest') as any[];
-    expect(evs.map((e) => e.chord)).toEqual(['A', 'D', 'E']);
+    expect(evs.map((e) => e.chord)).toEqual(['A', 'D', undefined, 'E']);
     expect(evs[0].lyric).toBe('Hello my');
-    expect(evs[1].lyric).toBe('friend just words');
+    expect(evs[1].lyric).toBe('friend');
+    // A line without chords keeps its own place, continuing the previous chord.
+    expect(evs[2].lyric).toBe('just words');
     expect(doc.lines[0].section).toBe('Chorus');
     expect(isChordSheet(doc)).toBe(true);
   });
@@ -155,7 +157,7 @@ Em   C   G   D`;
     expect(cp).toContain('{comment: Chorus}');
     expect(sniffText(ug)).toBe('chordsheet');
     const imp = importText(ug, 'chordsheet');
-    const chords = imp.doc.lines.flatMap((l) => l.events).filter((e) => e.kind === 'rest').map((e: any) => e.chord);
+    const chords = imp.doc.lines.flatMap((l) => l.events).filter((e) => e.kind === 'rest' && e.chord).map((e: any) => e.chord);
     expect(chords).toEqual(['G#', 'C#', 'G#', 'D#7', 'Fm', 'C#', 'G#', 'D#']);
   });
 
@@ -202,5 +204,38 @@ describe('chord placement', () => {
   it('keeps words whole when a chord sits mid-word', () => {
     const cp = chordsOverLyricsToChordPro('G                 C\nWalking down the sunny road');
     expect(cp).toContain('[G]Walking down the [C]sunny road');
+  });
+});
+
+describe('chord sheets keep their lines', () => {
+  const SHEET = `[Verse 1]
+ C
+Let me sing you something, there's a long road,
+                         D7         G7
+over the hill-side, when the morning glows.
+
+[Chorus]
+        G                   F        C
+Yippee ki-yi-yay, when the round-up ends.`;
+
+  it('keeps lead-in words on their own line, sizes chords by lyrics, and keeps hyphens', () => {
+    const { doc } = importText('```\n' + SHEET + '\n```', 'chordsheet');
+    expect(doc.meta.title).toBeUndefined();
+    const verse = doc.lines[1].events.filter((e) => e.kind === 'rest') as any[];
+    expect(verse[0]).toMatchObject({ lyric: 'over the hill-side, when' });
+    expect(verse[0].chord).toBeUndefined();
+    expect(verse.map((e) => e.chord)).toEqual([undefined, 'D7', 'G7']);
+    const total = verse.reduce((a, e) => a + e.beats, 0);
+    expect(total).toBe(8); // a typical lyric line ≈ 2 bars
+    expect(verse[0].beats).toBeGreaterThan(verse[1].beats);
+
+    const r = chordSheetToTab(doc, C, 'hold');
+    const text = serializeHtab(r.doc);
+    // Lead-in plays on the previous chord (C); hyphenated words survive a round trip.
+    expect(text).toContain(String.raw`w: Yippee ki\-yi\-yay,~when~the round\-up ends.`);
+    const back = parseHtab(text).doc;
+    const chorus = back.lines[2].events.filter((e) => e.kind === 'note') as NoteEvent[];
+    expect(chorus.map((n) => n.lyric)).toEqual(['Yippee', 'ki-yi-yay, when the', 'round-up', 'ends.']);
+    expect((back.lines[1].events[0] as NoteEvent).sounds).toEqual((back.lines[0].events[0] as NoteEvent).sounds);
   });
 });

@@ -112,7 +112,8 @@ function lyricsText(line: TabLine): string | null {
   const parts: string[] = [];
   for (let k = 0; k <= last; k++) {
     const syl = notes[k].lyric ?? '*';
-    parts.push(syl.trim().replace(/\s+/g, '~') || '*');
+    // Hyphens inside a syllable are literal ("round-up"); a trailing one joins to the next syllable.
+    parts.push(syl.trim().replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-') || '*');
   }
   // Join: syllables ending with "-" glue to the next one.
   let text = '';
