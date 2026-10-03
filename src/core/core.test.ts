@@ -1,0 +1,173 @@
+import { describe, expect, it } from 'vitest';
+import { getHarmonica, maxBend, soundPitch, canOver } from './instruments';
+import { parseHtab, parseSound } from './htab/parser';
+import { serializeHtab } from './htab/serializer';
+import { setMetaFields } from './htab/meta';
+import { buildScore, harmonicaFromMeta } from './score';
+import { notesToTab, positionFor, retab, suggestHarmonicas, tabToNotes } from './convert';
+import { midiToName, parseNoteName } from './pitch';
+import { holeSound, type HoleSound } from './types';
+
+const C = getHarmonica({ family: 'diatonic', tuning: 'richter', key: 'C' });
+
+describe('pitch', () => {
+  it('round-trips note names', () => {
+    expect(parseNoteName('C4')).toBe(60);
+    expect(parseNoteName('Bb3')).toBe(58);
+    expect(parseNoteName('F#5')).toBe(78);
+    expect(midiToName(61)).toBe('C#4');
+    expect(midiToName(61, true)).toBe('Db4');
+  });
+});
+
+describe('instruments', () => {
+  it('builds a C Richter diatonic', () => {
+    expect(C.holes.map((h) => midiToName(h.blow))).toEqual(['C4', 'E4', 'G4', 'C5', 'E5', 'G5', 'C6', 'E6', 'G6', 'C7']);
+    expect(C.holes.map((h) => midiToName(h.draw))).toEqual(['D4', 'G4', 'B4', 'D5', 'F5', 'A5', 'B5', 'D6', 'F6', 'A6']);
+  });
+  it('knows diatonic bends and overblows', () => {
+    expect(maxBend(C, 3, 'draw')).toBe(3);
+    expect(maxBend(C, 2, 'draw')).toBe(2);
+    expect(maxBend(C, 10, 'blow')).toBe(2);
+    expect(maxBend(C, 5, 'blow')).toBe(0);
+    expect(soundPitch(C, holeSound(3, 'draw', { bend: 2 }))).toBe(parseNoteName('A4'));
+    expect(soundPitch(C, holeSound(6, 'blow', { over: true }))).toBe(parseNoteName('A#5'));
+    expect(canOver(C, 7, 'draw')).toBe(true);
+    expect(soundPitch(C, holeSound(4, 'draw', { bend: 2 }))).toBeNull();
+  });
+  it('builds a chromatic with slide', () => {
+    const chrom = getHarmonica({ family: 'chromatic', tuning: 'solo-12', key: 'C' });
+    expect(chrom.holes).toHaveLength(12);
+    expect(soundPitch(chrom, holeSound(1, 'blow', { slide: true }))).toBe(61);
+    expect(soundPitch(chrom, holeSound(4, 'draw'))).toBe(71);
+  });
+  it('places other keys in the standard range', () => {
+    expect(getHarmonica({ key: 'G' }).holes[0].blow).toBe(55);
+    expect(getHarmonica({ key: 'F#' }).holes[0].blow).toBe(66);
+    expect(getHarmonica({ key: 'Low D' }).holes[0].blow).toBe(50);
+  });
+});
+
+describe('htab parser', () => {
+  it('parses sound spellings', () => {
+    const s = (w: string) => parseSound(w) as HoleSound;
+    expect(s('-4')).toMatchObject({ hole: 4, breath: 'draw', bend: 0 });
+    expect(s('+4')).toMatchObject({ hole: 4, breath: 'blow' });
+    expect(s('4D')).toMatchObject({ hole: 4, breath: 'draw' });
+    expect(s("-3''")).toMatchObject({ hole: 3, breath: 'draw', bend: 2 });
+    expect(s('-3b')).toMatchObject({ bend: 1 });
+    expect(s('6o')).toMatchObject({ hole: 6, breath: 'blow', over: true });
+    expect(s('<5')).toMatchObject({ hole: 5, slide: true });
+    expect(parseSound('C#4')).toEqual({ type: 'pitch', midi: 61 });
+    expect(typeof parseSound('x4')).toBe('string');
+  });
+
+  it('parses header, rhythm, chords, lyrics, sections', () => {
+    const text = `---
+title: Test
+harmonica: diatonic
+harp-key: G
+tempo: 90
+---
+@ Verse
+[C] 4 -4~ {5 6} | (4 5 6)~ . -(1 2 3) ||
+w: twin-kle twin kle
+`;
+    const { doc, issues } = parseHtab(text);
+    expect(issues).toEqual([]);
+    expect(doc.meta).toMatchObject({ title: 'Test', harpKey: 'G', tempo: 90 });
+    const line = doc.lines[0];
+    expect(line.section).toBe('Verse');
+    const kinds = line.events.map((e) => e.kind);
+    expect(kinds).toEqual(['note', 'note', 'note', 'note', 'bar', 'note', 'rest', 'note', 'bar']);
+    const notes = line.events.filter((e) => e.kind === 'note') as any[];
+    expect(notes[0].chord).toBe('C');
+    expect(notes.map((n) => n.beats)).toEqual([1, 2, 0.5, 0.5, 2, 1]);
+    expect(notes[0].lyric).toBe('twin-');
+    expect(notes[1].lyric).toBe('kle');
+    expect(notes[4].sounds).toHaveLength(3);
+    expect(notes[5].sounds.every((s: HoleSound) => s.breath === 'draw')).toBe(true);
+  });
+
+  it('reports errors with spans', () => {
+    const { issues } = parseHtab('4 -4 zz 5');
+    expect(issues).toHaveLength(1);
+    expect(issues[0].span).toEqual({ start: 5, end: 7 });
+  });
+
+  it('round-trips through the serializer', () => {
+    const text = `---
+title: Round trip
+harmonica: diatonic
+harp-key: C
+tempo: 120
+time: 3/4
+---
+@ A
+[G7] -2 {-3' -3} -4~ | {4~ 5} {. 6 -6} -(1 2 3 4)~ |]
+w: one two- three four
+`;
+    const a = parseHtab(text).doc;
+    const out = serializeHtab(a);
+    const b = parseHtab(out).doc;
+    const strip = (d: typeof a) => JSON.parse(JSON.stringify(d, (k, v) => (k === 'src' ? undefined : v)));
+    expect(strip(b)).toEqual(strip(a));
+  });
+});
+
+describe('meta editing', () => {
+  it('replaces and adds fields, keeping the body', () => {
+    const text = '---\ntitle: X\nkey: C\n---\n4 5 6\n';
+    const out = setMetaFields(text, { harpKey: 'A', title: 'Y' });
+    expect(out).toBe('---\ntitle: Y\nkey: C\nharp-key: A\n---\n4 5 6\n');
+    expect(setMetaFields('4 5', { tempo: 80 })).toBe('---\ntempo: 80\n---\n4 5');
+  });
+});
+
+describe('score + conversion', () => {
+  const twinkle = parseHtab('4 4 6 6 -6 -6 6~ | -5 -5 5 5 -4 -4 4~').doc;
+
+  it('builds a timed score', () => {
+    const { score, issues } = buildScore(twinkle, harmonicaFromMeta(twinkle.meta));
+    expect(issues).toEqual([]);
+    expect(score.totalBeats).toBe(16);
+    expect(score.events[6]).toMatchObject({ start: 6, beats: 2, midis: [79] });
+  });
+
+  it('converts tab → notes → tab losslessly for simple melodies', () => {
+    const notes = tabToNotes(twinkle, C).doc;
+    const first = notes.lines[0].events[0] as any;
+    expect(first.sounds[0]).toEqual({ type: 'pitch', midi: 72 });
+    const back = notesToTab(notes, C);
+    expect(back.warnings).toEqual([]);
+    expect(serializeHtab(back.doc)).toContain('4 4 6 6 -6 -6 6~ | -5 -5 5 5 -4 -4 4~');
+  });
+
+  it('uses bends only when needed, and flags unplayable notes', () => {
+    const doc = parseHtab('B4 Bb4 A4 G4').doc; // -3, -3', -3'', -2 (or 3)
+    const r = notesToTab(doc, C);
+    expect(r.stats.bends).toBe(2);
+    const bad = notesToTab(parseHtab('B3').doc, C);
+    expect(bad.stats.unplayable).toBe(1);
+  });
+
+  it('places chords on adjacent holes', () => {
+    const r = notesToTab(parseHtab('(C4 E4 G4) (D4 G4 B4)').doc, C);
+    expect(serializeHtab(r.doc)).toContain('(1 2 3) -(1 2 3)');
+  });
+
+  it('re-tabs a diatonic melody for chromatic', () => {
+    const chrom = getHarmonica({ family: 'chromatic', tuning: 'solo-12', key: 'C' });
+    const r = retab(twinkle, C, chrom);
+    expect(r.stats.unplayable).toBe(0);
+  });
+
+  it('suggests a fitting harmonica and position', () => {
+    // A G-major melody with F#: a C diatonic can't play it without overblows, a G one can.
+    const doc = parseHtab('---\nkey: G\n---\nG4 A4 B4 C5 D5 E5 F#5 G5').doc;
+    const best = suggestHarmonicas(doc, { families: ['diatonic'] })[0];
+    expect(best.stats.unplayable).toBe(0);
+    expect(positionFor('C', 7)).toBe(2);
+    expect(positionFor('G', 7)).toBe(1);
+  });
+});
