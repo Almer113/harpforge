@@ -21,7 +21,13 @@ npm run build
 - **Record** — timed (metronome + count-in, snapped to ♩/♪/𝅘𝅥𝅯) or free (just the order of notes);
   appends to the current tab or replaces it.
 - **Auto-play** with moving highlight, loop, metronome and practice speed.
-- **Editor** — syntax-highlighted `.htab` text with error squiggles and a live, clickable tab preview.
+- **Editor** — three modes over the same tab: **Visual** (drag-and-drop measures and note cards sized by the
+  time signature; drag to move, Alt-drag to copy, drag a card's edge to change its length, step entry by
+  playing the harmonica, inspector for holes/bends/chords/lyrics, measure tools, re-barring when the time
+  signature changes), **Text** (syntax-highlighted `.htab` with error squiggles) and **Split** (text + live
+  preview). Song details (title, key, time signature, tempo, harmonica) sit on top; undo/redo covers everything.
+  Shortcuts: Z X C V B note lengths, N dotted, M triplet, / rest, ←/→ select, ↑/↓ next note (Shift = semitone),
+  Del delete, Ctrl+C/V copy/paste, Ctrl+Z/Y undo/redo.
 - **Convert** — paste notes (or a tab), get a ranked list of the best harmonicas/positions,
   and the tab for the one you pick. Switching a song's harmonica re-tabs it automatically.
 - **Import** — HarpTab, ABC, MusicXML (`.musicxml`/`.xml`/`.mxl`), MIDI, ChordPro, plain
@@ -64,7 +70,9 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `src/audio/pitch.ts` | Pitch detection (YIN) for the microphone |
 | `scripts/prepare-samples.py` | Turns the VCSL recordings into web-ready, looped samples |
 | `src/live` | Keyboard/mouse input and recording |
-| `src/state` | Zustand store, playback controls, actions |
+| `src/core/edit/model.ts` | Measure model behind the visual editor (placement, moves, re-barring) |
+| `src/components/editor` | Visual editor, inspector, song details |
+| `src/state` | Zustand store (incl. undo history), playback controls, actions |
 | `src/pages`, `src/components` | UI |
 
 ## Roadmap
