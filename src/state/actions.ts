@@ -6,7 +6,7 @@ import { splitHeader } from '../core/htab/parser';
 import { bodyText } from '../core/htab/serializer';
 import { getHarmonica, specId, type HarmonicaSpec } from '../core/instruments';
 import { BLANK } from '../demo/songs';
-import { isChordSheet } from '../core/convert';
+import { isChordSheet, octaveOptions } from '../core/convert';
 import { decodeText, exportDoc, importBytes, IMPORT_ACCEPT, type ExportKind, type Imported } from '../core/formats';
 import { saveTab } from '../storage/library';
 import { stop } from './playback';
@@ -36,6 +36,22 @@ export function setHarmonica(spec: HarmonicaSpec) {
   useApp.setState({ keyOffset: 0 });
   if (r.warnings.length) s.notify(`Re-tabbed for ${to.name} — ${r.warnings.length} note(s) couldn't be placed.`);
   else if (r.stats.notes) s.notify(`Re-tabbed for ${to.name} ✓`);
+}
+
+/** Moves the whole tab an octave up (+12) or down (−12) on the same harmonica, if it fits. */
+export function shiftOctave(shift: 12 | -12) {
+  const s = useApp.getState();
+  const p = getParsed(s.text);
+  const opt = octaveOptions(p.doc, p.harp).find((o) => o.shift === shift);
+  if (!opt?.possible || !opt.result) {
+    s.notify(opt?.note ?? 'Can’t move this tab.');
+    return;
+  }
+  stop();
+  const header = s.text.slice(0, splitHeader(s.text).bodyStart);
+  const body = bodyText(opt.result.doc.lines);
+  s.setText(header + body + (body ? '\n' : ''));
+  s.notify(`Moved an octave ${shift > 0 ? 'up' : 'down'} ✓`);
 }
 
 export function confirmDiscard(): boolean {

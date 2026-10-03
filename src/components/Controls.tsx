@@ -1,12 +1,16 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { FAMILIES, keysFor, tuningsFor, type Family } from '../core/instruments';
 import { startRecording, stopRecording } from '../live/recorder';
-import { setHarmonica } from '../state/actions';
+import { setHarmonica, shiftOctave } from '../state/actions';
+import { octaveOptions } from '../core/convert';
 import { stop, togglePlay } from '../state/playback';
 import { useApp, useParsed } from '../state/store';
 
 export function HarmonicaPicker() {
-  const { harp } = useParsed();
+  const { harp, doc } = useParsed();
+  const octaves = useMemo(() => octaveOptions(doc, harp), [doc, harp]);
+  const up = octaves.find((o) => o.shift === 12)!;
+  const down = octaves.find((o) => o.shift === -12)!;
   const { family, tuning, key } = harp.spec;
   const setFamily = (f: Family) => {
     const keys = keysFor(f);
@@ -38,6 +42,13 @@ export function HarmonicaPicker() {
           ))}
         </select>
       </label>
+      <div className="octave-ctl">
+        <span>Octave</span>
+        <div className="seg">
+          <button disabled={!down.possible} onClick={() => shiftOctave(-12)} title={down.note} aria-label="Octave down">▼</button>
+          <button disabled={!up.possible} onClick={() => shiftOctave(12)} title={up.note} aria-label="Octave up">▲</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -125,10 +136,14 @@ export function Transport({ showRecord = false }: { showRecord?: boolean }) {
               <button className="t-btn rec-btn ghost" onClick={() => startRecording('free')} title="Record notes in order, without timing">
                 {Icon.rec} <span>Free</span>
               </button>
-              <select value={recordGrid} onChange={(e) => useApp.setState({ recordGrid: parseFloat(e.target.value) })} title="Snap timed recordings to">
-                <option value={1}>Snap ♩</option>
-                <option value={0.5}>Snap ♪</option>
-                <option value={0.25}>Snap 𝅘𝅥𝅯</option>
+              <select
+                value={recordGrid}
+                onChange={(e) => useApp.setState({ recordGrid: parseFloat(e.target.value) })}
+                title="Timing grid for Record: when you stop, each note is rounded to the nearest step so small timing wobbles disappear. (Free recording ignores this.)"
+              >
+                <option value={1}>Round to beats</option>
+                <option value={0.5}>Round to ½ beats</option>
+                <option value={0.25}>Round to ¼ beats</option>
               </select>
               <label className="check" title="Add the recording to the end of the current tab, or replace its contents">
                 <input type="checkbox" checked={recordAppend} onChange={(e) => useApp.setState({ recordAppend: e.target.checked })} />

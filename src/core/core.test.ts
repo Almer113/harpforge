@@ -210,3 +210,19 @@ describe('tremolo & octave harmonicas', () => {
     expect(issues).toEqual([]);
   });
 });
+
+describe('octave shifting', () => {
+  it('offers octaves that fit and blocks ones that do not', async () => {
+    const { octaveOptions } = await import('./convert');
+    const doc = parseHtab('4 4 6 6 -6 -6 6~').doc;
+    const [up, down] = octaveOptions(doc, C);
+    expect(down.possible).toBe(true);
+    // An octave down, A4 is only reachable as the bent -3''.
+    expect(serializeHtab(down.result!.doc)).toMatch(/1 1 (-2|3) (-2|3) -3'' -3'' (-2|3)~/);
+    expect(down.note).toMatch(/2 bends/);
+    expect(up.possible).toBe(true);
+    // Hole 1 can't go lower.
+    const low = octaveOptions(parseHtab('1 -1 2').doc, C);
+    expect(low[1].possible).toBe(false);
+  });
+});

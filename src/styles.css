@@ -438,3 +438,9 @@ select:focus, .search:focus { border-color: var(--brass); }
   .editor-split, .convert-grid { grid-template-columns: 1fr; }
   .editor-pane { position: static; }
 }
+
+/* Octave buttons in the harmonica picker */
+.octave-ctl { display: flex; flex-direction: column; gap: 3px; }
+.octave-ctl > span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); font-weight: 700; }
+.octave-ctl .seg button { padding: 5px 11px; font-size: 11px; }
+.seg button:disabled { opacity: 0.35; cursor: not-allowed; }

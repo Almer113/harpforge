@@ -463,3 +463,51 @@ function guessTonicFromChords(doc: TabDoc): number | undefined {
   }
   return undefined;
 }
+
+// ---- Octave shifting ----------------------------------------------------------
+
+export interface OctaveOption {
+  shift: 12 | -12;
+  possible: boolean;
+  result?: ConvertResult;
+  /** Short description of what playing it there takes. */
+  note: string;
+}
+
+function countTechniques(doc: TabDoc, harp: Harmonica): { bends: number; overblows: number; unplayable: number } {
+  let bends = 0;
+  let overblows = 0;
+  let unplayable = 0;
+  for (const l of doc.lines) {
+    for (const e of l.events) {
+      if (e.kind !== 'note') continue;
+      for (const s of e.sounds) {
+        if (s.type !== 'hole') continue;
+        if (soundPitch(harp, s) === null) unplayable++;
+        else if (s.over) overblows++;
+        else if (s.bend) bends++;
+      }
+    }
+  }
+  return { bends, overblows, unplayable };
+}
+
+/** Whether the tab can move an octave up/down on the same harmonica, and what it takes. */
+export function octaveOptions(doc: TabDoc, harp: Harmonica): OctaveOption[] {
+  const now = countTechniques(doc, harp);
+  const hasNotes = doc.lines.some((l) => l.events.some((e) => e.kind === 'note'));
+  return ([12, -12] as const).map((shift) => {
+    const dir = shift > 0 ? 'up' : 'down';
+    if (!hasNotes) return { shift, possible: false, note: 'No notes to move' };
+    const result = notesToTab(doc, harp, { sourceHarp: harp, shift });
+    const missing = result.stats.unplayable;
+    if (missing > now.unplayable) {
+      return { shift, possible: false, result, note: `Can't go an octave ${dir}: ${missing} note${missing === 1 ? '' : 's'} would be out of range on ${harp.name}` };
+    }
+    const extras: string[] = [];
+    if (result.stats.bends) extras.push(`${result.stats.bends} bend${result.stats.bends === 1 ? '' : 's'}`);
+    if (result.stats.overblows) extras.push(`${result.stats.overblows} overblow${result.stats.overblows === 1 ? '' : 's'}`);
+    if (result.stats.slides) extras.push(`${result.stats.slides} slide note${result.stats.slides === 1 ? '' : 's'}`);
+    return { shift, possible: true, result, note: `Move an octave ${dir}` + (extras.length ? ` (needs ${extras.join(', ')})` : ' (no bends needed)') };
+  });
+}
