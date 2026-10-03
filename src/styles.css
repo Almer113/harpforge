@@ -618,7 +618,7 @@ select:focus, .search:focus { border-color: var(--brass); }
 .ve-lyric { font-size: 11px; color: var(--muted); font-style: italic; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .ve-resize { position: absolute; right: 0; top: 0; bottom: 0; width: 8px; cursor: ew-resize; border-radius: 0 9px 9px 0; }
 .ve-item:hover .ve-resize, .ve-item.selected .ve-resize { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18)); }
-.ve-resize-ghost { position: absolute; left: -1px; top: -1px; bottom: -1px; border: 2px dashed var(--brass-2); border-radius: 9px; pointer-events: none; }
+.ve-resize-ghost { position: absolute; top: 4px; bottom: 4px; border: 2px dashed var(--brass-2); border-radius: 9px; pointer-events: none; z-index: 3; background: rgba(227, 169, 72, 0.08); }
 .ve-ghost {
   position: absolute; top: 4px; bottom: 4px; border-radius: 9px; pointer-events: none; z-index: 3;
   border: 2px dashed var(--brass-2); background: rgba(227, 169, 72, 0.12);

@@ -11,6 +11,7 @@ import * as engine from '../../audio/engine';
 import {
   advance,
   allPositions,
+  absBeat,
   chainAt,
   chainLength,
   EPS,
@@ -417,6 +418,28 @@ interface Drag {
   grab: number; // beats between the note start and the pointer
   moved: boolean;
   mode: 'move' | 'resize';
+  /** Beats from the start of the (tied) note to the grabbed piece, and the note's whole length. */
+  offset: number;
+  total: number;
+}
+
+/**
+ * Splits a span (absolute start + length) into one segment per measure, so previews
+ * line up with the lanes — measures are separated by gaps and can wrap onto new lines.
+ */
+function segments(cap: number, abs: number, dur: number): { m: number; start: number; len: number }[] {
+  const out: { m: number; start: number; len: number }[] = [];
+  let at = abs;
+  let left = dur;
+  for (let guard = 0; left > EPS && guard < 64; guard++) {
+    const m = Math.floor(at / cap + EPS);
+    const start = at - m * cap;
+    const len = Math.min(left, cap - start);
+    out.push({ m, start, len });
+    at += len;
+    left -= len;
+  }
+  return out;
 }
 
 function Score({ song, starts, playingAt, flats, showNames }: { song: Song; starts: number[]; playingAt: Set<number>; flats: boolean; showNames: boolean }) {
@@ -425,7 +448,8 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
   const harp = useParsed().harp;
   const zoom = ve.zoom;
   const drag = useRef<Drag | null>(null);
-  const [ghost, setGhost] = useState<{ m: number; start: number; dur: number; copy: boolean } | null>(null);
+  // Move preview: where the grabbed piece lands (m/start) and the whole note's span (abs/dur).
+  const [ghost, setGhost] = useState<{ m: number; start: number; abs: number; dur: number; copy: boolean } | null>(null);
   const [resizeDur, setResizeDur] = useState<{ pos: Pos; dur: number } | null>(null);
   const root = useRef<HTMLDivElement>(null);
 
@@ -453,8 +477,9 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
         return;
       }
       const r = lane.el.getBoundingClientRect();
-      const start = Math.max(0, Math.min(song.cap - Math.min(d.item.dur, song.cap), snapTo((e.clientX - r.left) / zoom - d.grab, snap)));
-      setGhost({ m: lane.m, start, dur: d.item.dur, copy: e.altKey });
+      const start = Math.max(0, Math.min(song.cap - snap, snapTo((e.clientX - r.left) / zoom - d.grab, snap)));
+      const head = Math.max(0, lane.m * song.cap + start - d.offset);
+      setGhost({ m: lane.m, start, abs: head, dur: d.total, copy: e.altKey });
     };
     const up = (e: PointerEvent) => {
       const d = drag.current;
@@ -495,7 +520,18 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
     e.preventDefault();
     const resize = (e.target as HTMLElement).classList.contains('ve-resize');
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    drag.current = { pos, item, x0: e.clientX, y0: e.clientY, grab: (e.clientX - rect.left) / zoom, moved: false, mode: resize ? 'resize' : 'move' };
+    const chain = chainAt(song, pos);
+    drag.current = {
+      pos,
+      item,
+      x0: e.clientX,
+      y0: e.clientY,
+      grab: (e.clientX - rect.left) / zoom,
+      moved: false,
+      mode: resize ? 'resize' : 'move',
+      offset: absBeat(song, pos) - absBeat(song, chain[0] ?? pos),
+      total: chainLength(song, chain),
+    };
     const sel = useApp.getState().ve.selection;
     if (e.shiftKey || e.ctrlKey || e.metaKey) {
       const has = sel.some((p) => samePos(p, pos));
@@ -556,7 +592,6 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
                   const pos = { m: mi, start: it.start };
                   const selected = ve.selection.some((p) => samePos(p, pos));
                   const playing = playingAt.has(+(starts[mi] + it.start).toFixed(4));
-                  const dur = resizeDur && samePos(resizeDur.pos, pos) ? resizeDur.dur : it.dur;
                   const dragging = ghost && drag.current && samePos(drag.current.pos, pos) && !ghost.copy;
                   const midis = it.sounds.map((s) => (s.type === 'pitch' ? s.midi : soundPitch(harp, s)));
                   const breath = it.sounds.length ? (it.sounds.every((s) => s.type === 'hole' && s.breath === 'draw') ? 'draw' : it.sounds.every((s) => s.type === 'hole' && s.breath === 'blow') ? 'blow' : 'mixed') : 'rest';
@@ -576,12 +611,21 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
                       {showNames && it.sounds.length > 0 && <span className="ve-name">{midis.map((x) => (x === null ? '?' : midiToName(x, flats))).join(' ')}</span>}
                       <span className="ve-lyric">{it.lyric ?? ''}</span>
                       {it.dur > EPS && <span className="ve-resize" title="Drag to change the length" />}
-                      {resizeDur && samePos(resizeDur.pos, pos) && <span className="ve-resize-ghost" style={{ width: dur * zoom - 3 }} />}
+
                     </div>
                   );
                 })}
                 {ve.caret.m === mi && <span className="ve-caret" style={{ left: ve.caret.start * zoom }} />}
-                {ghost && ghost.m === mi && <span className={`ve-ghost ${ghost.copy ? 'copy' : ''}`} style={{ left: ghost.start * zoom, width: Math.max(ghost.dur * zoom, 22) - 3 }} />}
+                {ghost &&
+                  segments(song.cap, ghost.abs, ghost.dur)
+                    .filter((g) => g.m === mi)
+                    .map((g) => (
+                      <span key={`g${g.start}`} className={`ve-ghost ${ghost.copy ? 'copy' : ''}`} style={{ left: g.start * zoom, width: Math.max(g.len * zoom, 22) - 3 }} />
+                    ))}
+                {resizeDur &&
+                  segments(song.cap, absBeat(song, resizeDur.pos), resizeDur.dur)
+                    .filter((g) => g.m === mi)
+                    .map((g) => <span key={`r${g.start}`} className="ve-resize-ghost" style={{ left: g.start * zoom, width: g.len * zoom - 3 }} />)}
               </div>
             </div>,
           ];
