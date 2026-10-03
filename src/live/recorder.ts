@@ -8,6 +8,7 @@ import { splitHeader } from '../core/htab/parser';
 import { bodyText, wrapEvents } from '../core/htab/serializer';
 import { beatsPerBar, type TabEvent } from '../core/htab/types';
 import { sameHoleSound, type HoleSound } from '../core/types';
+import { clustersToEvents, quantize } from '../core/timeline';
 import { getParsed, useApp } from '../state/store';
 import { stop as stopPlayback } from '../state/playback';
 
@@ -100,58 +101,10 @@ function buildFree(list: Take[]): TabEvent[] {
 }
 
 function buildTimed(list: Take[], grid: number, bpb: number, endBeat: number): TabEvent[] {
-  const q = (x: number) => Math.max(0, Math.round(x / grid) * grid);
-  const clusters: { start: number; end: number; sounds: HoleSound[] }[] = [];
-  for (const t of list) {
-    const start = q(t.start);
-    const end = Math.max(start + grid, q(t.end ?? endBeat));
-    const c = clusters.find((k) => k.start === start);
-    if (c) {
-      c.sounds.push(t.sound);
-      c.end = Math.max(c.end, end);
-    } else clusters.push({ start, end, sounds: [t.sound] });
-  }
-  clusters.sort((a, b) => a.start - b.start);
-  if (!clusters.length) return [];
-
-  // Flat timeline of notes and rests, starting at the first note's bar.
-  const timeline: { beats: number; sounds?: HoleSound[] }[] = [];
-  let pos = Math.floor(clusters[0].start / bpb) * bpb;
-  clusters.forEach((c, i) => {
-    if (c.start > pos) timeline.push({ beats: c.start - pos });
-    const next = clusters[i + 1]?.start ?? Infinity;
-    const end = Math.min(c.end, next);
-    timeline.push({ beats: end - c.start, sounds: uniqueSounds(c.sounds) });
-    pos = end;
-  });
-
-  // Insert bar lines; split rests that cross a bar line.
-  const events: TabEvent[] = [];
-  let t = 0;
-  let nextBar = bpb;
-  for (const item of timeline) {
-    let remaining = item.beats;
-    if (!item.sounds) {
-      while (remaining > 1e-6) {
-        const chunk = Math.min(remaining, nextBar - t);
-        events.push({ kind: 'rest', beats: chunk });
-        t += chunk;
-        remaining -= chunk;
-        if (t >= nextBar - 1e-6) {
-          events.push({ kind: 'bar', style: 'single' });
-          nextBar += bpb;
-        }
-      }
-      continue;
-    }
-    events.push({ kind: 'note', sounds: item.sounds, beats: remaining });
-    t += remaining;
-    while (t >= nextBar - 1e-6) {
-      if (events[events.length - 1].kind !== 'bar') events.push({ kind: 'bar', style: 'single' });
-      nextBar += bpb;
-    }
-  }
-  return events;
+  const notes = list.map((t) => ({ start: t.start, end: t.end ?? endBeat, sound: t.sound }));
+  const clusters = quantize(notes, grid, (a, b) => a.type === 'hole' && b.type === 'hole' && sameHoleSound(a, b));
+  for (const c of clusters) c.sounds = uniqueSounds(c.sounds as HoleSound[]);
+  return clustersToEvents(clusters, bpb);
 }
 
 export function stopRecording() {

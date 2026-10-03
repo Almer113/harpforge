@@ -14,6 +14,7 @@ import {
   type HarmonicaSpec,
 } from './instruments';
 import { midiToName, mod12, parsePitchClass } from './pitch';
+import { findHarmonicaChord, parseChord } from './chords';
 import type { NoteEvent, RestEvent, TabDoc, TabEvent, TabMeta } from './htab/types';
 import type { Breath, HoleSound, Sound } from './types';
 
@@ -329,4 +330,136 @@ export function suggestHarmonicas(doc: TabDoc, opts: { sourceHarp?: Harmonica; l
   }
   results.sort((a, b) => a.score - b.score);
   return results.slice(0, opts.limit ?? 10);
+}
+
+// ---- Chord sheets ----------------------------------------------------------
+//
+// A chord sheet has chord symbols (and lyrics) but no melody. It's represented as
+// rests carrying `chord` and `lyric`; to play it, each chord becomes a harmonica
+// chord, repeated in a simple rhythm pattern.
+
+export type StrumPattern = 'hold' | 'halves' | 'quarters' | 'shuffle';
+
+export const STRUM_PATTERNS: { id: StrumPattern; name: string }[] = [
+  { id: 'halves', name: 'Two per bar' },
+  { id: 'quarters', name: 'Every beat' },
+  { id: 'shuffle', name: 'Shuffle chug' },
+  { id: 'hold', name: 'Hold' },
+];
+
+export function isChordSheet(doc: TabDoc): boolean {
+  let chords = 0;
+  for (const l of doc.lines) {
+    for (const e of l.events) {
+      if (e.kind === 'note') return false;
+      if (e.kind === 'rest' && e.chord) chords++;
+    }
+  }
+  return chords > 0;
+}
+
+function patternBeats(total: number, pattern: StrumPattern): number[] {
+  if (pattern === 'hold' || total <= 1) return [total];
+  if (pattern === 'halves') {
+    const half = total / 2;
+    return Number.isInteger(half) ? [half, half] : [total];
+  }
+  if (pattern === 'shuffle') {
+    // Long-short on every beat: {chord~ chord}
+    const out: number[] = [];
+    for (let b = 0; b < Math.floor(total); b++) out.push(2 / 3, 1 / 3);
+    if (total % 1) out.push(total % 1);
+    return out;
+  }
+  const out = Array.from({ length: Math.floor(total) }, () => 1);
+  if (total % 1) out.push(total % 1);
+  return out;
+}
+
+export interface ChordSheetResult extends ConvertResult {
+  missingChords: string[];
+}
+
+export function chordSheetToTab(doc: TabDoc, harp: Harmonica, pattern: StrumPattern = 'halves'): ChordSheetResult {
+  const cache = new Map<string, ReturnType<typeof findHarmonicaChord>>();
+  const lookup = (sym: string) => {
+    if (!cache.has(sym)) {
+      const info = parseChord(sym);
+      cache.set(sym, info ? findHarmonicaChord(harp, info) : null);
+    }
+    return cache.get(sym)!;
+  };
+  const stats: ConvertStats = { notes: 0, bends: 0, overblows: 0, slides: 0, unplayable: 0, reducedChords: 0, cost: 0 };
+  const missing = new Set<string>();
+  const lines = doc.lines.map((l) => {
+    const events: TabEvent[] = [];
+    for (const e of l.events) {
+      if (e.kind !== 'rest' || !e.chord || e.beats <= 0) {
+        events.push({ ...e });
+        continue;
+      }
+      const found = lookup(e.chord);
+      if (!found) {
+        missing.add(e.chord);
+        stats.unplayable++;
+        stats.cost += 25;
+        events.push({ ...e });
+        continue;
+      }
+      stats.cost += found.cost;
+      if (found.sounds.length === 1) stats.reducedChords++;
+      if (found.sounds.some((s) => s.slide)) stats.slides++;
+      patternBeats(e.beats, pattern).forEach((beats, k) => {
+        events.push({
+          kind: 'note',
+          sounds: found.sounds,
+          beats,
+          chord: k === 0 ? e.chord : undefined,
+          lyric: k === 0 ? e.lyric : undefined,
+          src: e.src,
+        });
+        stats.notes++;
+      });
+    }
+    return { ...l, events };
+  });
+  const meta = cloneMeta(doc.meta);
+  meta.harmonica = harp.spec.family;
+  meta.tuning = harp.spec.tuning;
+  meta.harpKey = harp.spec.key;
+  const warnings = [...missing].map((c) => `No way to play ${c} on ${harp.name}`);
+  return { doc: { meta, lines }, warnings, stats, missingChords: [...missing] };
+}
+
+/** Ranks harmonicas by how well they cover a chord sheet's chords. */
+export function suggestForChordSheet(doc: TabDoc, opts: { limit?: number; families?: string[] } = {}): Suggestion[] {
+  const tonic = guessTonicFromChords(doc);
+  const results: Suggestion[] = [];
+  for (const spec of allSpecs()) {
+    if (opts.families && !opts.families.includes(spec.family)) continue;
+    const harp = getHarmonica(spec);
+    const r = chordSheetToTab(doc, harp, 'hold');
+    const position = spec.family === 'diatonic' && tonic !== undefined ? positionFor(spec.key, tonic) : undefined;
+    let preference = 0;
+    if (spec.family !== 'diatonic') preference += 2;
+    else {
+      if (spec.tuning !== 'richter') preference += 1.5;
+      if (/Low|High/.test(spec.key)) preference += 0.6;
+    }
+    results.push({ spec, name: harmonicaName(spec), shift: 0, score: r.stats.cost + preference, stats: r.stats, position });
+  }
+  results.sort((a, b) => a.score - b.score);
+  return results.slice(0, opts.limit ?? 10);
+}
+
+function guessTonicFromChords(doc: TabDoc): number | undefined {
+  if (doc.meta.key) {
+    const pc = parsePitchClass(doc.meta.key.replace(/m(in(or)?)?$/i, '').trim());
+    if (pc !== null) return pc;
+  }
+  for (const l of doc.lines) for (const e of l.events) if (e.kind !== 'bar' && e.chord) {
+    const c = parseChord(e.chord);
+    if (c) return c.root;
+  }
+  return undefined;
 }

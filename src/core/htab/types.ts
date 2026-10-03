@@ -21,6 +21,8 @@ export interface RestEvent {
   kind: 'rest';
   beats: number;
   chord?: string;
+  /** Lyrics over a rest: used by chord sheets, where chords have no melody yet. */
+  lyric?: string;
   src?: Span;
 }
 
@@ -78,12 +80,11 @@ export function defaultMeta(): TabMeta {
   return { harmonica: 'diatonic', tuning: 'richter', harpKey: 'C', tempo: 100, time: '4/4', extra: {} };
 }
 
+/** Bar length in beats. A beat is a quarter note (6/8 → 3, 2/2 → 4). */
 export function beatsPerBar(meta: TabMeta): number {
   const m = /^(\d+)\s*\/\s*(\d+)$/.exec(meta.time);
   if (!m) return 4;
   const n = parseInt(m[1], 10);
   const d = parseInt(m[2], 10);
-  // Compound meters (6/8, 9/8, 12/8) count dotted-quarter beats.
-  if (d === 8 && n % 3 === 0 && n > 3) return n / 3;
-  return n || 4;
+  return n > 0 && d > 0 ? (n * 4) / d : 4;
 }
