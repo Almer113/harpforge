@@ -14,9 +14,9 @@ interface Props {
   onSelect?: (scoreIndex: number, ev: NoteEvent) => void;
 }
 
-/** A note's holes; a chord's holes sit side by side ("456", "-1-2-3"). */
-function tokenText(ev: NoteEvent): string {
-  return ev.sounds.map((s) => (s.type === 'hole' ? holeSoundText(s) : soundText(s))).join('');
+/** A note's holes; a chord's holes sit side by side ("456", "-1-2-3"), a hair apart. */
+function tokenParts(ev: NoteEvent): string[] {
+  return ev.sounds.map((s) => (s.type === 'hole' ? holeSoundText(s) : soundText(s)));
 }
 
 function breathClass(ev: NoteEvent): string {
@@ -65,7 +65,9 @@ export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect }:
                     className={`st-note ${breathClass(ev)} ${active ? 'active' : ''} ${selected ? 'selected' : ''}`}
                     onClick={() => idx !== undefined && onSelect?.(idx, ev)}
                   >
-                    {tokenText(ev)}
+                    {tokenParts(ev).map((t, k) => (
+                      <span key={k} className="st-hole">{t}</span>
+                    ))}
                   </button>
                 );
               })}
