@@ -156,11 +156,11 @@ select:focus, .search:focus { border-color: var(--brass); }
 }
 .stage.is-recording { border-color: rgba(239, 106, 90, 0.6); box-shadow: 0 0 0 3px rgba(239, 106, 90, 0.12); }
 .harp-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; container-type: inline-size; }
-.now-playing { min-height: 34px; display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.now-playing { height: 36px; flex: none; overflow: hidden; display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: nowrap; }
 .np-idle { color: var(--faint); font-size: 13px; }
 .np-chip {
-  display: inline-flex; align-items: baseline; gap: 8px; padding: 4px 12px; border-radius: 999px;
-  font-family: var(--mono); border: 1px solid;
+  display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px;
+  font-family: var(--mono); border: 1px solid; line-height: 1;
 }
 .np-chip b { font-size: 17px; }
 .np-chip span { color: var(--muted); font-size: 12px; }
