@@ -11,10 +11,15 @@ function onEvent(index: number, on: boolean) {
   }));
 }
 
+// Bumped by stop(): a play() still waiting for the audio to start then doesn't go ahead.
+let generation = 0;
+
 export async function play() {
   const s = useApp.getState();
   if (s.recording) return;
+  const gen = ++generation;
   await engine.ensureAudio();
+  if (gen !== generation) return;
   if (s.play === 'paused') {
     engine.resumePlayback();
     useApp.setState({ play: 'playing' });
@@ -43,6 +48,7 @@ export function pause() {
 }
 
 export function stop() {
+  generation++;
   engine.stopPlayback();
   useApp.setState({ play: 'stopped', activeEvents: [] });
 }
@@ -76,6 +82,13 @@ export async function previewEvent(index: number) {
   setTimeout(() => onEvent(index, false), secs * 1000);
 }
 
+// Highlights switched off while the tab was hidden may have been dropped: clear them.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && useApp.getState().activeEvents.length) useApp.setState({ activeEvents: [] });
+  });
+}
+
 // The sound follows the current harmonica (single reed, tremolo, octave).
 engine.setVoicing(getParsed(useApp.getState().text).harp.voicing);
 
@@ -102,9 +115,7 @@ useApp.subscribe((s, prev) => {
   if (s.metronome !== prev.metronome && s.play !== 'stopped' && !s.recording) {
     engine.setMetronome(s.metronome ? beatsPerBar(getParsed(s.text).doc.meta) : null);
   }
-  if (s.loop !== prev.loop && s.play === 'playing') {
-    stop();
-    void play();
-  }
+  // Looping switches on and off in place; playback keeps going.
+  if (s.loop !== prev.loop && s.play !== 'stopped') engine.setLoop(s.loop);
   if (s.text !== prev.text && s.play !== 'stopped' && !s.recording) stop();
 });

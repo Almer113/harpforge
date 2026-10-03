@@ -62,7 +62,7 @@ registerProcessor('harpforge-tap', Tap);
 
 let mic: { ctx: AudioContext; stream: MediaStream; source: MediaStreamAudioSourceNode; tap: AudioWorkletNode } | null = null;
 let lastUiUpdate = 0;
-const MIC_ID = 'mic';
+export const MIC_ID = 'mic';
 
 const tracker = new NoteTracker({
   on: (note) => {

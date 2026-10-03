@@ -17,10 +17,11 @@ export async function ensureAudio(): Promise<void> {
   outputs();
 }
 
+// Live notes start right away: Tone.now() is the scheduling time, a lookahead (0.1 s) ahead.
 export function noteOn(id: string, midi: number, glideFrom?: number) {
   noteOff(id);
   const v = createVoice();
-  v.start(midi, Tone.now(), glideFrom);
+  v.start(midi, Tone.immediate(), glideFrom);
   live.set(id, v);
 }
 
@@ -31,7 +32,7 @@ export function setPitch(id: string, midi: number) {
 export function noteOff(id: string) {
   const v = live.get(id);
   if (!v) return;
-  v.stop(Tone.now());
+  v.stop(Tone.immediate());
   live.delete(id);
 }
 
@@ -73,6 +74,48 @@ export interface PlaybackOptions {
 const scheduledVoices = new Set<Voice>();
 let metronomeId: number | null = null;
 let metronomeBpb = 4;
+// The playing song's end, so looping can be switched on and off while it plays.
+let current: { startBeat: number; end: number; offset: number; endId: number | null; onEnd?: () => void } | null = null;
+let endTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Runs `fn` when the transport reaches `time`. Not through Tone's Draw, which silently
+ * drops callbacks that come more than 0.25 s late (a hidden browser tab): then the song
+ * would never end and the app would stay "playing".
+ */
+function atTime(time: number, fn: () => void) {
+  clearTimeout(endTimer);
+  endTimer = setTimeout(fn, Math.max(0, (time - Tone.immediate()) * 1000));
+}
+
+function scheduleEnd() {
+  if (!current) return;
+  const c = current;
+  c.endId = transport().schedule((time) => {
+    atTime(time, () => {
+      stopPlayback();
+      c.onEnd?.();
+    });
+  }, beatTicks(c.end));
+}
+
+/** Turns looping on or off while playing, without restarting. */
+export function setLoop(on: boolean) {
+  const t = transport();
+  if (!current) return;
+  if (on) {
+    if (current.endId !== null) t.clear(current.endId);
+    current.endId = null;
+    clearTimeout(endTimer);
+    t.loopStart = beatTicks(current.startBeat + current.offset);
+    t.loopEnd = beatTicks(current.end);
+    t.loop = true;
+  } else {
+    t.loop = false;
+    // Already past the end (it was looping)? Then it ends at the next pass; otherwise at the end.
+    scheduleEnd();
+  }
+}
 
 function scheduleMetronome(beatsPerBar: number) {
   metronomeBpb = beatsPerBar;
@@ -124,18 +167,9 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
       }, beatTicks(at));
     }
     const end = score.totalBeats + offset;
-    if (opts.loop && score.totalBeats > 0) {
-      t.loop = true;
-      t.loopStart = beatTicks(startBeat + offset);
-      t.loopEnd = beatTicks(end);
-    } else {
-      t.schedule((time) => {
-        Tone.getDraw().schedule(() => {
-          stopPlayback();
-          opts.onEnd?.();
-        }, time);
-      }, beatTicks(end));
-    }
+    current = { startBeat, end, offset, endId: null, onEnd: opts.onEnd };
+    if (opts.loop && score.totalBeats > 0) setLoop(true);
+    else scheduleEnd();
   }
 
   if (opts.metronomeBeatsPerBar) scheduleMetronome(opts.metronomeBeatsPerBar);
@@ -151,7 +185,7 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
 export function pausePlayback() {
   transport().pause();
   Tone.getDraw().cancel(0);
-  for (const v of scheduledVoices) v.stop(Tone.now());
+  for (const v of scheduledVoices) v.stop(Tone.immediate());
   scheduledVoices.clear();
 }
 
@@ -161,12 +195,14 @@ export function resumePlayback() {
 
 export function stopPlayback() {
   const t = transport();
+  current = null;
+  clearTimeout(endTimer);
   t.stop();
   t.cancel(0);
   Tone.getDraw().cancel(0);
   t.loop = false;
   metronomeId = null;
-  for (const v of scheduledVoices) v.stop(Tone.now());
+  for (const v of scheduledVoices) v.stop(Tone.immediate());
   scheduledVoices.clear();
 }
 
@@ -174,9 +210,9 @@ export function setTempo(bpm: number) {
   transport().bpm.value = bpm;
 }
 
-/** Current transport position in beats. */
+/** Transport position in beats right now (what's being heard, not the scheduling lookahead). */
 export function transportBeats(): number {
-  return transport().ticks / ticksPerBeat();
+  return transport().getTicksAtTime(Tone.immediate()) / ticksPerBeat();
 }
 
 export function isTransportRunning(): boolean {
@@ -185,7 +221,7 @@ export function isTransportRunning(): boolean {
 
 /** Plays one event right away (clicking a tab card). */
 export function previewMidis(midis: number[], seconds = 0.5, glides: (number | undefined)[] = []) {
-  const now = Tone.now();
+  const now = Tone.immediate();
   midis.forEach((m, k) => {
     const v = createVoice(midis.length > 1 ? 0.7 : 1);
     v.start(m, now, glides[k]);

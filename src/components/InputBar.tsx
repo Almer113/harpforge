@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { holeSoundText } from '../core/htab/serializer';
 import { midiToName, prefersFlats } from '../core/pitch';
 import { startMic, startMidi, stopMic, stopMidi } from '../live/inputs';
-import { hint, startPractice, stopPractice } from '../state/practice';
+import { hint, practiceTotal, startPractice, stopPractice } from '../state/practice';
 import { useApp, useParsed } from '../state/store';
 
 const MicIcon = (
@@ -127,7 +127,7 @@ function PracticeControl() {
     );
   }
   const ev = score.events[practice.index];
-  const total = score.events.filter((e) => !e.rest).length;
+  const total = practiceTotal();
   const flats = prefersFlats(harp.spec.key);
   const target = ev
     ? ev.sounds.map((s, k) => (s.type === 'hole' ? holeSoundText(s) : midiToName(ev.midis[k] ?? 0, flats))).join(' ')

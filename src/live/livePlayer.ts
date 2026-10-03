@@ -29,6 +29,15 @@ export function onPlayed(fn: PlayedListener): () => void {
   return () => playedListeners.delete(fn);
 }
 
+/** Everything a live note does: starts, changes pitch (bends, slide), stops. */
+export type LiveEvent = { type: 'press' | 'change'; id: string; midi: number; sound: HoleSound } | { type: 'release'; id: string };
+const liveListeners = new Set<(e: LiveEvent) => void>();
+
+export function onLive(fn: (e: LiveEvent) => void): () => void {
+  liveListeners.add(fn);
+  return () => liveListeners.delete(fn);
+}
+
 /**
  * Starts a sound. Returns false if the harmonica can't play it. `silent` shows and
  * records the note without synthesising it (the microphone: you're playing a real harp).
@@ -47,6 +56,7 @@ export function press(id: string, sound: HoleSound, opts: { silent?: boolean } =
   setHeld(id, sound);
   recordPress(id, sound);
   for (const fn of playedListeners) fn(midi, id, sound);
+  for (const fn of liveListeners) fn({ type: 'press', id, midi, sound });
   return true;
 }
 
@@ -61,6 +71,9 @@ export function change(id: string, sound: HoleSound, pitch?: number) {
   if (!silentIds.has(id)) engine.setPitch(id, midi);
   setHeld(id, sound);
   recordUpdate(id, sound);
+  // Listeners get the note the sound stands for (a mouse bend passes in-between pitches).
+  const note = soundPitch(harp(), sound);
+  if (note !== null) for (const fn of liveListeners) fn({ type: 'change', id, midi: note, sound });
 }
 
 export function release(id: string) {
@@ -68,6 +81,7 @@ export function release(id: string) {
   if (!silentIds.delete(id)) engine.noteOff(id);
   setHeld(id, null);
   recordRelease(id);
+  for (const fn of liveListeners) fn({ type: 'release', id });
 }
 
 export function releaseAll() {
