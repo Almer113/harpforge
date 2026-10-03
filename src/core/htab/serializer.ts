@@ -52,9 +52,17 @@ const EPS = 1e-6;
 const isInt = (x: number) => Math.abs(x - Math.round(x)) < EPS;
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
 
+/** A group's length as "~" marks and an optional "/N" divider: 1.5 beats → "~~/2". */
+function groupLength(sum: number): string {
+  if (isInt(sum) && sum >= 1) return '~'.repeat(Math.round(sum) - 1);
+  for (const n of [2, 3, 4, 6, 8, 12, 16, 24, 48]) {
+    if (isInt(sum * n) && sum * n >= 1 - EPS) return '~'.repeat(Math.round(sum * n) - 1) + '/' + n;
+  }
+  return '~'.repeat(Math.max(0, Math.round(sum) - 1));
+}
+
 function groupText(items: (NoteEvent | RestEvent)[], opts: SerializeOptions): string {
   const sum = items.reduce((a, e) => a + e.beats, 0);
-  const total = Math.max(1, Math.round(sum));
   let ints: number[] | null = null;
   for (const d of [1, 2, 3, 4, 6, 8, 12, 16, 24, 48]) {
     if (items.every((e) => isInt(e.beats * d))) {
@@ -65,7 +73,8 @@ function groupText(items: (NoteEvent | RestEvent)[], opts: SerializeOptions): st
   ints ??= items.map((e) => Math.max(1, Math.round(e.beats * 48)));
   const g = ints.reduce((a, b) => gcd(a, b));
   const parts = items.map((e, k) => withChord(e, eventCore(e, opts) + '~'.repeat(ints![k] / g - 1)));
-  return '{' + parts.join(' ') + '}' + '~'.repeat(total - 1);
+  // A group cut short by a bar line (odd meters such as 7/8) gets a fractional length.
+  return '{' + parts.join(' ') + '}' + groupLength(sum);
 }
 
 /** Serializes one line of events (without lyrics). */
@@ -140,6 +149,13 @@ export function headerText(meta: TabMeta): string {
   return ['---', ...lines, '---'].join('\n');
 }
 
+/** One line of tab and its lyrics line, if any (without the section heading). */
+export function lineText(line: TabLine, opts: SerializeOptions = {}): string[] {
+  if (!line.events.length) return [];
+  const lyr = lyricsText(line);
+  return lyr ? [eventsText(line.events, opts), lyr] : [eventsText(line.events, opts)];
+}
+
 export function bodyText(lines: TabLine[], opts: SerializeOptions = {}): string {
   const out: string[] = [];
   for (const line of lines) {
@@ -147,11 +163,7 @@ export function bodyText(lines: TabLine[], opts: SerializeOptions = {}): string 
       if (out.length) out.push('');
       out.push(`@ ${line.section}`);
     }
-    if (line.events.length) {
-      out.push(eventsText(line.events, opts));
-      const lyr = lyricsText(line);
-      if (lyr) out.push(lyr);
-    }
+    out.push(...lineText(line, opts));
   }
   return out.join('\n');
 }

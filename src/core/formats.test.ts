@@ -182,6 +182,16 @@ describe('MIDI', () => {
     expect(doc.meta.tempo).toBe(96);
     expect(flat(doc)).toEqual(['C5:1', 'C5:1', 'G5:1', 'G5:1', 'A5:1', 'A5:1', 'G5:2']);
   });
+
+  it('skips SysEx messages without losing the timing', () => {
+    const bytes = writeMidi(TWINKLE_TAB, C);
+    // Insert a GM-reset SysEx (delta 0) at the start of the first track and fix its length.
+    const at = bytes.findIndex((_, i) => String.fromCharCode(...bytes.slice(i, i + 4)) === 'MTrk');
+    const sysex = [0x00, 0xf0, 0x05, 0x7e, 0x7f, 0x09, 0x01, 0xf7];
+    const len = new DataView(bytes.buffer, bytes.byteOffset).getUint32(at + 4) + sysex.length;
+    const out = new Uint8Array([...bytes.slice(0, at + 4), len >>> 24, (len >> 16) & 255, (len >> 8) & 255, len & 255, ...sysex, ...bytes.slice(at + 8)]);
+    expect(flat(parseMidi(out).doc)).toEqual(['C5:1', 'C5:1', 'G5:1', 'G5:1', 'A5:1', 'A5:1', 'G5:2']);
+  });
 });
 
 describe('MusicXML', () => {

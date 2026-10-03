@@ -1,9 +1,9 @@
 // Glue between the visual editor's measure model and the .htab text.
 
-import { fromDoc, toDoc, type Song } from '../core/edit/model';
+import { fromDoc, type Song } from '../core/edit/model';
+import { spliceBody } from '../core/edit/splice';
 import { setMetaFields } from '../core/htab/meta';
 import { parseHtab, splitHeader } from '../core/htab/parser';
-import { bodyText } from '../core/htab/serializer';
 import { allOptions, canOver, maxBend, soundPitch, type Harmonica } from '../core/instruments';
 import type { HoleSound, Sound } from '../core/types';
 import { getParsed, useApp } from './store';
@@ -15,7 +15,8 @@ export function currentSong(): Song {
 /** The current text with its body replaced by `song` (the header is kept as written). */
 export function songText(song: Song): string {
   const current = useApp.getState().text;
-  let text = current.slice(0, splitHeader(current).bodyStart) + bodyText(toDoc(song).lines) + '\n';
+  // Lines the edit didn't touch keep their own text, comments and blank lines.
+  let text = current.slice(0, splitHeader(current).bodyStart) + spliceBody(current, song) + '\n';
   if (song.meta.time !== getParsed(current).doc.meta.time) text = setMetaFields(text, { time: song.meta.time });
   return text;
 }

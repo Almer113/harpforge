@@ -693,3 +693,13 @@ select:focus, .search:focus { border-color: var(--brass); }
 .st-note.active { background: rgba(227, 169, 72, 0.18); border-color: var(--brass-2); }
 /* Two-digit holes (10, 11, 12 …) are underlined so runs of holes stay readable. */
 .st-two { display: inline-block; line-height: 1.15; border-bottom: 2px solid currentColor; margin: 0 1px; }
+
+/* Short bars (pickups): the part of the lane past the bar's real length */
+.ve-short {
+  position: absolute; top: 0; bottom: 0; right: 0; pointer-events: none; z-index: 0;
+  background: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.28) 0 6px, transparent 6px 12px);
+  border-left: 1px dashed var(--line-2, rgba(255, 255, 255, 0.18));
+}
+.insp-note { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 0 10px; }
+.lib-backup { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -4px 0 14px; }
+.lib-backup span { margin-right: auto; }

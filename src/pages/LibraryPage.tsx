@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { confirmDiscard, importFile, openPasteImport, saveCurrent } from '../state/actions';
+import { confirmDiscard, downloadData, importFile, openPasteImport, saveCurrent } from '../state/actions';
 import { ExportMenu } from '../components/ExportMenu';
 import { stop } from '../state/playback';
 import { useApp } from '../state/store';
-import { deleteTab, listTabs, saveTab, type SavedTab } from '../storage/library';
+import { copyText, deleteTab, exportLibrary, importLibrary, listTabs, persistStorage, saveTab, type SavedTab } from '../storage/library';
 
 export function LibraryPage() {
   const [tabs, setTabs] = useState<SavedTab[] | null>(null);
@@ -17,7 +17,12 @@ export function LibraryPage() {
 
   const open = (t: SavedTab, page: 'play' | 'editor' = 'play') => {
     const s = useApp.getState();
-    if (s.docId !== t.id && !confirmDiscard()) return;
+    // The tab that's already open: just go to it (reloading would throw away unsaved edits).
+    if (s.docId === t.id) {
+      s.setPage(page);
+      return;
+    }
+    if (!confirmDiscard()) return;
     stop();
     s.loadText(t.text, t.id, true);
     s.setPage(page);
@@ -25,14 +30,50 @@ export function LibraryPage() {
 
   const remove = async (t: SavedTab) => {
     if (!window.confirm(`Delete "${t.title}" from your library? This can't be undone.`)) return;
-    await deleteTab(t.id);
+    try {
+      await deleteTab(t.id);
+    } catch (e) {
+      useApp.getState().notify(`Couldn’t delete: ${(e as Error).message}`);
+    }
     if (useApp.getState().docId === t.id) useApp.setState({ docId: null, savedText: null });
     refresh();
   };
 
   const duplicate = async (t: SavedTab) => {
-    await saveTab(t.text.replace(/^(title:\s*)(.*)$/m, '$1$2 (copy)'));
+    try {
+      await saveTab(copyText(t));
+    } catch (e) {
+      useApp.getState().notify(`Couldn’t duplicate: ${(e as Error).message}`);
+    }
     refresh();
+  };
+
+  const backup = async () => {
+    try {
+      const zip = await exportLibrary();
+      downloadData(`HarpForge library ${new Date().toISOString().slice(0, 10)}.zip`, zip, 'application/zip');
+    } catch (e) {
+      useApp.getState().notify(`Backup failed: ${(e as Error).message}`);
+    }
+  };
+
+  const restore = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.zip,application/zip';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const { added, skipped } = await importLibrary(new Uint8Array(await file.arrayBuffer()));
+        useApp.getState().notify(`Restored ${added} tab${added === 1 ? '' : 's'}${skipped ? ` (${skipped} already in your library)` : ''} ✓`);
+        void persistStorage();
+      } catch (e) {
+        useApp.getState().notify(`That isn’t a library backup (${(e as Error).message}).`);
+      }
+      refresh();
+    };
+    input.click();
   };
 
   const filtered = (tabs ?? []).filter((t) => (t.title + ' ' + t.harmonica).toLowerCase().includes(query.toLowerCase()));
@@ -51,6 +92,15 @@ export function LibraryPage() {
           <button className="btn primary" onClick={() => saveCurrent().then(refresh)}>Save current tab</button>
         </div>
       </header>
+      <div className="lib-backup muted small">
+        <span>Tabs are stored only in this browser — clearing its site data removes them.</span>
+        <button className="btn small ghost" onClick={() => void backup()} disabled={!tabs?.length} title="Download every tab as .htab files in one .zip">
+          Back up library
+        </button>
+        <button className="btn small ghost" onClick={restore} title="Add the tabs from a backup .zip">
+          Restore backup…
+        </button>
+      </div>
 
       {tabs === null ? (
         <p className="muted">Loading…</p>

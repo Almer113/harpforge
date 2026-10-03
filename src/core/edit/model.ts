@@ -25,10 +25,18 @@ export interface Measure {
   items: Item[];
   /** Bar line drawn at the start (repeat start), if any. */
   startBar?: BarStyle;
-  endBar: BarStyle;
+  /** 'none': no bar line is written (the bar carries on on the next line of text). */
+  endBar: BarStyle | 'none';
   /** Starts a new line of the sheet. */
   lineBreak: boolean;
   section?: string;
+  /**
+   * Written length when it differs from the time signature: a pickup or another short
+   * bar. It's only filled with rests up to this length (notes may make it longer).
+   */
+  len?: number;
+  /** Index of the text line the measure was read from (lets untouched lines keep their own text). */
+  src?: number;
 }
 
 export interface Song {
@@ -54,6 +62,21 @@ export function measureLength(m: Measure): number {
   return m.items.reduce((a, it) => Math.max(a, itemEnd(it)), 0);
 }
 
+/** Beats a measure really takes: its written length (short bars) or the time signature, or more if overfull. */
+export function measureSpan(song: Song, m: Measure): number {
+  return Math.max(m.len ?? song.cap, measureLength(m));
+}
+
+/** Measure indexes on each line of text (a line starts at a line break or a section). */
+export function lineGroups(song: Song): number[][] {
+  const groups: number[][] = [];
+  song.measures.forEach((m, i) => {
+    if (!groups.length || m.lineBreak || m.section !== undefined) groups.push([]);
+    groups[groups.length - 1].push(i);
+  });
+  return groups;
+}
+
 // ---- Doc ↔ Song --------------------------------------------------------------------------
 
 export function fromDoc(doc: TabDoc): Song {
@@ -66,15 +89,17 @@ export function fromDoc(doc: TabDoc): Song {
   let pendingSection: string | undefined;
   let lineStart = true;
 
-  const close = (endBar: BarStyle = 'single') => {
+  const close = (endBar: Measure['endBar'] = 'single') => {
     cur.endBar = endBar;
+    // Pickups and other short bars keep their length instead of being filled with rests.
+    if (hasBars && t < cap - EPS) cur.len = t;
     measures.push(cur);
     cur = emptyMeasure(false);
     t = 0;
   };
   const touched = () => cur.items.length > 0 || t > EPS;
 
-  for (const line of doc.lines) {
+  doc.lines.forEach((line, li) => {
     if (line.section !== undefined) pendingSection = line.section;
     lineStart = true;
     for (const ev of line.events) {
@@ -85,7 +110,11 @@ export function fromDoc(doc: TabDoc): Song {
         continue;
       }
       if (ev.beats <= EPS) {
-        if (ev.chord) pendingChord = ev.chord;
+        if (!ev.chord) continue;
+        // A chord symbol with no note after it on its line marks the end of the bar it follows.
+        const into = touched() ? cur : lineStart ? null : measures[measures.length - 1];
+        if (into) into.items.push({ start: into === cur ? t : Math.max(into.len ?? cap, measureLength(into)), dur: 0, sounds: [], chord: ev.chord });
+        else pendingChord = ev.chord;
         continue;
       }
       if (!hasBars && t >= cap - EPS) close();
@@ -94,6 +123,7 @@ export function fromDoc(doc: TabDoc): Song {
         cur.lineBreak = true;
         lineStart = false;
       }
+      cur.src ??= li;
       if (pendingSection !== undefined) {
         cur.section = pendingSection;
         pendingSection = undefined;
@@ -108,9 +138,9 @@ export function fromDoc(doc: TabDoc): Song {
       }
       t += ev.beats;
     }
-    // A line ending mid-measure without a bar still ends the measure (keeps the line).
-    if (touched()) close();
-  }
+    // A line ending without a bar line ends the measure there; no bar line is written for it.
+    if (touched()) close(hasBars ? 'none' : 'single');
+  });
   if (touched() || cur.section !== undefined) close();
   if (pendingChord && measures.length) {
     const last = measures[measures.length - 1];
@@ -157,12 +187,13 @@ export function toDoc(song: Song): TabDoc {
       if (it.dur > EPS) prev = it;
       t = Math.max(t, itemEnd(it));
     }
-    if (t < song.cap - EPS) {
-      pushRest(events, t, song.cap);
+    const target = m.len ?? song.cap;
+    if (t < target - EPS) {
+      pushRest(events, t, target);
       prev = null;
       prevEvent = null;
     }
-    events.push({ kind: 'bar', style: m.endBar });
+    if (m.endBar !== 'none') events.push({ kind: 'bar', style: m.endBar });
   });
   return { meta: song.meta, lines };
 }
@@ -331,6 +362,52 @@ export function moveItem(song: Song, from: Pos, to: Pos, copy = false): Song {
   return placeItem(base, target.m, placed);
 }
 
+/**
+ * Gives every selected note a new length. Notes that follow each other directly are
+ * laid out again one after another, so shortening or lengthening a run of notes never
+ * swallows the notes inside it; only the run's end moves (like a single note's).
+ */
+export function setLengths(s: Song, sel: Pos[], beats: number): { song: Song; selection: Pos[] } {
+  if (sel.length === 1) return { song: updateItem(s, sel[0], { dur: beats }), selection: sel };
+  // One entry per (tied) note, in order.
+  const heads: { pos: Pos; chain: Pos[]; item: Item; abs: number; len: number }[] = [];
+  for (const p of sel) {
+    const chain = chainAt(s, p);
+    if (!chain.length || heads.some((h) => samePos(h.pos, chain[0]))) continue;
+    heads.push({ pos: chain[0], chain, item: findItem(s, chain[0])!, abs: absBeat(s, chain[0]), len: chainLength(s, chain) });
+  }
+  heads.sort((a, b) => a.abs - b.abs);
+  const runs: (typeof heads)[] = [];
+  for (const h of heads) {
+    const run = runs[runs.length - 1];
+    const prev = run?.[run.length - 1];
+    if (prev && Math.abs(advanceAbs(s, prev) - h.abs) < EPS) run.push(h);
+    else runs.push([h]);
+  }
+  let next = s;
+  const selection: Pos[] = [];
+  // Later runs first, so earlier ones can grow over them predictably.
+  for (const run of [...runs].reverse()) {
+    next = removeChains(next, run.map((h) => h.pos));
+    let at = run[0].pos;
+    for (const h of run) {
+      next = placeItem(next, at.m, { ...h.item, tied: undefined, start: at.start, dur: beats });
+      selection.unshift(at);
+      at = advance(next, at, beats);
+    }
+  }
+  return { song: next, selection: selection.sort((a, b) => a.m - b.m || a.start - b.start) };
+}
+
+/** Where the note at `h` ends, in lane beats (the start of the slot right after it). */
+function advanceAbs(s: Song, h: { pos: Pos; chain: Pos[] }): number {
+  const last = h.chain[h.chain.length - 1];
+  const it = findItem(s, last)!;
+  const end = last.start + it.dur;
+  // A note ending on its bar line ends where the next measure starts.
+  return end >= measureSpan(s, s.measures[last.m]) - EPS ? (last.m + 1) * s.cap : last.m * s.cap + end;
+}
+
 // ---- Ties ----------------------------------------------------------------------------------
 
 /** Absolute beat of a position (measures are `cap` long). */
@@ -353,7 +430,8 @@ export function previousItem(song: Song, pos: Pos): { pos: Pos; item: Item } | n
   }
   const prevM = song.measures[pos.m - 1];
   if (!prevM) return null;
-  const it = prevM.items.find((x) => near(itemEnd(x), song.cap) && x.dur > EPS);
+  const end = measureSpan(song, prevM);
+  const it = prevM.items.find((x) => near(itemEnd(x), end) && x.dur > EPS);
   return it ? { pos: { m: pos.m - 1, start: it.start }, item: it } : null;
 }
 
@@ -362,7 +440,7 @@ export function nextItem(song: Song, pos: Pos): { pos: Pos; item: Item } | null 
   const it = findItem(song, pos);
   if (!it) return null;
   const end = itemEnd(it);
-  if (end < song.cap - EPS) {
+  if (end < measureSpan(song, song.measures[pos.m]) - EPS) {
     const n = song.measures[pos.m].items.find((x) => near(x.start, end) && x !== it);
     return n ? { pos: { m: pos.m, start: n.start }, item: n } : null;
   }
@@ -429,6 +507,8 @@ export function deleteMeasure(song: Song, m: number): Song {
   const s = cloneSong(song);
   const [gone] = s.measures.splice(m, 1);
   if (!s.measures.length) s.measures.push(emptyMeasure(true));
+  // Deleting the last measure keeps the song's end bar on the new last one.
+  if (gone && m === s.measures.length && gone.endBar !== 'single' && gone.endBar !== 'none' && s.measures[m - 1]?.endBar === 'single') s.measures[m - 1].endBar = gone.endBar;
   // Keep the line/section start on the measure that takes its place.
   const next = s.measures[m];
   if (gone && next) {
@@ -443,7 +523,12 @@ export function duplicateMeasure(song: Song, m: number): Song {
   const s = cloneSong(song);
   const src = s.measures[m];
   if (!src) return song;
-  s.measures.splice(m + 1, 0, { ...src, items: src.items.map((it) => ({ ...it })), lineBreak: false, section: undefined, startBar: undefined });
+  if (m === s.measures.length - 1 && src.endBar === 'final') {
+    s.measures.splice(m + 1, 0, { ...src, items: src.items.map((it) => ({ ...it })), lineBreak: false, section: undefined, startBar: undefined, src: undefined });
+    s.measures[m].endBar = 'single';
+    return s;
+  }
+  s.measures.splice(m + 1, 0, { ...src, items: src.items.map((it) => ({ ...it })), lineBreak: false, section: undefined, startBar: undefined, src: undefined });
   return s;
 }
 
@@ -464,19 +549,22 @@ export function updateMeasure(song: Song, m: number, patch: Partial<Omit<Measure
 
 // ---- Time signature -----------------------------------------------------------------------
 
-/** Changes the time signature. With `reflow`, notes are re-barred (notes crossing a new bar are split). */
+/**
+ * Changes the time signature. With `reflow`, notes are re-barred (notes crossing a new
+ * bar are split into ties). A pickup bar stays a pickup; repeat signs and other bar
+ * lines stay where they were when a new bar line falls on the same beat.
+ */
 export function setTimeSignature(song: Song, time: string, reflow: boolean): Song {
   const meta = { ...song.meta, time };
   const cap = beatsPerBar(meta);
   if (!reflow) return { ...cloneSong(song), meta, cap };
 
-  // Flatten to absolute time; each old measure spans max(cap, its content).
+  // Flatten to absolute time; each old measure spans its real length.
   type Abs = Item & { at: number };
   const abs: Abs[] = [];
-  const marks: { at: number; section?: string; lineBreak: boolean }[] = [];
+  const marks: { at: number; end: number; m: Measure }[] = [];
   let t = 0;
   for (const m of song.measures) {
-    marks.push({ at: t, section: m.section, lineBreak: m.lineBreak });
     for (const it of [...m.items].sort((a, b) => a.start - b.start)) {
       const at = t + it.start;
       const last = abs[abs.length - 1];
@@ -484,24 +572,35 @@ export function setTimeSignature(song: Song, time: string, reflow: boolean): Son
       if (it.tied && last && near(last.at + last.dur, at) && sameSounds(last.sounds, it.sounds)) last.dur += it.dur;
       else abs.push({ ...it, at, tied: it.tied && !!last && near(last.at + last.dur, at) ? true : undefined });
     }
-    t += Math.max(song.cap, measureLength(m));
+    const span = measureSpan(song, m);
+    marks.push({ at: t, end: t + span, m });
+    t += span;
   }
+  // A pickup (short first bar) keeps its length; the new bars start after it.
+  const first = song.measures[0];
+  const pickup = first?.len !== undefined && first.len < song.cap - EPS ? marks[0].end : 0;
+  const pickupNew = pickup > EPS && pickup < cap - EPS ? pickup : 0;
+  const indexAt = (at: number) => (pickupNew && at < pickupNew - EPS ? 0 : (pickupNew ? 1 : 0) + Math.floor((at - pickupNew) / cap + EPS));
+  const startOf = (mi: number) => (pickupNew ? (mi === 0 ? 0 : pickupNew + (mi - 1) * cap) : mi * cap);
+  const spanOf = (mi: number) => (pickupNew && mi === 0 ? pickupNew : cap);
+
   // Re-bar up to the end of the last note (trailing empty space isn't music).
   const lastNoteEnd = abs.reduce((a, it) => Math.max(a, it.at + it.dur), 0);
   const total = lastNoteEnd > EPS ? lastNoteEnd : t;
-  const count = Math.max(1, Math.ceil(total / cap - EPS));
+  const count = Math.max(1, indexAt(total - 1e-3) + 1);
   const measures: Measure[] = Array.from({ length: count }, (_, i) => emptyMeasure(i === 0));
+  if (pickupNew) measures[0].len = pickupNew;
   for (const it of abs) {
     let at = it.at;
     let left = it.dur;
-    let first = true;
+    let firstPiece = true;
     do {
-      const mi = Math.min(count - 1, Math.floor(at / cap + EPS));
-      const start = at - mi * cap;
-      const take = left <= EPS ? 0 : Math.min(left, cap - start);
+      const mi = Math.min(count - 1, indexAt(at));
+      const start = at - startOf(mi);
+      const take = left <= EPS ? 0 : mi === count - 1 ? left : Math.min(left, spanOf(mi) - start);
       const piece: Item = { ...it, start, dur: take };
       delete (piece as Partial<Abs>).at;
-      if (!first) {
+      if (!firstPiece) {
         delete piece.chord;
         delete piece.lyric;
         if (!piece.sounds.length) break;
@@ -510,16 +609,28 @@ export function setTimeSignature(song: Song, time: string, reflow: boolean): Son
       measures[mi].items.push(piece);
       at += take;
       left -= take;
-      first = false;
+      firstPiece = false;
     } while (left > EPS);
   }
   for (const mk of marks) {
-    const mi = Math.min(count - 1, Math.floor(mk.at / cap + EPS));
-    if (mk.section !== undefined) measures[mi].section = mk.section;
-    if (mk.lineBreak) measures[mi].lineBreak = true;
+    const mi = Math.min(count - 1, indexAt(mk.at));
+    const nm = measures[mi];
+    if (mk.m.section !== undefined) nm.section = mk.m.section;
+    if (mk.m.lineBreak) nm.lineBreak = true;
+    nm.src ??= mk.m.src;
+    // Bar lines move with the music when a new bar line falls on the same beat.
+    if (mk.m.startBar && near(startOf(mi), mk.at)) nm.startBar = mk.m.startBar;
+    if (mk.m.endBar !== 'single' && mk.m.endBar !== 'none') {
+      const ei = Math.min(count - 1, indexAt(mk.end - 1e-3));
+      if (near(startOf(ei) + spanOf(ei), mk.end) || ei === count - 1) measures[ei].endBar = mk.m.endBar;
+    }
   }
-  const lastEnd = song.measures[song.measures.length - 1]?.endBar;
-  if (lastEnd && lastEnd !== 'single') measures[count - 1].endBar = lastEnd;
+  // A short last bar stays short.
+  const last = song.measures[song.measures.length - 1];
+  if (last?.len !== undefined && count > 1) {
+    const rest = total - startOf(count - 1);
+    if (rest < cap - EPS) measures[count - 1].len = rest;
+  }
   return { meta, measures, cap };
 }
 

@@ -112,6 +112,7 @@ function SyntaxHelp() {
     ['(4 5 6)  -(1 2 3)', 'chord: holes played together'],
     ['4~  4~~', 'hold for 2 / 3 beats'],
     ['{4 5}  {4~ 5}', 'split one beat: 2 eighths / dotted rhythm'],
+    ['{7}/2  {6~ 7}~~/2', 'a group lasting part of a beat (for 7/8, 5/8 …)'],
     ['.', 'rest (one beat)'],
     ['6~ | ~~ 5', 'tie: a lone ~ continues the previous note (across bars too)'],
     ['|  ||  |]  |:  :|', 'bar lines'],

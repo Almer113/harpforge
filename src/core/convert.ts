@@ -232,6 +232,8 @@ export function notesToTab(doc: TabDoc, harp: Harmonica, opts: NotesToTabOptions
             stats.unplayable++;
             stats.cost += 25;
             warnings.push(`${slot.pitches.map((p) => midiToName(p)).join('+')} isn't playable on ${harp.name}`);
+            // Keep the music: the note stays as a note name rather than becoming a rest.
+            return { ...e, sounds: slot.pitches.map((midi) => ({ type: 'pitch' as const, midi })) };
           }
           return restFor(e);
         }

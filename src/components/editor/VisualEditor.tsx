@@ -18,10 +18,12 @@ import {
   fromDoc,
   insertMeasure,
   measureLength,
+  measureSpan,
   moveItem,
   placeItem,
   removeChains,
   samePos,
+  setLengths,
   setTie,
   snapTo,
   updateItem,
@@ -30,7 +32,8 @@ import {
   type Song,
 } from '../../core/edit/model';
 import { soundPitch } from '../../core/instruments';
-import { midiToName, prefersFlats } from '../../core/pitch';
+import { midiToName } from '../../core/pitch';
+import { flatsFor } from '../../core/edit/splice';
 import type { Sound } from '../../core/types';
 import { onPlayed } from '../../live/livePlayer';
 import { useHarmonicaKeyboard } from '../../live/useHarmonicaKeyboard';
@@ -46,13 +49,13 @@ export function toolDuration(ve: VisualState): number {
   return ve.dur * (ve.dotted ? 1.5 : 1) * (ve.triplet ? 2 / 3 : 1);
 }
 
-/** Absolute start beat of each measure (a measure spans its capacity, or longer if overfull). */
+/** Absolute start beat of each measure as played (short bars and overfull bars take their real length). */
 export function measureStarts(song: Song): number[] {
   const out: number[] = [];
   let t = 0;
   for (const m of song.measures) {
     out.push(t);
-    t += Math.max(song.cap, measureLength(m));
+    t += measureSpan(song, m);
   }
   return out;
 }
@@ -83,7 +86,8 @@ export function VisualEditor() {
   const showNames = useApp((s) => s.showNoteNames);
   const song = useMemo(() => fromDoc(parsed.doc), [parsed]);
   const starts = useMemo(() => measureStarts(song), [song]);
-  const flats = prefersFlats(parsed.doc.meta.key ?? parsed.harp.spec.key);
+  const text = useApp((s) => s.text);
+  const flats = flatsFor(text, parsed.doc.meta.key ?? parsed.harp.spec.key);
   const hasBars = parsed.doc.lines.some((l) => l.events.some((e) => e.kind === 'bar'));
 
   useHarmonicaKeyboard(true, { arrows: false });
@@ -146,7 +150,7 @@ export function VisualEditor() {
       const ctrl = e.ctrlKey || e.metaKey;
 
       if (ctrl && e.key.toLowerCase() === 'c' && sel.length) {
-        const abs = (p: Pos) => measureStarts(s)[p.m] + p.start;
+        const abs = (p: Pos) => absBeat(s, p);
         const items = sel.map((p) => ({ p, it: s.measures[p.m]?.items.find((x) => Math.abs(x.start - p.start) < EPS) })).filter((x) => x.it);
         const base = Math.min(...items.map((x) => abs(x.p)));
         clipboard = items.map((x) => ({ rel: abs(x.p) - base, item: { ...x.it! } }));
@@ -218,7 +222,11 @@ export function VisualEditor() {
           if (!all.length) return;
           const cur = sel[sel.length - 1];
           let i = cur ? all.findIndex((p) => samePos(p, cur)) : -1;
-          if (i < 0) i = all.findIndex((p) => p.m > v.caret.m || (p.m === v.caret.m && p.start >= v.caret.start - EPS)) - (e.key === 'ArrowRight' ? 1 : 0);
+          if (i < 0) {
+            // No selection: step from the caret (after the last note when nothing follows it).
+            const after = all.findIndex((p) => p.m > v.caret.m || (p.m === v.caret.m && p.start >= v.caret.start - EPS));
+            i = (after < 0 ? all.length : after) - (e.key === 'ArrowRight' ? 1 : 0);
+          }
           const j = Math.max(0, Math.min(all.length - 1, i + (e.key === 'ArrowRight' ? 1 : -1)));
           const p = all[j];
           const it = s.measures[p.m].items.find((x) => Math.abs(x.start - p.start) < EPS)!;
@@ -286,10 +294,9 @@ function setDuration(base: number, dotted: boolean, triplet: boolean) {
   st.setVe({ dur: base, dotted, triplet });
   if (!v.selection.length) return;
   const beats = base * (dotted ? 1.5 : 1) * (triplet ? 2 / 3 : 1);
-  let s = fromDoc(getParsed(st.text).doc);
-  // Later notes first, so earlier ones can grow over them predictably.
-  for (const p of [...v.selection].sort((a, b) => b.m - a.m || b.start - a.start)) s = updateItem(s, p, { dur: beats });
-  commitSong(s);
+  const s = fromDoc(getParsed(st.text).doc);
+  const { song, selection } = setLengths(s, v.selection, beats);
+  apply(song, { selection });
 }
 
 /** Ties the selected note to the one before it (or unties it). */
@@ -451,6 +458,11 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
   // Move preview: where the grabbed piece lands (m/start) and the whole note's span (abs/dur).
   const [ghost, setGhost] = useState<{ m: number; start: number; abs: number; dur: number; copy: boolean } | null>(null);
   const [resizeDur, setResizeDur] = useState<{ pos: Pos; dur: number } | null>(null);
+  // Latest previews, read when the drag ends.
+  const ghostRef = useRef(ghost);
+  const resizeRef = useRef(resizeDur);
+  ghostRef.current = ghost;
+  resizeRef.current = resizeDur;
   const root = useRef<HTMLDivElement>(null);
 
   const laneAt = (x: number, y: number) => {
@@ -468,43 +480,46 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
       if (d.mode === 'resize') {
         // Past the bar line the note carries on into the next measure as a tie.
         const dur = Math.max(snap, snapTo(d.item.dur + (e.clientX - d.x0) / zoom, snap));
-        setResizeDur({ pos: d.pos, dur: Math.min(dur, song.cap * 4) });
+        resizeRef.current = { pos: d.pos, dur: Math.min(dur, song.cap * 4) };
+        setResizeDur(resizeRef.current);
         return;
       }
       const lane = laneAt(e.clientX, e.clientY);
       if (!lane) {
+        ghostRef.current = null;
         setGhost(null);
         return;
       }
       const r = lane.el.getBoundingClientRect();
       const start = Math.max(0, Math.min(song.cap - snap, snapTo((e.clientX - r.left) / zoom - d.grab, snap)));
       const head = Math.max(0, lane.m * song.cap + start - d.offset);
-      setGhost({ m: lane.m, start, abs: head, dur: d.total, copy: e.altKey });
+      ghostRef.current = { m: lane.m, start, abs: head, dur: d.total, copy: e.altKey };
+      setGhost(ghostRef.current);
     };
-    const up = (e: PointerEvent) => {
+    const up = () => {
       const d = drag.current;
       drag.current = null;
       if (!d) return;
       const s = fromDoc(getParsed(useApp.getState().text).doc);
+      // Edits happen here, not inside state updaters (React may run those twice).
       if (d.mode === 'resize') {
-        setResizeDur((rd) => {
-          if (rd && d.moved && Math.abs(rd.dur - d.item.dur) > EPS) {
-            // The dragged piece changes length; the whole (tied) note follows.
-            const chain = chainAt(s, d.pos);
-            const total = chainLength(s, chain) - d.item.dur + rd.dur;
-            apply(updateItem(s, d.pos, { dur: total }));
-          }
-          return null;
-        });
+        const rd = resizeRef.current;
+        setResizeDur(null);
+        if (rd && d.moved && Math.abs(rd.dur - d.item.dur) > EPS) {
+          // The dragged piece changes length; the whole (tied) note follows.
+          const chain = chainAt(s, d.pos);
+          const total = chainLength(s, chain) - d.item.dur + rd.dur;
+          apply(updateItem(s, d.pos, { dur: total }));
+        }
         return;
       }
-      setGhost((g) => {
-        if (g && d.moved) {
-          const to = { m: g.m, start: g.start };
-          if (!samePos(to, d.pos) || g.copy) apply(moveItem(s, d.pos, to, e.altKey), { selection: [to], measure: to.m, caret: advance(s, to, d.item.dur) });
-        }
-        return null;
-      });
+      const g = ghostRef.current;
+      setGhost(null);
+      if (g && d.moved) {
+        const to = { m: g.m, start: g.start };
+        // Copy or move as the preview showed it (Alt when the pointer last moved).
+        if (!samePos(to, d.pos) || g.copy) apply(moveItem(s, d.pos, to, g.copy), { selection: [to], measure: to.m, caret: advance(s, to, d.item.dur) });
+      }
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -588,6 +603,13 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
                 onPointerDown={(e) => onLaneDown(e, mi)}
                 onDoubleClick={(e) => onLaneDouble(e, mi)}
               >
+                {meas.len !== undefined && meas.len < song.cap - EPS && len < song.cap - EPS && (
+                  <span
+                    className="ve-short"
+                    style={{ left: Math.max(meas.len, len) * zoom }}
+                    title={`A short bar (pickup): ${+meas.len.toFixed(2)} of ${song.cap} beats. Notes placed here make it longer.`}
+                  />
+                )}
                 {meas.items.map((it) => {
                   const pos = { m: mi, start: it.start };
                   const selected = ve.selection.some((p) => samePos(p, pos));

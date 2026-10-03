@@ -3,12 +3,12 @@
 import { retab } from '../core/convert';
 import { setMetaFields } from '../core/htab/meta';
 import { splitHeader } from '../core/htab/parser';
-import { bodyText } from '../core/htab/serializer';
+import { replaceLines } from '../core/edit/splice';
 import { getHarmonica, specId, type HarmonicaSpec } from '../core/instruments';
 import { BLANK } from '../demo/songs';
 import { isChordSheet, octaveOptions } from '../core/convert';
 import { decodeText, detectKind, exportDoc, FORMAT_NAMES, importBytes, IMPORT_ACCEPT, importText, sniffText, type ExportKind, type Imported } from '../core/formats';
-import { saveTab } from '../storage/library';
+import { persistStorage, saveTab } from '../storage/library';
 import { stop } from './playback';
 import { getParsed, isDirty, useApp } from './store';
 
@@ -31,10 +31,13 @@ export function setHarmonica(spec: HarmonicaSpec) {
   }
   const r = retab(p.doc, p.harp, to);
   const header = s.text.slice(0, splitHeader(s.text).bodyStart);
-  const body = bodyText(r.doc.lines);
+  // Only the lines whose notes changed are rewritten; comments and spacing stay.
+  const body = replaceLines(s.text, r.doc.lines);
   s.setText(setMetaFields(header, fields) + body + (body ? '\n' : ''));
   useApp.setState({ keyOffset: 0 });
-  if (r.warnings.length) s.notify(`Re-tabbed for ${to.name} — ${r.warnings.length} note(s) couldn't be placed.`);
+  if (r.stats.unplayable)
+    s.notify(`Re-tabbed for ${to.name} — ${r.stats.unplayable} note(s) don't fit this harmonica and are kept as note names (e.g. A#4).`);
+  else if (r.warnings.length) s.notify(`Re-tabbed for ${to.name} — ${r.warnings.join('; ')}.`);
   else if (r.stats.notes) s.notify(`Re-tabbed for ${to.name} ✓`);
 }
 
@@ -49,7 +52,7 @@ export function shiftOctave(shift: 12 | -12) {
   }
   stop();
   const header = s.text.slice(0, splitHeader(s.text).bodyStart);
-  const body = bodyText(opt.result.doc.lines);
+  const body = replaceLines(s.text, opt.result.doc.lines);
   s.setText(header + body + (body ? '\n' : ''));
   s.notify(`Moved an octave ${shift > 0 ? 'up' : 'down'} ✓`);
 }
@@ -68,9 +71,15 @@ export function newTab() {
 
 export async function saveCurrent(asCopy = false): Promise<void> {
   const s = useApp.getState();
-  const id = await saveTab(s.text, asCopy ? null : s.docId);
-  s.markSaved(id);
-  s.notify(asCopy ? 'Saved a copy to your library ✓' : 'Saved to your library ✓');
+  const text = s.text;
+  try {
+    const id = await saveTab(text, asCopy ? null : s.docId);
+    s.markSaved(id, text);
+    s.notify(asCopy ? 'Saved a copy to your library ✓' : 'Saved to your library ✓');
+    void persistStorage();
+  } catch (e) {
+    s.notify(`Couldn’t save to your library (${(e as Error).message || 'storage unavailable'}). Export the tab to keep it.`);
+  }
 }
 
 export function downloadData(filename: string, data: string | Uint8Array, type = 'text/plain') {
@@ -176,12 +185,14 @@ export function openPasteImport() {
 }
 
 /** Loads tab text as the current tab. `unchanged` marks it as having no edits yet (e.g. opened from a link). */
-export function loadTabText(text: string, name: string, opts: { unchanged?: boolean; message?: string } = {}) {
-  if (!confirmDiscard()) return;
+/** Opens a tab's text (asking first if there are unsaved changes). Returns false if the user kept their tab. */
+export function loadTabText(text: string, name: string, opts: { unchanged?: boolean; message?: string } = {}): boolean {
+  if (!confirmDiscard()) return false;
   stop();
   const s = useApp.getState();
   s.loadText(text, null, !!opts.unchanged);
   const { issues } = getParsed(text);
   const errors = issues.filter((i) => i.severity === 'error').length;
   s.notify(errors ? `Imported "${name}" with ${errors} problem(s) — see the editor.` : opts.message ?? `Imported "${name}" ✓`);
+  return true;
 }

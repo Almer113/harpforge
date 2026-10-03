@@ -48,12 +48,16 @@ export async function copyShareLink() {
 export function openSharedFromUrl() {
   const m = new RegExp(`[#&]${PARAM}=([A-Za-z0-9_-]+)`).exec(location.hash);
   if (!m) return;
-  history.replaceState(null, '', location.pathname + location.search);
+  let text: string;
   try {
-    const text = decodeTab(m[1]);
-    loadTabText(text, 'shared link', { unchanged: true, message: 'Opened a shared tab — Save it to keep it in your library.' });
-    useApp.getState().setPage('play');
+    text = decodeTab(m[1]);
   } catch {
+    history.replaceState(null, '', location.pathname + location.search);
     useApp.getState().notify('That share link is damaged or incomplete.');
+    return;
   }
+  // If the user keeps their unsaved tab instead, the link stays in the address bar for later.
+  if (!loadTabText(text, 'shared link', { unchanged: true, message: 'Opened a shared tab — Save it to keep it in your library.' })) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  useApp.getState().setPage('play');
 }

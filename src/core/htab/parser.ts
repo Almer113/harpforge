@@ -206,14 +206,17 @@ function parseRange(ctx: Ctx, from: number, to: number, inGroup: boolean): TabEv
       }
       const inner = parseRange(ctx, i + 1, j, true) as (NoteEvent | RestEvent)[];
       const tildes = countTildes(s, j + 1);
-      const total = 1 + tildes;
+      // "{7}/2" = half a beat, "{6~ 7}~~/2" = 1½ beats: needed for odd meters like 7/8.
+      const div = /^\/(\d{1,2})/.exec(s.slice(j + 1 + tildes));
+      const divisor = div ? Math.max(1, parseInt(div[1], 10)) : 1;
+      const total = (1 + tildes) / divisor;
       const sum = inner.reduce((a, e) => a + e.beats, 0);
       if (inner.length === 0) issue(ctx, 'Empty beat group', i, j + 1, 'warning');
       for (const e of inner) {
         e.beats = (total * e.beats) / sum;
         events.push(e);
       }
-      i = j + 1 + tildes;
+      i = j + 1 + tildes + (div ? div[0].length : 0);
       continue;
     }
 

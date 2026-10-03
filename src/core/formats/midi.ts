@@ -112,7 +112,9 @@ export function parseMidi(data: Uint8Array): Imported {
         continue;
       }
       if (b === 0xf0 || b === 0xf7) {
-        r.pos += r.varlen();
+        // Read the length first: `r.pos += r.varlen()` would add it to the position from before the length bytes.
+        const len = r.varlen();
+        r.pos += len;
         continue;
       }
       if (b & 0x80) status = b;

@@ -23,7 +23,8 @@ import {
 import { holeSoundText, soundText } from '../../core/htab/serializer';
 import type { BarStyle } from '../../core/htab/types';
 import { canOver, maxBend, soundPitch } from '../../core/instruments';
-import { midiToName, prefersFlats } from '../../core/pitch';
+import { midiToName } from '../../core/pitch';
+import { flatsFor } from '../../core/edit/splice';
 import type { HoleSound, Sound } from '../../core/types';
 import { commitSong, DURATIONS, describeDuration, durationLabel, mapHoles, parseSoundsInput, stepPitch } from '../../state/editor';
 import { useApp, useParsed } from '../../state/store';
@@ -78,7 +79,7 @@ function CaretPanel({ song }: { song: Song }) {
 
 function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
   const { harp, doc } = useParsed();
-  const flats = prefersFlats(doc.meta.key ?? harp.spec.key);
+  const flats = flatsFor(useApp.getState().text, doc.meta.key ?? harp.spec.key);
   const [input, setInput] = useState(soundsText(item.sounds));
   const [bad, setBad] = useState(false);
   useEffect(() => {
@@ -227,10 +228,17 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
           <span>Chord</span>
           <LiveInput value={item.chord ?? ''} placeholder="G7" onCommit={(v) => commitSong(updateItem(song, pos, { chord: v.trim() || undefined }), 'typing')} />
         </label>
-        <label className="field">
-          <span>Lyric</span>
-          <LiveInput value={item.lyric ?? ''} placeholder="syl-" onCommit={(v) => commitSong(updateItem(song, pos, { lyric: v || undefined }), 'typing')} />
-        </label>
+        {item.sounds.length > 0 && !item.tied ? (
+          <label className="field">
+            <span>Lyric</span>
+            <LiveInput value={item.lyric ?? ''} placeholder="syl-" onCommit={(v) => commitSong(updateItem(song, pos, { lyric: v || undefined }), 'typing')} />
+          </label>
+        ) : (
+          <div className="field">
+            <span>Lyric</span>
+            <span className="muted small">{item.tied ? 'A tied note isn’t sung again — the syllable goes on the note it continues.' : 'Lyrics go on notes, not rests.'}</span>
+          </div>
+        )}
       </div>
 
       <div className="row">
@@ -283,7 +291,8 @@ function MultiPanel({ song, sel }: { song: Song; sel: Pos[] }) {
   );
 }
 
-const END_BARS: { id: BarStyle; label: string }[] = [
+const END_BARS: { id: BarStyle | 'none'; label: string }[] = [
+  { id: 'none', label: 'none (carries on)' },
   { id: 'single', label: '| bar' },
   { id: 'double', label: '|| double' },
   { id: 'repeat-end', label: ':| repeat back' },
@@ -302,6 +311,14 @@ function MeasurePanel({ song, m }: { song: Song; m: number }) {
           {+Math.min(length, 99).toFixed(2)} / {song.cap} beats
         </span>
       </div>
+      {meas.len !== undefined && meas.len < song.cap - EPS && length < song.cap - EPS && (
+        <div className="insp-note">
+          <span className="muted small">Short bar{m === 0 ? ' (pickup)' : ''}: {+Math.max(meas.len, length).toFixed(2)} of {song.cap} beats.</span>
+          <button className="btn small ghost" onClick={() => apply(updateMeasure(song, m, { len: undefined }))} title="Fill the rest of the bar with rests">
+            Make full length
+          </button>
+        </div>
+      )}
       <label className="field">
         <span>Section</span>
         <LiveInput
@@ -326,7 +343,7 @@ function MeasurePanel({ song, m }: { song: Song; m: number }) {
       </div>
       <label className="field">
         <span>Bar line at the end</span>
-        <select value={meas.endBar} onChange={(e) => apply(updateMeasure(song, m, { endBar: e.target.value as BarStyle }))}>
+        <select value={meas.endBar} onChange={(e) => apply(updateMeasure(song, m, { endBar: e.target.value as BarStyle | 'none' }))}>
           {END_BARS.map((b) => (
             <option key={b.id} value={b.id}>{b.label}</option>
           ))}

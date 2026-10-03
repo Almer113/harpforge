@@ -162,7 +162,8 @@ export interface AppState {
   redo(): void;
   history: { past: string[]; future: string[]; lastKind: string; lastAt: number };
   loadText(t: string, docId?: string | null, saved?: boolean): void;
-  markSaved(docId: string): void;
+  /** Marks `text` (what was actually written to the library) as saved under `docId`. */
+  markSaved(docId: string, text?: string): void;
   notify(message: string): void;
 }
 
@@ -249,7 +250,7 @@ export const useApp = create<AppState>((set) => ({
   history: { past: [], future: [], lastKind: '', lastAt: 0 },
   loadText: (text, docId = null, saved = false) =>
     set({ text, docId, savedText: saved ? text : null, selectedEvent: null, activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0 } }),
-  markSaved: (docId) => set((s) => ({ docId, savedText: s.text })),
+  markSaved: (docId, text) => set((s) => ({ docId, savedText: text ?? s.text })),
   notify: (message) => set({ toast: { message, id: Date.now() } }),
 }));
 
@@ -265,17 +266,31 @@ useApp.subscribe((s, prev) => {
 
 // Autosave the working document.
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let autosaveFailed = false;
+function writeWorking() {
+  clearTimeout(saveTimer);
+  saveTimer = undefined;
+  const s = useApp.getState();
+  try {
+    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ text: s.text, docId: s.docId, savedText: s.savedText }));
+    autosaveFailed = false;
+  } catch {
+    // Storage full or blocked: say so once, so unsaved work isn't silently at risk.
+    if (!autosaveFailed) s.notify('Couldn’t keep a backup of your working tab in this browser — save it to your library or export it.');
+    autosaveFailed = true;
+  }
+}
 useApp.subscribe((s, prev) => {
   if (s.text === prev.text && s.docId === prev.docId && s.savedText === prev.savedText) return;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try {
-      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ text: s.text, docId: s.docId, savedText: s.savedText }));
-    } catch {
-      /* storage unavailable */
-    }
-  }, 300);
+  saveTimer = setTimeout(writeWorking, 300);
 });
+// Don't lose the last keystrokes when the tab is closed or hidden.
+if (typeof window !== 'undefined') {
+  const flush = () => saveTimer !== undefined && writeWorking();
+  window.addEventListener('pagehide', flush);
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flush());
+}
 
 export function useParsed(): Parsed {
   const text = useApp((s) => s.text);

@@ -50,6 +50,7 @@ Aliases accepted on import: `instrument` = `harmonica`, `bpm` = `tempo`, `meter`
 | `~` | hold: each `~` adds one beat (`4~~` = 3 beats) |
 | `{a b c}` | split one beat between the items, weighted by their `~` (`{4~ 5}` = ⅔ + ⅓) |
 | `{a b}~` | the group lasts 2 beats instead of 1 |
+| `{a}/2`  `{a b~}~~/2` | the group lasts a fraction of a beat: `/2` halves it (`{7}/2` = ½ beat, `{6~ 7}~~/2` = 1½ beats). Used for bars that end on a half beat, as in 7/8 |
 | `.` | rest (one beat, `.~` = two) |
 | `~` (on its own) | **tie**: the previous note keeps sounding for one beat per `~`, e.g. `6~ \| ~~ 5` |
 | `\|` `\|\|` `\|]` `\|:` `:\|` | bar lines: single, double, final, repeat start/end |
