@@ -132,7 +132,15 @@ export function parseMusicXml(xml: string): Imported {
           }
           const tieStop = [...el.getElementsByTagName('tie')].some((t) => t.getAttribute('type') === 'stop');
           if (tieStop && last && midi !== null && last.sounds.length === 1 && last.sounds[0].type === 'pitch' && last.sounds[0].midi === midi) {
-            last.beats += beats;
+            // Within a measure the tie just lengthens the note; across a bar line it stays a tie.
+            const idx = events.lastIndexOf(last);
+            if (idx >= 0 && !events.slice(idx + 1).some((e) => e.kind === 'bar')) {
+              last.beats += beats;
+              break;
+            }
+            const tiedEv: NoteEvent = { kind: 'note', sounds: last.sounds, beats, tied: true };
+            events.push(tiedEv);
+            last = tiedEv;
             break;
           }
           if (midi === null) {
@@ -215,6 +223,7 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
   const items: Item[] = [];
   for (const l of doc.lines) for (const e of l.events) if (e.kind !== 'bar' && e.beats > 0) items.push({ beats: e.beats, ev: e });
   const measures: { beats: number; ev: NoteEvent | RestEvent; tieStart: boolean; tieStop: boolean; first: boolean }[][] = [[]];
+  let lastPiece: (typeof measures)[number][number] | null = null;
   let room = bpb;
   for (const it of items) {
     let left = it.beats;
@@ -227,7 +236,14 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
       const take = Math.min(left, room);
       left -= take;
       room -= take;
-      measures[measures.length - 1].push({ beats: take, ev: it.ev, tieStart: left > 1e-6, tieStop: !first, first });
+      const piece = { beats: take, ev: it.ev, tieStart: left > 1e-6, tieStop: !first, first };
+      // A tied note: the previous piece ties into this one.
+      if (first && it.ev.kind === 'note' && it.ev.tied && lastPiece) {
+        lastPiece.tieStart = true;
+        piece.tieStop = true;
+      }
+      measures[measures.length - 1].push(piece);
+      lastPiece = piece;
       first = false;
     }
   }
@@ -272,7 +288,7 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
             wordOpen = hyphen;
             lyrics += `<lyric number="1"><syllabic>${syllabic}</syllabic><text>${esc(word)}</text></lyric>`;
           }
-          const holes = ev.sounds.filter((s): s is HoleSound => s.type === 'hole');
+          const holes = ev.tied ? [] : ev.sounds.filter((s): s is HoleSound => s.type === 'hole');
           if (holes.length) lyrics += `<lyric number="2" name="tab"><syllabic>single</syllabic><text>${esc(holes.map((h) => holeSoundText(h)).join(' '))}</text></lyric>`;
         }
         out.push(`<note>${k > 0 ? '<chord/>' : ''}${pitch}<duration>${dur}</duration>${tieXml}${typeXml}${tiedXml}${lyrics}</note>`);

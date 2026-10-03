@@ -212,22 +212,31 @@ export function writeMidi(doc: TabDoc, harp?: Harmonica): Uint8Array {
   }
   evs.push({ tick: 0, order: 0, bytes: [0xc0, 22] }); // GM 23: Harmonica
 
+  // Notes first (ties merged into the note they continue), then MIDI events.
+  const notes: { tick: number; ticks: number; midis: number[] }[] = [];
   let t = 0;
+  let open: (typeof notes)[number] | null = null;
   for (const line of doc.lines) {
     for (const e of line.events) {
       if (e.kind === 'bar') continue;
       const ticks = Math.round(e.beats * PPQ);
+      if (e.chord) evs.push({ tick: t, order: 1, bytes: textEvent(0x01, e.chord) });
       if (e.kind === 'note') {
-        const midis = eventMidis(e as NoteEvent, harp);
-        if (e.lyric) evs.push({ tick: t, order: 1, bytes: textEvent(0x05, e.lyric) });
-        if (e.chord) evs.push({ tick: t, order: 1, bytes: textEvent(0x01, e.chord) });
-        const off = t + Math.max(1, ticks - Math.min(30, Math.floor(ticks / 10)));
-        for (const m of midis) {
-          evs.push({ tick: t, order: 2, bytes: [0x90, m, 90] });
-          evs.push({ tick: off, order: 0, bytes: [0x80, m, 0] });
+        if (e.lyric && !e.tied) evs.push({ tick: t, order: 1, bytes: textEvent(0x05, e.lyric) });
+        if (e.tied && open) open.ticks += ticks;
+        else {
+          open = { tick: t, ticks, midis: eventMidis(e as NoteEvent, harp) };
+          notes.push(open);
         }
-      } else if (e.chord) evs.push({ tick: t, order: 1, bytes: textEvent(0x01, e.chord) });
+      } else open = null;
       t += ticks;
+    }
+  }
+  for (const n of notes) {
+    const off = n.tick + Math.max(1, n.ticks - Math.min(30, Math.floor(n.ticks / 10)));
+    for (const m of n.midis) {
+      evs.push({ tick: n.tick, order: 2, bytes: [0x90, m, 90] });
+      evs.push({ tick: off, order: 0, bytes: [0x80, m, 0] });
     }
   }
   evs.sort((a, b) => a.tick - b.tick || a.order - b.order);

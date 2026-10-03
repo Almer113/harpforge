@@ -32,6 +32,7 @@ function chordText(sounds: Sound[], opts: SerializeOptions): string {
 
 function eventCore(e: NoteEvent | RestEvent, opts: SerializeOptions): string {
   if (e.kind === 'rest') return '.';
+  if (e.tied) return '~';
   return e.sounds.length === 1 ? soundText(e.sounds[0], opts) : chordText(e.sounds, opts);
 }
 
@@ -84,6 +85,7 @@ export function eventsText(events: TabEvent[], opts: SerializeOptions = {}): str
       continue;
     }
     if (isInt(e.beats) && e.beats >= 1) {
+      // A tie is one "~" per beat; a note is one token plus a "~" per extra beat.
       out.push(withChord(e, eventCore(e, opts) + '~'.repeat(Math.round(e.beats) - 1)));
       i++;
       continue;
@@ -105,7 +107,7 @@ export function eventsText(events: TabEvent[], opts: SerializeOptions = {}): str
 }
 
 function lyricsText(line: TabLine): string | null {
-  const notes = line.events.filter((e): e is NoteEvent => e.kind === 'note');
+  const notes = line.events.filter((e): e is NoteEvent => e.kind === 'note' && !e.tied);
   if (!notes.some((n) => n.lyric)) return null;
   let last = notes.length - 1;
   while (last >= 0 && !notes[last].lyric) last--;

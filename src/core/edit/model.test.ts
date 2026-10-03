@@ -6,6 +6,9 @@ import { buildScore, harmonicaFromMeta } from '../score';
 import { holeSound } from '../types';
 import {
   advance,
+  chainAt,
+  removeChains,
+  setTie,
   deleteMeasure,
   duplicateMeasure,
   fromDoc,
@@ -61,9 +64,9 @@ describe('edit model: notes', () => {
     expect(body(s)).toBe('4 -3~ 7 |');
   });
 
-  it('shortens a note running into a placed one and clips to the measure', () => {
+  it('shortens a note running into a placed one; a long note ties into the next measure', () => {
     const s0 = song('4~~~ |');
-    expect(body(placeItem(s0, 0, { start: 2, dur: 4, sounds: [holeSound(6, 'blow')] }))).toBe('4~ 6~ |');
+    expect(body(placeItem(s0, 0, { start: 2, dur: 4, sounds: [holeSound(6, 'blow')] }))).toBe('4~ 6~ | ~~ .~ |');
   });
 
   it('deletes into rests and moves/copies between measures', () => {
@@ -108,7 +111,44 @@ describe('edit model: measures and time signatures', () => {
     expect(kept.measures).toHaveLength(2);
     const re = setTimeSignature(s, '3/4', true);
     expect(re.meta.time).toBe('3/4');
-    // 8 beats → bars of 3; the long -5 is split across the bar line.
-    expect(body(re)).toBe('4 5 6 | 7 -4 -5 | -5 -6 . |');
+    // 8 beats → bars of 3; the long -5 is tied across the new bar line.
+    expect(body(re)).toBe('4 5 6 | 7 -4 -5 | ~ -6 . |');
+    // …and changing back merges the tie again.
+    expect(body(setTimeSignature(re, '4/4', true))).toBe('4 5 6 7 | -4 -5~ -6 |');
+  });
+});
+
+describe('edit model: ties', () => {
+  const tied = () => song('4 5 6~ | ~ 7 . . |');
+
+  it('reads and writes ties', () => {
+    const s = tied();
+    expect(s.measures[1].items[0]).toMatchObject({ start: 0, dur: 1, tied: true });
+    expect(body(s)).toBe('4 5 6~ | ~ 7 .~ |');
+  });
+
+  it('treats a tied chain as one note', () => {
+    const s = tied();
+    expect(chainAt(s, { m: 1, start: 0 })).toEqual([{ m: 0, start: 2 }, { m: 1, start: 0 }]);
+    // Length of the whole note:
+    expect(body(updateItem(s, { m: 1, start: 0 }, { dur: 4 }))).toBe('4 5 6~ | ~~ .~ |');
+    expect(body(updateItem(s, { m: 0, start: 2 }, { dur: 1 }))).toBe('4 5 6 . | . 7 .~ |');
+    // Sound of the whole note:
+    expect(body(updateItem(s, { m: 1, start: 0 }, { sounds: [holeSound(5, 'draw')] }))).toBe('4 5 -5~ | ~ 7 .~ |');
+    // Deleting any piece deletes the note:
+    expect(body(removeChains(s, [{ m: 1, start: 0 }]))).toBe('4 5 .~ | . 7 .~ |');
+    // Moving any piece moves the whole note (the grabbed piece lands on the target):
+    expect(body(moveItem(s, { m: 1, start: 0 }, { m: 1, start: 2 }))).toBe('4 5 .~ | 6~~ . |');
+    expect(body(moveItem(s, { m: 0, start: 2 }, { m: 0, start: 3 }))).toBe('4 5 . 6 | ~~ .~ |');
+  });
+
+  it('ties and unties, and drops ties that no longer follow the same note', () => {
+    const s = song('4 4 5 5 |');
+    expect(body(setTie(s, { m: 0, start: 1 }, true))).toBe('4~ 5 5 |');
+    expect(body(setTie(s, { m: 0, start: 3 }, true))).toBe('4 4 5~ |');
+    const t = tied();
+    expect(body(setTie(t, { m: 1, start: 0 }, false))).toBe('4 5 6~ | 6 7 .~ |');
+    // Overwriting the start of a chain leaves the rest as a plain note.
+    expect(body(placeItem(t, 0, { start: 2, dur: 2, sounds: [holeSound(3, 'draw')] }))).toBe('4 5 -3~ | 6 7 .~ |');
   });
 });

@@ -15,8 +15,8 @@ import { eventMidis, keyFifths, keySignature, LETTER_PC, notesMeta, spell, toFra
 
 interface PendingNote {
   ev: NoteEvent;
-  /** Pitch of a tie-able single note. */
-  tieMidi?: number;
+  /** The note's pitches, to match the note a tie leads to. */
+  key: string;
 }
 
 export function parseAbc(text: string): Imported {
@@ -35,7 +35,9 @@ export function parseAbc(text: string): Imported {
   let firstVoice: string | null = null;
   let currentVoice: string | null = null;
   let pendingSection: string | undefined;
-  let pendingLyricNotes: NoteEvent[] = [];
+  // One entry per written note head; null = a head merged into the previous note by a
+  // tie (it still takes a lyric slot, but the syllable is dropped).
+  let pendingLyricNotes: (NoteEvent | null)[] = [];
   let lastNote: PendingNote | null = null;
   let tieOpen = false;
   let barAcc: Record<string, number> = {};
@@ -122,7 +124,8 @@ export function parseAbc(text: string): Imported {
         k++;
         continue;
       }
-      notes[k++].lyric = tok.replace(/\\-/g, '-').replace(/~/g, ' ');
+      const target = notes[k++];
+      if (target && !target.tied) target.lyric = tok.replace(/\\-/g, '-').replace(/~/g, ' ');
     }
     pendingLyricNotes = [];
   };
@@ -159,6 +162,10 @@ export function parseAbc(text: string): Imported {
     if (field && !/^[|[]/.test(trimmed)) {
       const [, f, v] = field;
       if (f === 'w') {
+        // A line of harmonica holes (as HarpForge writes under the staff) is the tab, not lyrics.
+        const hole = String.raw`<?(?:\\-)?\d{1,2}'{0,3}o?`;
+        const isTabLine = new RegExp(`^(?:\\*|${hole}(?:~${hole})*)(?:\\s+(?:\\*|${hole}(?:~${hole})*))*$`).test(v.trim());
+        if (isTabLine) continue;
         if (!currentVoice || currentVoice === firstVoice) attachLyrics(v);
         continue;
       }
@@ -198,16 +205,28 @@ export function parseAbc(text: string): Imported {
         ev.chord = pendingChord;
         pendingChord = undefined;
       }
-      // Ties merge into the previous note when the pitch matches.
-      if (ev.kind === 'note' && tieOpen && lastNote && tieMidi !== undefined && lastNote.tieMidi === tieMidi && !ev.chord) {
-        lastNote.ev.beats += ev.beats;
+      // Ties: within a bar the notes merge; across a bar line (or line) they stay tied.
+      const key = ev.kind === 'note' ? ev.sounds.map((s) => (s.type === 'pitch' ? s.midi : 0)).join(',') : '';
+      void tieMidi;
+      if (ev.kind === 'note' && tieOpen && lastNote && lastNote.key === key) {
         tieOpen = false;
+        const idx = events.lastIndexOf(lastNote.ev);
+        const crossesBar = idx < 0 || events.slice(idx + 1).some((e) => e.kind === 'bar');
+        if (!crossesBar && !ev.chord) {
+          lastNote.ev.beats += ev.beats;
+          pendingLyricNotes.push(null);
+          return;
+        }
+        ev.tied = true;
+        events.push(ev);
+        pendingLyricNotes.push(ev);
+        lastNote = { ev, key };
         return;
       }
       tieOpen = false;
       events.push(ev);
       if (ev.kind === 'note') {
-        lastNote = { ev, tieMidi };
+        lastNote = { ev, key };
         pendingLyricNotes.push(ev);
       } else lastNote = null;
     };
@@ -409,6 +428,7 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
   if (meta.artist) out.push(`C:${meta.artist}`);
   out.push(`M:${meta.time}`, 'L:1/8', `Q:1/4=${Math.round(meta.tempo)}`, `K:${keyText}`);
   const order: [number, number][] = [];
+  let lastTieable: number | null = null;
 
   doc.lines.forEach((line, li) => {
     if (line.section) out.push(`P:${line.section}`);
@@ -416,6 +436,7 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
     let barAcc: Record<string, number> = {};
     const sig = keySignature(fifths);
     const parts: string[] = [];
+    lastTieable = null; // a tie from the end of the previous line is written as a plain repeated note
     const lyr: string[] = [];
     const tabs: string[] = [];
 
@@ -479,7 +500,15 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
         return;
       }
       const body = midis.length === 1 ? noteText(midis[0]) : `[${midis.map(noteText).join('')}]`;
+      if (ev.tied && lastTieable !== null) parts[lastTieable] += '-';
       parts.push(`${prefix}${chord}${body}${len}`);
+      lastTieable = parts.length - 1;
+      if (ev.tied) {
+        // Tied notes aren't sung or tabbed again, but keep their slot under the staff.
+        if (withLyrics) lyr.push('*');
+        tabs.push('*');
+        return;
+      }
       if (withLyrics) lyr.push(ev.lyric ? ev.lyric.trim().replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-') : '*');
       tabs.push(tabToken(ev));
     }

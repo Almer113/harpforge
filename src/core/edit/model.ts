@@ -17,6 +17,8 @@ export interface Item {
   sounds: Sound[];
   chord?: string;
   lyric?: string;
+  /** Tied from the item before it (same sound, keeps sounding across the gap/bar). */
+  tied?: boolean;
 }
 
 export interface Measure {
@@ -99,7 +101,11 @@ export function fromDoc(doc: TabDoc): Song {
       const chord = ev.chord ?? pendingChord;
       pendingChord = undefined;
       const sounds = ev.kind === 'note' ? ev.sounds : [];
-      if (sounds.length || chord || ev.lyric) cur.items.push({ start: t, dur: ev.beats, sounds, chord, lyric: ev.lyric });
+      if (sounds.length || chord || ev.lyric) {
+        const item: Item = { start: t, dur: ev.beats, sounds, chord, lyric: ev.lyric };
+        if (ev.kind === 'note' && ev.tied) item.tied = true;
+        cur.items.push(item);
+      }
       t += ev.beats;
     }
     // A line ending mid-measure without a bar still ends the measure (keeps the line).
@@ -118,6 +124,10 @@ export function fromDoc(doc: TabDoc): Song {
 export function toDoc(song: Song): TabDoc {
   const lines: TabLine[] = [];
   let line: TabLine | null = null;
+  // The item sounding right before the current one, for checking ties, and the
+  // event written for it (a tie inside a measure just lengthens that event).
+  let prev: Item | null = null;
+  let prevEvent: NoteEvent | null = null;
   song.measures.forEach((m) => {
     if (!line || m.lineBreak || m.section !== undefined) {
       line = { events: [] };
@@ -126,13 +136,32 @@ export function toDoc(song: Song): TabDoc {
     }
     const events = line.events;
     if (m.startBar) events.push({ kind: 'bar', style: m.startBar });
+    const measureFrom = events.length;
     let t = 0;
     for (const it of [...m.items].sort((a, b) => a.start - b.start || a.dur - b.dur)) {
-      if (it.start > t + EPS) pushRest(events, t, it.start);
-      events.push(itemEvent(it));
+      if (it.start > t + EPS) {
+        pushRest(events, t, it.start);
+        prev = null;
+        prevEvent = null;
+      }
+      // A tie is only kept when it directly follows a note with the same sound.
+      const tie = !!it.tied && !!prev && prev.sounds.length > 0 && sameSounds(prev.sounds, it.sounds);
+      if (tie && prevEvent && events.indexOf(prevEvent) >= measureFrom && !it.chord) {
+        // Inside a measure a tie is just a longer note: "4~", not "4 ~".
+        prevEvent.beats += it.dur;
+      } else {
+        const ev = itemEvent(it, tie);
+        events.push(ev);
+        prevEvent = ev.kind === 'note' ? ev : null;
+      }
+      if (it.dur > EPS) prev = it;
       t = Math.max(t, itemEnd(it));
     }
-    if (t < song.cap - EPS) pushRest(events, t, song.cap);
+    if (t < song.cap - EPS) {
+      pushRest(events, t, song.cap);
+      prev = null;
+      prevEvent = null;
+    }
     events.push({ kind: 'bar', style: m.endBar });
   });
   return { meta: song.meta, lines };
@@ -154,7 +183,16 @@ function pushRest(events: TabEvent[], from: number, to: number) {
   if (to > t + EPS) events.push({ kind: 'rest', beats: to - t });
 }
 
-function itemEvent(it: Item): TabEvent {
+export function sameSounds(a: Sound[], b: Sound[]): boolean {
+  return a.length === b.length && JSON.stringify(a) === JSON.stringify(b);
+}
+
+function itemEvent(it: Item, tie = false): TabEvent {
+  if (it.sounds.length && tie) {
+    const ev: NoteEvent = { kind: 'note', sounds: it.sounds, beats: it.dur, tied: true };
+    if (it.chord) ev.chord = it.chord;
+    return ev;
+  }
   if (it.sounds.length) {
     const ev: NoteEvent = { kind: 'note', sounds: it.sounds, beats: it.dur };
     if (it.chord) ev.chord = it.chord;
@@ -195,10 +233,33 @@ export function itemAt(song: Song, m: number, time: number): Item | undefined {
 
 /**
  * Places an item, overwriting what it lands on: items starting inside its span are
- * removed and an item running into it is shortened. Durations are clipped to the
- * measure.
+ * removed and an item running into it is shortened. A note longer than the room
+ * left in the measure continues as tied pieces in the following measures.
  */
 export function placeItem(song: Song, m: number, item: Item): Song {
+  if (item.dur <= EPS) return placeOne(song, m, item);
+  let s = song;
+  let at = { m, start: Math.max(0, Math.min(item.start, song.cap - EPS)) };
+  let left = Math.min(item.dur, song.cap * 64);
+  let first = true;
+  while (left > EPS) {
+    const take = Math.min(left, song.cap - at.start);
+    const piece: Item = { ...item, start: at.start, dur: take };
+    if (!first) {
+      piece.tied = true;
+      delete piece.chord;
+      delete piece.lyric;
+    }
+    s = placeOne(s, at.m, piece);
+    left -= take;
+    first = false;
+    at = { m: at.m + 1, start: 0 };
+  }
+  return s;
+}
+
+/** Places an item within one measure (clipped to it). */
+function placeOne(song: Song, m: number, item: Item): Song {
   const s = cloneSong(song);
   while (s.measures.length <= m) s.measures.push(emptyMeasure(false));
   const meas = s.measures[m];
@@ -225,26 +286,135 @@ export function removeItems(song: Song, positions: Pos[]): Song {
   return s;
 }
 
-/** Changes fields of an item; a new duration re-places it (overwriting what follows). */
+/**
+ * Changes an item. For tied notes the whole chain changes: `dur` is the length of
+ * the whole note (re-split at bar lines) and `sounds` apply to every piece.
+ */
 export function updateItem(song: Song, pos: Pos, patch: Partial<Omit<Item, 'start'>>): Song {
   const it = findItem(song, pos);
   if (!it) return song;
-  const next = { ...it, ...patch };
-  if (patch.dur !== undefined && !near(patch.dur, it.dur)) return placeItem(removeItems(song, [pos]), pos.m, next);
+  const chain = chainAt(song, pos);
+  if (patch.dur !== undefined) {
+    const total = chainLength(song, chain);
+    if (!near(patch.dur, total) || chain.length > 1) {
+      const head = findItem(song, chain[0])!;
+      const rest = { ...patch };
+      delete rest.dur;
+      const merged = { ...head, ...rest, dur: patch.dur };
+      if (near(patch.dur, total) && Object.keys(rest).length === 0) return song;
+      return placeItem(removeItems(song, chain), chain[0].m, merged);
+    }
+  }
   const s = cloneSong(song);
+  if (patch.sounds) for (const p of chain) findItem(s, p)!.sounds = patch.sounds;
   const target = findItem(s, pos)!;
-  Object.assign(target, patch);
+  const { sounds: _sounds, dur: _dur, ...own } = patch;
+  void _sounds;
+  void _dur;
+  Object.assign(target, own);
   if (!target.chord) delete target.chord;
   if (!target.lyric) delete target.lyric;
+  if (!target.tied) delete target.tied;
   return s;
 }
 
-/** Moves (or copies) an item to another slot. */
+/** Moves (or copies) a note — the whole tied chain — so that the grabbed piece lands at `to`. */
 export function moveItem(song: Song, from: Pos, to: Pos, copy = false): Song {
-  const it = findItem(song, from);
+  const chain = chainAt(song, from);
+  const head = findItem(song, chain[0]);
+  if (!head) return song;
+  const offset = absBeat(song, from) - absBeat(song, chain[0]);
+  const target = posAt(song, Math.max(0, absBeat(song, to) - offset));
+  const base = copy ? song : removeItems(song, chain);
+  const placed = { ...head, start: target.start, dur: chainLength(song, chain) };
+  delete placed.tied;
+  return placeItem(base, target.m, placed);
+}
+
+// ---- Ties ----------------------------------------------------------------------------------
+
+/** Absolute beat of a position (measures are `cap` long). */
+export function absBeat(song: Song, pos: Pos): number {
+  return pos.m * song.cap + pos.start;
+}
+
+export function posAt(song: Song, abs: number): Pos {
+  const m = Math.floor(abs / song.cap + EPS);
+  return { m, start: Math.max(0, abs - m * song.cap) };
+}
+
+/** The item ending exactly where `pos` starts (in this measure, or the end of the previous one). */
+export function previousItem(song: Song, pos: Pos): { pos: Pos; item: Item } | null {
+  const meas = song.measures[pos.m];
+  if (!meas) return null;
+  if (pos.start > EPS) {
+    const it = meas.items.find((x) => near(itemEnd(x), pos.start) && x.dur > EPS);
+    return it ? { pos: { m: pos.m, start: it.start }, item: it } : null;
+  }
+  const prevM = song.measures[pos.m - 1];
+  if (!prevM) return null;
+  const it = prevM.items.find((x) => near(itemEnd(x), song.cap) && x.dur > EPS);
+  return it ? { pos: { m: pos.m - 1, start: it.start }, item: it } : null;
+}
+
+/** The item starting exactly where the one at `pos` ends. */
+export function nextItem(song: Song, pos: Pos): { pos: Pos; item: Item } | null {
+  const it = findItem(song, pos);
+  if (!it) return null;
+  const end = itemEnd(it);
+  if (end < song.cap - EPS) {
+    const n = song.measures[pos.m].items.find((x) => near(x.start, end) && x !== it);
+    return n ? { pos: { m: pos.m, start: n.start }, item: n } : null;
+  }
+  const nm = song.measures[pos.m + 1];
+  const n = nm?.items.find((x) => near(x.start, 0));
+  return n ? { pos: { m: pos.m + 1, start: 0 }, item: n } : null;
+}
+
+/** All pieces of the (possibly tied) note at `pos`, first to last. */
+export function chainAt(song: Song, pos: Pos): Pos[] {
+  const it = findItem(song, pos);
+  if (!it) return [];
+  let head = { pos, item: it };
+  for (let guard = 0; head.item.tied && guard < 256; guard++) {
+    const p = previousItem(song, head.pos);
+    if (!p || !p.item.sounds.length || !sameSounds(p.item.sounds, head.item.sounds)) break;
+    head = p;
+  }
+  const out = [head.pos];
+  let cur = head;
+  for (let guard = 0; guard < 256; guard++) {
+    const n = nextItem(song, cur.pos);
+    if (!n || !n.item.tied || !sameSounds(n.item.sounds, cur.item.sounds)) break;
+    out.push(n.pos);
+    cur = n;
+  }
+  return out;
+}
+
+export function chainLength(song: Song, chain: Pos[]): number {
+  return chain.reduce((a, p) => a + (findItem(song, p)?.dur ?? 0), 0);
+}
+
+/** Removes whole notes: any piece of a tied chain removes the chain. */
+export function removeChains(song: Song, positions: Pos[]): Song {
+  const all: Pos[] = [];
+  for (const p of positions) for (const q of chainAt(song, p)) if (!all.some((x) => x.m === q.m && near(x.start, q.start))) all.push(q);
+  return removeItems(song, all.length ? all : positions);
+}
+
+/** Ties a note to the one before it (taking its sound), or unties it. */
+export function setTie(song: Song, pos: Pos, on: boolean): Song {
+  const it = findItem(song, pos);
   if (!it) return song;
-  const base = copy ? song : removeItems(song, [from]);
-  return placeItem(base, to.m, { ...it, start: to.start });
+  if (!on) return updateItem(song, pos, { tied: false });
+  const prev = previousItem(song, pos);
+  if (!prev || !prev.item.sounds.length) return song;
+  const s = updateItem(song, pos, { sounds: prev.item.sounds });
+  const s2 = cloneSong(s);
+  findItem(s2, pos)!.tied = true;
+  delete findItem(s2, pos)!.lyric;
+  return s2;
 }
 
 // ---- Measures -------------------------------------------------------------------------------
@@ -307,10 +477,18 @@ export function setTimeSignature(song: Song, time: string, reflow: boolean): Son
   let t = 0;
   for (const m of song.measures) {
     marks.push({ at: t, section: m.section, lineBreak: m.lineBreak });
-    for (const it of m.items) abs.push({ ...it, at: t + it.start });
+    for (const it of [...m.items].sort((a, b) => a.start - b.start)) {
+      const at = t + it.start;
+      const last = abs[abs.length - 1];
+      // Tied pieces merge back into one note before re-barring.
+      if (it.tied && last && near(last.at + last.dur, at) && sameSounds(last.sounds, it.sounds)) last.dur += it.dur;
+      else abs.push({ ...it, at, tied: it.tied && !!last && near(last.at + last.dur, at) ? true : undefined });
+    }
     t += Math.max(song.cap, measureLength(m));
   }
-  const total = t;
+  // Re-bar up to the end of the last note (trailing empty space isn't music).
+  const lastNoteEnd = abs.reduce((a, it) => Math.max(a, it.at + it.dur), 0);
+  const total = lastNoteEnd > EPS ? lastNoteEnd : t;
   const count = Math.max(1, Math.ceil(total / cap - EPS));
   const measures: Measure[] = Array.from({ length: count }, (_, i) => emptyMeasure(i === 0));
   for (const it of abs) {
@@ -327,6 +505,7 @@ export function setTimeSignature(song: Song, time: string, reflow: boolean): Son
         delete piece.chord;
         delete piece.lyric;
         if (!piece.sounds.length) break;
+        piece.tied = true;
       }
       measures[mi].items.push(piece);
       at += take;
@@ -348,9 +527,7 @@ export function setTimeSignature(song: Song, time: string, reflow: boolean): Son
 
 /** The slot after an item of `dur` at `pos`, moving into the next measure when full. */
 export function advance(song: Song, pos: Pos, dur: number): Pos {
-  const t = pos.start + dur;
-  if (t < song.cap - EPS) return { m: pos.m, start: t };
-  return { m: pos.m + 1, start: Math.max(0, t - song.cap) };
+  return posAt(song, absBeat(song, pos) + dur);
 }
 
 /** All items in reading order. */

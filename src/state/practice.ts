@@ -10,7 +10,7 @@ function nextPlayable(from: number): number | null {
   const { score } = getParsed(useApp.getState().text);
   for (let i = Math.max(0, from); i < score.events.length; i++) {
     const ev = score.events[i];
-    if (!ev.rest && ev.midis.some((m) => m !== null)) return i;
+    if (!ev.rest && !ev.tied && ev.midis.some((m) => m !== null)) return i;
   }
   return null;
 }

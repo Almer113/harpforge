@@ -26,7 +26,9 @@ npm run build
   playing the harmonica, inspector for holes/bends/chords/lyrics, measure tools, re-barring when the time
   signature changes), **Text** (syntax-highlighted `.htab` with error squiggles) and **Split** (text + live
   preview). Song details (title, key, time signature, tempo, harmonica) sit on top; undo/redo covers everything.
-  Shortcuts: Z X C V B note lengths, N dotted, M triplet, / rest, ←/→ select, ↑/↓ next note (Shift = semitone),
+  Notes longer than the rest of a measure continue as **ties** into the next ones (also by dragging a note's
+  edge past the bar line); a tied note acts as one note for moving, deleting and changing length.
+  Shortcuts: Z X C V B note lengths, N dotted, M triplet, L tie, / rest, ←/→ select, ↑/↓ next note (Shift = semitone),
   Del delete, Ctrl+C/V copy/paste, Ctrl+Z/Y undo/redo.
 - **Convert** — paste notes (or a tab), get a ranked list of the best harmonicas/positions,
   and the tab for the one you pick. Switching a song's harmonica re-tabs it automatically.

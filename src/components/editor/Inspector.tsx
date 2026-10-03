@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import {
   advance,
+  chainAt,
+  chainLength,
   clearMeasure,
   deleteMeasure,
   duplicateMeasure,
@@ -10,7 +12,8 @@ import {
   findItem,
   insertMeasure,
   placeItem,
-  removeItems,
+  removeChains,
+  setTie,
   updateItem,
   updateMeasure,
   type Item,
@@ -87,7 +90,11 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
   const holes = item.sounds.filter((s): s is HoleSound => s.type === 'hole');
   const first = holes[0];
   const midis = item.sounds.map((s) => (s.type === 'pitch' ? s.midi : soundPitch(harp, s)));
-  const d = describeDuration(item.dur);
+  // A tied note's length is the whole chain.
+  const chain = chainAt(song, pos);
+  const total = chainLength(song, chain);
+  const d = describeDuration(total);
+  const measuresSpanned = new Set(chain.map((p) => p.m)).size;
 
   const applyInput = () => {
     const parsed = parseSoundsInput(input);
@@ -117,10 +124,13 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
         </span>
         <div className="insp-names">
           <b>{midis.map((m) => (m === null ? 'not playable' : midiToName(m, flats))).join(' + ') || 'rest'}</b>
-          <span className="muted small">{durationLabel(item.dur)}</span>
+          <span className="muted small">
+            {durationLabel(total)}
+            {chain.length > 1 && ` · tied across ${measuresSpanned} measures`}
+          </span>
         </div>
         {item.sounds.length > 0 && (
-          <button className="icon-btn" onClick={() => playSounds(item.sounds, item.dur)} title="Hear it">
+          <button className="icon-btn" onClick={() => playSounds(item.sounds, total)} title="Hear it">
             ▶
           </button>
         )}
@@ -197,6 +207,21 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
         </div>
       </div>
 
+      {item.sounds.length > 0 && (
+        <label className="check" title="This note continues the note right before it (also across a bar line) instead of being played again (L)">
+          <input
+            type="checkbox"
+            checked={!!item.tied}
+            onChange={(e) => {
+              const next = setTie(song, pos, e.target.checked);
+              if (next === song) useApp.getState().notify('There’s no note right before this one to tie to.');
+              else apply(next);
+            }}
+          />
+          Tied to the previous note
+        </label>
+      )}
+
       <div className="field-row">
         <label className="field">
           <span>Chord</span>
@@ -212,14 +237,15 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
         <button
           className="btn small"
           onClick={() => {
-            const to = advance(song, pos, item.dur);
-            apply(placeItem(song, to.m, { ...item, start: to.start }), { selection: [to], caret: advance(song, to, item.dur), measure: to.m });
+            const head = findItem(song, chain[0])!;
+            const to = advance(song, chain[0], total);
+            apply(placeItem(song, to.m, { ...head, tied: undefined, start: to.start, dur: total }), { selection: [to], caret: advance(song, to, total), measure: to.m });
           }}
           title="Copy this note into the next slot"
         >
           Repeat
         </button>
-        <button className="btn small danger" onClick={() => apply(removeItems(song, [pos]), { selection: [], caret: pos })}>
+        <button className="btn small danger" onClick={() => apply(removeChains(song, [pos]), { selection: [], caret: chain[0] })}>
           Delete
         </button>
       </div>
@@ -251,7 +277,7 @@ function MultiPanel({ song, sel }: { song: Song; sel: Pos[] }) {
       <div className="row">
         <button className="btn small" onClick={() => step(1)}>Pitch ▲</button>
         <button className="btn small" onClick={() => step(-1)}>Pitch ▼</button>
-        <button className="btn small danger" onClick={() => apply(removeItems(song, sel), { selection: [] })}>Delete</button>
+        <button className="btn small danger" onClick={() => apply(removeChains(song, sel), { selection: [] })}>Delete</button>
       </div>
     </section>
   );

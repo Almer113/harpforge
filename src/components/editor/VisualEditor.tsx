@@ -11,14 +11,17 @@ import * as engine from '../../audio/engine';
 import {
   advance,
   allPositions,
+  chainAt,
+  chainLength,
   EPS,
   fromDoc,
   insertMeasure,
   measureLength,
   moveItem,
   placeItem,
-  removeItems,
+  removeChains,
   samePos,
+  setTie,
   snapTo,
   updateItem,
   type Item,
@@ -188,6 +191,11 @@ export function VisualEditor() {
           e.preventDefault();
           setDuration(v.dur, false, !v.triplet);
           return;
+        case 'l':
+        case 'L':
+          e.preventDefault();
+          toggleTie();
+          return;
         case '/': {
           e.preventDefault();
           insertRest();
@@ -197,7 +205,7 @@ export function VisualEditor() {
         case 'Backspace':
           if (!sel.length) return;
           e.preventDefault();
-          apply(removeItems(s, sel), { selection: [], caret: sel[0] });
+          apply(removeChains(s, sel), { selection: [], caret: sel[0] });
           return;
         case 'Escape':
           setVe({ selection: [] });
@@ -283,12 +291,31 @@ function setDuration(base: number, dotted: boolean, triplet: boolean) {
   commitSong(s);
 }
 
+/** Ties the selected note to the one before it (or unties it). */
+function toggleTie() {
+  const st = useApp.getState();
+  const sel = st.ve.selection;
+  if (sel.length !== 1) {
+    st.notify('Select the note that should continue the previous one, then press Tie (L).');
+    return;
+  }
+  const s = fromDoc(getParsed(st.text).doc);
+  const it = s.measures[sel[0].m]?.items.find((x) => Math.abs(x.start - sel[0].start) < EPS);
+  if (!it) return;
+  const next = setTie(s, sel[0], !it.tied);
+  if (next === s) {
+    st.notify('There’s no note right before this one to tie to.');
+    return;
+  }
+  apply(next);
+}
+
 function insertRest() {
   const st = useApp.getState();
   const v = st.ve;
   const s = fromDoc(getParsed(st.text).doc);
   const dur = toolDuration(v);
-  const cleared = removeItems(placeItem(s, v.caret.m, { start: v.caret.start, dur, sounds: [] }), [v.caret]);
+  const cleared = removeChains(placeItem(s, v.caret.m, { start: v.caret.start, dur, sounds: [] }), [v.caret]);
   apply(cleared, { caret: advance(cleared, v.caret, dur), selection: [] });
 }
 
@@ -311,11 +338,12 @@ function Toolbar({ song }: { song: Song }) {
   const canUndo = useApp((s) => s.history.past.length > 0);
   const canRedo = useApp((s) => s.history.future.length > 0);
   const sel = ve.selection;
+  const selTied = sel.length === 1 && !!song.measures[sel[0].m]?.items.find((x) => Math.abs(x.start - sel[0].start) < EPS)?.tied;
   // When notes are selected, the palette shows (and sets) their duration.
   const shown = useMemo(() => {
     if (sel.length) {
       const it = song.measures[sel[0].m]?.items.find((x) => Math.abs(x.start - sel[0].start) < EPS);
-      if (it) return describeDuration(it.dur);
+      if (it) return describeDuration(chainLength(song, chainAt(song, sel[0])));
     }
     return { base: ve.dur, dotted: ve.dotted, triplet: ve.triplet };
   }, [sel, song, ve.dur, ve.dotted, ve.triplet]);
@@ -347,8 +375,11 @@ function Toolbar({ song }: { song: Song }) {
       <div className="tb-group">
         <button className="btn small" onClick={addNoteAtCaret} title="Add a note at the caret (double-click an empty slot also works)">+ Note</button>
         <button className="btn small ghost" onClick={insertRest} title="Insert a rest at the caret (/)">Rest</button>
-        <button className="btn small ghost" disabled={!sel.length} onClick={() => apply(removeItems(fromDoc(getParsed(useApp.getState().text).doc), sel), { selection: [] })} title="Delete selected notes (Del)">
+        <button className="btn small ghost" disabled={!sel.length} onClick={() => apply(removeChains(fromDoc(getParsed(useApp.getState().text).doc), sel), { selection: [] })} title="Delete selected notes (Del)">
           Delete
+        </button>
+        <button className={`btn small ghost tie-btn ${selTied ? 'on' : ''}`} disabled={sel.length !== 1} onClick={toggleTie} title="Tie: the selected note continues the note before it, across bar lines too (L)">
+          <span className="tie-arc-icon">⁀</span> Tie
         </button>
       </div>
       <div className="tb-group">
@@ -411,8 +442,9 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
       d.moved = true;
       const snap = useApp.getState().ve.snap;
       if (d.mode === 'resize') {
+        // Past the bar line the note carries on into the next measure as a tie.
         const dur = Math.max(snap, snapTo(d.item.dur + (e.clientX - d.x0) / zoom, snap));
-        setResizeDur({ pos: d.pos, dur: Math.min(dur, song.cap - d.pos.start) });
+        setResizeDur({ pos: d.pos, dur: Math.min(dur, song.cap * 4) });
         return;
       }
       const lane = laneAt(e.clientX, e.clientY);
@@ -431,7 +463,12 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
       const s = fromDoc(getParsed(useApp.getState().text).doc);
       if (d.mode === 'resize') {
         setResizeDur((rd) => {
-          if (rd && d.moved && Math.abs(rd.dur - d.item.dur) > EPS) apply(updateItem(s, d.pos, { dur: rd.dur }));
+          if (rd && d.moved && Math.abs(rd.dur - d.item.dur) > EPS) {
+            // The dragged piece changes length; the whole (tied) note follows.
+            const chain = chainAt(s, d.pos);
+            const total = chainLength(s, chain) - d.item.dur + rd.dur;
+            apply(updateItem(s, d.pos, { dur: total }));
+          }
           return null;
         });
         return;
@@ -466,7 +503,7 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
     } else if (!sel.some((p) => samePos(p, pos)) || sel.length > 1) {
       setVe({ selection: [pos], measure: pos.m, caret: advance(song, pos, item.dur) });
     }
-    if (item.sounds.length && !resize) playSounds(item.sounds, item.dur);
+    if (item.sounds.length && !resize) playSounds(item.sounds, chainLength(song, chainAt(song, pos)));
   };
 
   const onLaneDown = (e: React.PointerEvent, m: number) => {
@@ -526,11 +563,12 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
                   return (
                     <div
                       key={it.start}
-                      className={`ve-item ${breath} ${selected ? 'selected' : ''} ${playing ? 'playing' : ''} ${dragging ? 'dragging' : ''} ${it.dur <= EPS ? 'marker' : ''} ${midis.some((x) => x === null) ? 'bad' : ''}`}
+                      className={`ve-item ${breath} ${it.tied ? 'tied' : ''} ${selected ? 'selected' : ''} ${playing ? 'playing' : ''} ${dragging ? 'dragging' : ''} ${it.dur <= EPS ? 'marker' : ''} ${midis.some((x) => x === null) ? 'bad' : ''}`}
                       style={{ left: it.start * zoom, width: Math.max(it.dur * zoom, 22) - 3 }}
                       onPointerDown={(e) => onItemDown(e, pos, it)}
                       title={midis.map((x) => (x === null ? 'not playable' : midiToName(x, flats))).join(' + ')}
                     >
+                      {it.tied && <span className="ve-tie" aria-label="tied from the previous note" />}
                       <span className="ve-chord">{it.chord ?? ''}</span>
                       <span className={`ve-glyphs ${it.sounds.length > 1 ? 'stack' : ''}`}>
                         {it.sounds.length ? it.sounds.map((s, k) => <Glyph key={k} sound={s} flats={flats} />) : <span className="rest-glyph">𝄽</span>}
@@ -559,7 +597,7 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
       {ve.caret.m >= song.measures.length && <p className="muted small">The caret is after the last measure — adding a note there creates a new measure.</p>}
       <div className="ve-legend muted small">
         Click a slot to place the caret · double-click to add a note · drag notes to move them (Alt = copy) · drag a note's right edge to change its length ·
-        ←/→ select · ↑/↓ next note (Shift: by semitone, incl. bends) · Z X C V B lengths · N dotted · M triplet · / rest · Del delete · Ctrl+C/V copy/paste
+        ←/→ select · ↑/↓ next note (Shift: by semitone, incl. bends) · Z X C V B lengths · N dotted · M triplet · L tie · / rest · Del delete · Ctrl+C/V copy/paste
       </div>
     </div>
   );

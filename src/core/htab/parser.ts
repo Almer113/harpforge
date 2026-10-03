@@ -268,7 +268,9 @@ function parseRange(ctx: Ctx, from: number, to: number, inGroup: boolean): TabEv
     if (core === '.' || core === 'r' || core === 'R') {
       events.push({ kind: 'rest', beats: 1 + tildes, chord: takeChord(), src });
     } else if (core === '') {
-      issue(ctx, '"~" must follow a note or rest', i, j);
+      // A bare "~": a tie — the previous note keeps sounding (one beat per "~").
+      // Its sounds are filled in after the whole tab is read (it may cross lines).
+      events.push({ kind: 'note', sounds: [], beats: tildes, tied: true, chord: takeChord(), src });
     } else {
       const r = parseSound(core);
       if (typeof r === 'string') issue(ctx, r, i, j);
@@ -295,10 +297,34 @@ function attachLyrics(line: TabLine, text: string) {
   const syllables = splitLyrics(text);
   let k = 0;
   for (const ev of line.events) {
-    if (ev.kind !== 'note') continue;
+    if (ev.kind !== 'note' || ev.tied) continue; // tied notes aren't sung again
     if (k >= syllables.length) break;
     const syl = syllables[k++];
     if (syl !== '*' && syl !== '_') ev.lyric = syl;
+  }
+}
+
+/**
+ * Gives each tie ("~") the sounds of the note it continues. A tie after a rest just
+ * lengthens the rest; a tie with nothing before it is an error.
+ */
+function resolveTies(lines: TabLine[], issues: ParseIssue[]) {
+  let last: NoteEvent | RestEvent | null = null;
+  for (const line of lines) {
+    line.events.forEach((ev, k) => {
+      if (ev.kind === 'bar' || ev.beats <= 0) return;
+      if (ev.kind === 'note' && ev.tied) {
+        if (last && last.kind === 'note') ev.sounds = last.sounds;
+        else {
+          if (!last) issues.push({ message: 'A tie "~" needs a note before it', span: ev.src ?? { start: 0, end: 1 }, severity: 'error' });
+          const rest: RestEvent = { kind: 'rest', beats: ev.beats, chord: ev.chord, src: ev.src };
+          line.events[k] = rest;
+          last = rest;
+          return;
+        }
+      }
+      last = ev as NoteEvent | RestEvent;
+    });
   }
 }
 
@@ -345,5 +371,6 @@ export function parseHtab(text: string): ParseResult {
   }
   if (pendingSection !== undefined) lines.push({ section: pendingSection, events: [] });
 
+  resolveTies(lines, issues);
   return { doc: { meta, lines }, issues };
 }

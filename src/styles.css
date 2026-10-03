@@ -657,3 +657,22 @@ select:focus, .search:focus { border-color: var(--brass); }
   .ve-main { grid-template-columns: 1fr; }
   .ve-inspector { position: static; display: grid; grid-template-columns: 1fr 1fr; }
 }
+
+/* ---------- Ties ---------- */
+/* A tie arc from the previous card into this one; the tied glyph is quieter. */
+.card.tied { position: relative; }
+.card.tied::before {
+  content: ''; position: absolute; left: -16px; top: 22px; width: 30px; height: 12px;
+  border: 2px solid var(--muted); border-color: var(--muted) transparent transparent transparent; border-radius: 50%;
+}
+.card.tied .glyph, .ve-item.tied .glyph { opacity: 0.45; }
+.ve-tie {
+  position: absolute; left: -14px; top: 14px; width: 28px; height: 12px; pointer-events: none; z-index: 3;
+  border: 2px solid var(--brass-2); border-color: var(--brass-2) transparent transparent transparent; border-radius: 50%;
+}
+.ve-measure .ve-lane { overflow: visible; }
+.ve-item.tied { border-left-style: dashed; }
+.tie-btn.on { color: var(--brass-2); border-color: rgba(227, 169, 72, 0.55); background: rgba(227, 169, 72, 0.12); }
+.tie-arc-icon { font-size: 16px; line-height: 1; }
+.ve-item { overflow: visible; }
+.ve-item > .ve-glyphs, .ve-item > .ve-lyric, .ve-item > .ve-chord, .ve-item > .ve-name { overflow: hidden; max-width: 100%; }

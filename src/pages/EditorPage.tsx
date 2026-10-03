@@ -113,6 +113,7 @@ function SyntaxHelp() {
     ['4~  4~~', 'hold for 2 / 3 beats'],
     ['{4 5}  {4~ 5}', 'split one beat: 2 eighths / dotted rhythm'],
     ['.', 'rest (one beat)'],
+    ['6~ | ~~ 5', 'tie: a lone ~ continues the previous note (across bars too)'],
     ['|  ||  |]  |:  :|', 'bar lines'],
     ['[G7]', 'chord symbol above the next note'],
     ['w: Twin-kle twin-kle', 'lyrics for the line above (one syllable per note)'],

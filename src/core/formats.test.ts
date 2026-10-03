@@ -84,7 +84,7 @@ w: one two three four five six se-ven
       'G4:1', 'A4:1', 'B4:1',
       'F#4:1', 'F4:1', 'F4:1', // natural lasts until the bar
       'C5:0.75', 'B4:0.25', 'A4:0.25', 'G4:0.25', 'A4:0.333', 'B4:0.333', 'C5:0.333',
-      'D5:4', // tie across the bar is merged
+      'D5:3', 'D5:1', // a tie across the bar line stays a tie
       'r:2',
     ]);
     const notes = doc.lines[0].events.filter((e) => e.kind === 'note') as NoteEvent[];
@@ -193,8 +193,11 @@ describe('MusicXML', () => {
     const back = parseMusicXml(xml).doc;
     expect(back.meta.time).toBe('3/4');
     expect(back.meta.key).toBe('F');
-    expect(flat(back)).toEqual(['C5:1', 'D5:3', 'E5:1', 'G5:0.5', 'A5:0.5', 'G5:4']);
-    const notes = back.lines.flatMap((l) => l.events).filter((e) => e.kind === 'note') as NoteEvent[];
+    // Notes crossing a 3/4 bar line come back as ties.
+    expect(flat(back)).toEqual(['C5:1', 'D5:2', 'D5:1', 'E5:1', 'G5:0.5', 'A5:0.5', 'G5:3', 'G5:1']);
+    const tiedFlags = back.lines.flatMap((l) => l.events).filter((e) => e.kind === 'note').map((e) => !!(e as NoteEvent).tied);
+    expect(tiedFlags).toEqual([false, false, true, false, false, false, false, true]);
+    const notes = back.lines.flatMap((l) => l.events).filter((e) => e.kind === 'note' && !e.tied) as NoteEvent[];
     expect(notes[0].chord).toBe('F');
     expect(notes.map((n) => n.lyric)).toEqual(['a', 'b-', 'c', 'd', 'e', 'f']);
   });

@@ -8,6 +8,7 @@
 //   1' 2'' 5, 6,,    octave up / down (also the combining dots 1̇ and 1̣)
 //   #4 b7            sharps / flats
 //   5_ 3_  6__       underline: eighth, sixteenth
+//   5 - | - 3        a dash after a bar line ties the note across it ("~" also ties)
 //   5. 3_            dotted
 //   {5 6 5}          a beat split evenly (triplets etc.), as in .htab
 //   [G7] w: @ |      chord symbols, lyrics, sections, bars — as in .htab
@@ -87,6 +88,7 @@ export function parseJianpu(text: string): Imported {
   let pendingSection: string | undefined;
   let lastLine: TabLine | undefined;
   let inHeader = false;
+  const tieCtx: TieContext = { last: null };
 
   for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
     let line = raw.replace(/\s+$/, '');
@@ -138,7 +140,7 @@ export function parseJianpu(text: string): Imported {
         const syl = splitLyrics(trimmed.slice(2));
         let k = 0;
         for (const ev of lastLine.events) {
-          if (ev.kind !== 'note' || k >= syl.length) continue;
+          if (ev.kind !== 'note' || ev.tied || k >= syl.length) continue;
           const s = syl[k++];
           if (s !== '*' && s !== '_') ev.lyric = s;
         }
@@ -146,7 +148,7 @@ export function parseJianpu(text: string): Imported {
       continue;
     }
 
-    const events = parseLine(line, doPc, warnings);
+    const events = parseLine(line, doPc, warnings, tieCtx);
     if (!events.length) continue;
     const tl: TabLine = { events };
     if (pendingSection !== undefined) {
@@ -160,7 +162,12 @@ export function parseJianpu(text: string): Imported {
   return { doc: { meta, lines }, warnings: [...new Set(warnings)], format: 'Numbered notation' };
 }
 
-function parseLine(s: string, doPc: number, warnings: string[]): TabEvent[] {
+/** The last note or rest read, across bars and lines, so dashes and "~" can tie to it. */
+interface TieContext {
+  last: NoteEvent | RestEvent | null;
+}
+
+function parseLine(s: string, doPc: number, warnings: string[], ctx: TieContext): TabEvent[] {
   const events: TabEvent[] = [];
   let pendingChord: string | undefined;
   let group: (NoteEvent | RestEvent)[] | null = null;
@@ -213,12 +220,39 @@ function parseLine(s: string, doPc: number, warnings: string[]): TabEvent[] {
     if (c === '-' || c === '–' || c === '—') {
       const prev = group ? group[group.length - 1] : last();
       if (prev) prev.beats += 1;
+      else if (ctx.last) {
+        // A dash after a bar line: the note is tied across it.
+        const tie: NoteEvent | RestEvent =
+          ctx.last.kind === 'note' ? { kind: 'note', sounds: ctx.last.sounds, beats: 1, tied: true } : { kind: 'rest', beats: 1 };
+        events.push(tie);
+        ctx.last = tie;
+      }
       i++;
       continue;
     }
-    const m = new RegExp(`^([#b♯♭]*)([0-7])([',${DOT_ABOVE}${DOT_BELOW}’]*)([_.~]*)`).exec(s.slice(i));
+    const m = new RegExp(`^([#b♯♭]*)([0-7~])([',${DOT_ABOVE}${DOT_BELOW}’]*)([_.~]*)`).exec(s.slice(i));
     if (m) {
       i += m[0].length;
+      if (m[2] === '~') {
+        // "~": a tie (keeps the previous note sounding), with the usual length marks.
+        let beats = 1;
+        for (const ch of m[4]) {
+          if (ch === '_') beats /= 2;
+          else if (ch === '~') beats += 1;
+        }
+        if (m[4].includes('.')) beats *= 1.5;
+        const prevNote = ctx.last;
+        const tie: NoteEvent | RestEvent =
+          prevNote && prevNote.kind === 'note' ? { kind: 'note', sounds: prevNote.sounds, beats, tied: true } : { kind: 'rest', beats };
+        if (pendingChord) {
+          tie.chord = pendingChord;
+          pendingChord = undefined;
+        }
+        if (group) group.push(tie);
+        else events.push(tie);
+        ctx.last = tie;
+        continue;
+      }
       const digit = parseInt(m[2], 10);
       let beats = 1;
       for (const ch of m[4]) {
@@ -252,6 +286,7 @@ function parseLine(s: string, doPc: number, warnings: string[]): TabEvent[] {
       }
       if (group) group.push(ev);
       else events.push(ev);
+      ctx.last = ev;
       continue;
     }
     warnings.push(`Skipped "${c}" in numbered notation`);
@@ -290,6 +325,13 @@ export function writeJianpu(doc: TabDoc, harp?: Harmonica): string {
     const tokenFor = (e: NoteEvent | RestEvent, scaleBeats: number | null): string => {
       const chord = e.chord ? `[${e.chord}]` : '';
       const midis = e.kind === 'note' ? eventMidis(e, harp) : [];
+      if (e.kind === 'note' && e.tied) {
+        // A tie: dashes for whole beats (the usual way), "~" otherwise.
+        if (scaleBeats === null && Math.abs(e.beats - Math.round(e.beats)) < 1e-6 && e.beats >= 1) return chord + Array(Math.round(e.beats)).fill('-').join(' ');
+        if (scaleBeats !== null) return chord + '~' + '~'.repeat(Math.max(0, Math.round(scaleBeats) - 1));
+        const sp = durationSpelling(e.beats);
+        return chord + '~' + (sp ? sp.suffix : '');
+      }
       const core = midis.length ? degreeText(midiToDegree(midis[midis.length - 1], doPc)) : '0';
       if (e.kind === 'note') lyrics.push(e.lyric ? e.lyric.trim().replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-') : '*');
       if (scaleBeats !== null) return chord + core + '~'.repeat(Math.max(0, Math.round(scaleBeats) - 1));

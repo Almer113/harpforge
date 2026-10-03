@@ -14,6 +14,11 @@ export interface NoteEvent {
   /** Chord symbol shown above, e.g. "G7". */
   chord?: string;
   lyric?: string;
+  /**
+   * Tied from the previous note: it keeps sounding instead of being played again
+   * (written as a bare "~", e.g. "6~ | ~~ 5"). Its sounds are the previous note's.
+   */
+  tied?: boolean;
   src?: Span;
 }
 

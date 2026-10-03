@@ -149,7 +149,7 @@ export function notesToTab(doc: TabDoc, harp: Harmonica, opts: NotesToTabOptions
   const slots: Slot[] = [];
   doc.lines.forEach((l, li) =>
     l.events.forEach((e, ei) => {
-      if (e.kind !== 'note') return;
+      if (e.kind !== 'note' || e.tied) return;
       const raw = eventPitches(e, opts.sourceHarp).filter((m): m is number => m !== null).map((m) => m + shift);
       const pitches = [...new Set(raw)].sort((a, b) => a - b);
       let cands: Candidate[] = [];
@@ -205,12 +205,26 @@ export function notesToTab(doc: TabDoc, harp: Harmonica, opts: NotesToTabOptions
   // 3. Rebuild the document.
   const lookup = new Map<string, Slot>();
   for (const s of slots) lookup.set(`${s.line}:${s.index}`, s);
+  let previous: TabEvent | null = null;
   const out: TabDoc = {
     meta: cloneMeta(doc.meta),
     lines: doc.lines.map((l, li) => ({
       ...l,
       events: l.events.map((e, ei): TabEvent => {
+        const result = convertOne(e, li, ei);
+        if (result.kind !== 'bar' && result.beats > 0) previous = result;
+        return result;
+      }),
+    })),
+  };
+
+  function convertOne(e: TabEvent, li: number, ei: number): TabEvent {
         if (e.kind !== 'note') return { ...e };
+        if (e.tied) {
+          // A tie keeps whatever the note it continues became.
+          const prev = previous as TabEvent | null;
+          return prev && prev.kind === 'note' ? { ...e, sounds: prev.sounds } : restFor(e);
+        }
         const slot = lookup.get(`${li}:${ei}`)!;
         const c = chosen.get(slot);
         if (!c) {
@@ -232,9 +246,7 @@ export function notesToTab(doc: TabDoc, harp: Harmonica, opts: NotesToTabOptions
           warnings.push(`Chord ${slot.pitches.map((p) => midiToName(p)).join('+')} reduced to a single note`);
         }
         return { ...e, sounds: c.sounds };
-      }),
-    })),
-  };
+  }
   out.meta.harmonica = harp.spec.family;
   out.meta.tuning = harp.spec.tuning;
   out.meta.harpKey = harp.spec.key;

@@ -106,18 +106,21 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
       t.schedule((time) => {
         const dur = Tone.Time(beatTicks(ev.beats)).toSeconds();
         const gap = Math.min(0.06, dur * 0.12);
-        ev.midis.forEach((m, k) => {
+        // The note sounds through its ties; ties themselves only move the highlight.
+        const soundDur = Tone.Time(beatTicks(ev.soundBeats)).toSeconds();
+        const soundGap = Math.min(0.06, soundDur * 0.12);
+        if (!ev.tied) ev.midis.forEach((m, k) => {
           if (m === null) return;
           const s = ev.sounds[k];
           const glide = s.type === 'hole' && s.bend > 0 ? m + s.bend : undefined;
           const v = createVoice(ev.midis.length > 1 ? 0.7 : 1);
           scheduledVoices.add(v);
           v.start(m, time, glide);
-          v.stop(time + dur - gap);
-          setTimeout(() => scheduledVoices.delete(v), (dur + 1) * 1000);
+          v.stop(time + soundDur - soundGap);
+          setTimeout(() => scheduledVoices.delete(v), (soundDur + 1) * 1000);
         });
         Tone.getDraw().schedule(() => opts.onEvent?.(ev.index, true), time);
-        Tone.getDraw().schedule(() => opts.onEvent?.(ev.index, false), time + dur - gap);
+        Tone.getDraw().schedule(() => opts.onEvent?.(ev.index, false), time + dur - (ev.soundBeats > ev.beats ? 0 : gap));
       }, beatTicks(at));
     }
     const end = score.totalBeats + offset;

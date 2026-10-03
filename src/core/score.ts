@@ -20,6 +20,10 @@ export interface ScoreEvent {
   rest: boolean;
   chord?: string;
   lyric?: string;
+  /** Continues the previous note (a tie): shown, but not played again. */
+  tied: boolean;
+  /** How long the note sounds, including the tied notes that follow it. */
+  soundBeats: number;
 }
 
 export interface Score {
@@ -57,7 +61,7 @@ export function buildScore(doc: TabDoc, harp: Harmonica): { score: Score; issues
         return;
       }
       if (e.kind === 'rest') {
-        if (e.beats > 0) events.push({ index: events.length, line: li, eventIndex: ei, start: t, beats: e.beats, sounds: [], midis: [], rest: true, chord: e.chord });
+        if (e.beats > 0) events.push({ index: events.length, line: li, eventIndex: ei, start: t, beats: e.beats, sounds: [], midis: [], rest: true, chord: e.chord, tied: false, soundBeats: e.beats });
         t += e.beats;
         return;
       }
@@ -69,7 +73,19 @@ export function buildScore(doc: TabDoc, harp: Harmonica): { score: Score; issues
           issues.push({ message: `${harp.name} ${why}`, span: e.src, severity: 'warning' });
         }
       });
-      events.push({ index: events.length, line: li, eventIndex: ei, start: t, beats: e.beats, sounds: e.sounds, midis, rest: false, chord: e.chord, lyric: e.lyric });
+      const tied = !!e.tied;
+      events.push({ index: events.length, line: li, eventIndex: ei, start: t, beats: e.beats, sounds: e.sounds, midis, rest: false, chord: e.chord, lyric: e.lyric, tied, soundBeats: e.beats });
+      // A tie lengthens the sounding part of the note that started the chain.
+      if (tied) {
+        for (let k = events.length - 2; k >= 0; k--) {
+          const head = events[k];
+          if (head.rest) break;
+          if (!head.tied) {
+            head.soundBeats += e.beats;
+            break;
+          }
+        }
+      }
       t += e.beats;
     });
   });

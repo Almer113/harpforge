@@ -51,11 +51,29 @@ Aliases accepted on import: `instrument` = `harmonica`, `bpm` = `tempo`, `meter`
 | `{a b c}` | split one beat between the items, weighted by their `~` (`{4~ 5}` = ⅔ + ⅓) |
 | `{a b}~` | the group lasts 2 beats instead of 1 |
 | `.` | rest (one beat, `.~` = two) |
+| `~` (on its own) | **tie**: the previous note keeps sounding for one beat per `~`, e.g. `6~ \| ~~ 5` |
 | `\|` `\|\|` `\|]` `\|:` `:\|` | bar lines: single, double, final, repeat start/end |
 | `[G7]` | chord symbol shown above the next note or rest |
 | `w: Twin-kle twin-kle` | lyrics for the tab line above: one syllable per note; `_` or `*` skips a note; `~` joins words (`Hello~my` is one syllable) |
 | `@ Chorus` | section heading |
 | `# text` | comment (at line start or after whitespace) |
+
+### Ties
+
+A `~` right after a note holds it (`6~~` = 3 beats). A `~` **on its own** is a tie:
+the note before it keeps sounding — across bar lines and line breaks too:
+
+```
+6~ | ~~ 5 6 |          6 is held for 4 beats, over the bar line
+-(1 2 3)~~~ | ~ .~ |   a chord tied over the bar
+{-4 ~} 5 …             ties work inside beat groups
+```
+
+A tie takes its sound from the note it continues, plays as one unbroken note,
+gets no lyric syllable, and is skipped in practice mode. A tie after a rest just
+lengthens the rest. Imports and exports keep ties: ABC (`-`), MusicXML (`<tie>`),
+MIDI (one long note, split at bar lines on import) and numbered notation
+(a dash after the bar line: `5 - | - 3`).
 
 Rhythm is optional: with no `~` or `{}`, every note is one beat, so tabs copied
 from the internet play back evenly. A beat is a quarter note; `tempo` counts

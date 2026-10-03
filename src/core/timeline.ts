@@ -64,9 +64,17 @@ export function clustersToEvents(clusters: TimedCluster[], bpb: number, startAtZ
       }
       continue;
     }
-    events.push({ kind: 'note', sounds: item.sounds, beats: remaining });
-    t += remaining;
-    barIfDue();
+    // Split at bar lines: the part after each bar is a tie.
+    let first = true;
+    while (remaining > 1e-6) {
+      const room = nextBar - t;
+      const chunk = room > 1e-6 ? Math.min(remaining, room) : remaining;
+      events.push(first ? { kind: 'note', sounds: item.sounds, beats: chunk } : { kind: 'note', sounds: item.sounds, beats: chunk, tied: true });
+      first = false;
+      t += chunk;
+      remaining -= chunk;
+      barIfDue();
+    }
   }
   return events;
 }

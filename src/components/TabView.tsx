@@ -95,14 +95,16 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, on
                       <button
                         key={ei}
                         data-index={idx}
-                        className={`card ${breath} ${active ? 'active' : ''} ${selected ? 'selected' : ''} ${bad ? 'bad' : ''} ${ev.beats < 1 ? 'short' : ''}`}
+                        className={`card ${breath} ${ev.kind === 'note' && ev.tied ? 'tied' : ''} ${active ? 'active' : ''} ${selected ? 'selected' : ''} ${bad ? 'bad' : ''} ${ev.beats < 1 ? 'short' : ''}`}
                         style={{ minWidth: width }}
                         onClick={() => idx !== undefined && onCardClick?.(idx, ev)}
                         title={sev && !sev.rest ? sev.midis.map((x) => (x === null ? 'not playable' : midiToName(x, flats))).join(' + ') : 'rest'}
                       >
                         <span className="card-chord">{ev.chord ?? ''}</span>
                         <span className="card-body">
-                          {numbers ? (
+                          {numbers && ev.kind === 'note' && ev.tied ? (
+                            <TieDashes beats={ev.beats} />
+                          ) : numbers ? (
                             <NumberGlyphs midis={ev.kind === 'rest' ? [] : (sev?.midis ?? []).filter((m): m is number => m !== null)} beats={ev.beats} doPc={doPc} />
                           ) : ev.kind === 'rest' ? (
                             <span className="rest-glyph">𝄽</span>
@@ -183,6 +185,18 @@ function NumberGlyphs({ midis, beats, doPc }: { midis: number[]; beats: number; 
       </span>
       {dotted && <span className="jp-aug">·</span>}
       {Array.from({ length: dashes }, (_, k) => (
+        <span key={k} className="jp-dash">–</span>
+      ))}
+    </span>
+  );
+}
+
+/** Numbered notation shows a tie as dashes: the note keeps sounding. */
+function TieDashes({ beats }: { beats: number }) {
+  const n = Math.max(1, Math.round(beats));
+  return (
+    <span className="jp">
+      {Array.from({ length: n }, (_, k) => (
         <span key={k} className="jp-dash">–</span>
       ))}
     </span>
