@@ -1,0 +1,98 @@
+{
+  "name": "Hohner Special 20 (C)",
+  "source": "Versilian Community Sample Library (VCSL) \u2014 https://github.com/sgossner/VCSL",
+  "license": "CC0 1.0 Universal (public domain)",
+  "sampleRate": 22050,
+  "notes": [
+    {
+      "note": "C4",
+      "midi": 60,
+      "tuneCents": 1.8,
+      "file": "C4.wav",
+      "loopStart": 0.9,
+      "loopEnd": 2.04984,
+      "loopMatch": 0.949,
+      "duration": 2.3
+    },
+    {
+      "note": "E4",
+      "midi": 64,
+      "tuneCents": 0.5,
+      "file": "E4.wav",
+      "loopStart": 0.9,
+      "loopEnd": 2.04639,
+      "loopMatch": 0.981,
+      "duration": 2.296
+    },
+    {
+      "note": "C5",
+      "midi": 72,
+      "tuneCents": 0.9,
+      "file": "C5.wav",
+      "loopStart": 0.9,
+      "loopEnd": 2.0907,
+      "loopMatch": 0.977,
+      "duration": 2.341
+    },
+    {
+      "note": "E5",
+      "midi": 76,
+      "tuneCents": -0.9,
+      "file": "E5.wav",
+      "loopStart": 0.9,
+      "loopEnd": 2.31896,
+      "loopMatch": 0.972,
+      "duration": 2.569
+    },
+    {
+      "note": "G5",
+      "midi": 79,
+      "tuneCents": 0.7,
+      "file": "G5.wav",
+      "loopStart": 0.9,
+      "loopEnd": 2.44327,
+      "loopMatch": 0.987,
+      "duration": 2.693
+    },
+    {
+      "note": "C6",
+      "midi": 84,
+      "tuneCents": 0.3,
+      "file": "C6.wav",
+      "loopStart": 0.9,
+      "loopEnd": 2.01841,
+      "loopMatch": 0.992,
+      "duration": 2.268
+    },
+    {
+      "note": "E6",
+      "midi": 88,
+      "tuneCents": -2.3,
+      "file": "E6.wav",
+      "loopStart": 0.9,
+      "loopEnd": 2.0005,
+      "loopMatch": 0.994,
+      "duration": 2.25
+    },
+    {
+      "note": "G6",
+      "midi": 91,
+      "tuneCents": 3.7,
+      "file": "G6.wav",
+      "loopStart": 0.9,
+      "loopEnd": 2.71469,
+      "loopMatch": 0.996,
+      "duration": 2.965
+    },
+    {
+      "note": "C7",
+      "midi": 96,
+      "tuneCents": 1.8,
+      "file": "C7.wav",
+      "loopStart": 0.9,
+      "loopEnd": 2.37932,
+      "loopMatch": 0.997,
+      "duration": 2.629
+    }
+  ]
+}

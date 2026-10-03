@@ -1,117 +1,12 @@
-// Audio engine: a synthesized free-reed voice (rich harmonics + breath noise),
-// live note on/off with smooth pitch bends, and transport-synced playback.
-//
-// Voices are created per note so each can bend independently. The voice design is
-// isolated in `Voice` so it can later be swapped for a sample-based one.
+// Audio engine: live note on/off with smooth pitch bends, and transport-synced
+// playback. Voices (recorded samples or the synthesized reed) live in voices.ts and
+// are created per note so each can bend independently.
 
 import * as Tone from 'tone';
-import { midiToFreq } from '../core/pitch';
 import type { Score } from '../core/score';
+import { createVoice, outputs, type Voice } from './voices';
 
-// Harmonic spectrum of a brass reed: strong low partials, both odd and even.
-const PARTIALS = [1, 0.85, 0.62, 0.5, 0.4, 0.3, 0.24, 0.17, 0.12, 0.09, 0.06, 0.045, 0.03];
-const RELEASE = 0.09;
-
-let master: Tone.Gain | null = null;
-
-function getMaster(): Tone.Gain {
-  if (master) return master;
-  const limiter = new Tone.Limiter(-2).toDestination();
-  const reverb = new Tone.Reverb({ decay: 1.4, wet: 0.16 }).connect(limiter);
-  const vibrato = new Tone.Vibrato({ frequency: 5.4, depth: 0.035 }).connect(reverb);
-  const body = new Tone.Filter({ type: 'peaking', frequency: 1300, Q: 0.9, gain: 3 }).connect(vibrato);
-  master = new Tone.Gain(0.32).connect(body);
-  return master;
-}
-
-export type Voicing = 'single' | 'tremolo' | 'octave';
-
-interface Layer {
-  cents: number;
-  level: number;
-}
-
-// Reeds sounding per note. Tremolo reeds are tuned slightly apart so they beat;
-// octave harmonicas add a reed an octave below the written note.
-const VOICINGS: Record<Voicing, Layer[]> = {
-  single: [{ cents: 0, level: 1 }],
-  tremolo: [
-    { cents: -9, level: 0.72 },
-    { cents: 9, level: 0.72 },
-  ],
-  octave: [
-    { cents: 0, level: 0.85 },
-    { cents: -1200, level: 0.6 },
-  ],
-};
-
-let voicing: Voicing = 'single';
-
-export function setVoicing(v: Voicing) {
-  voicing = v;
-}
-
-const freqOf = (midi: number, cents: number) => midiToFreq(midi + cents / 100);
-
-class Voice {
-  private oscs: Tone.Oscillator[];
-  private layers: Layer[];
-  private noise: Tone.Noise;
-  private filter: Tone.Filter;
-  private noiseFilter: Tone.Filter;
-  private env: Tone.AmplitudeEnvelope;
-  private disposed = false;
-
-  constructor(level = 1) {
-    this.layers = VOICINGS[voicing];
-    this.env = new Tone.AmplitudeEnvelope({ attack: 0.028, decay: 0.15, sustain: 0.82, release: RELEASE }).connect(getMaster());
-    this.filter = new Tone.Filter({ type: 'lowpass', frequency: 3000, Q: 0.6 }).connect(this.env);
-    this.oscs = this.layers.map(
-      (l) => new Tone.Oscillator({ type: 'custom', partials: PARTIALS, volume: -6 + 20 * Math.log10(level * l.level) }).connect(this.filter),
-    );
-    this.noiseFilter = new Tone.Filter({ type: 'bandpass', frequency: 1500, Q: 1.2 }).connect(this.env);
-    this.noise = new Tone.Noise({ type: 'pink', volume: -32 }).connect(this.noiseFilter);
-  }
-
-  start(midi: number, time: number, glideFrom?: number) {
-    const glide = glideFrom !== undefined ? 0.09 : 0.035;
-    this.oscs.forEach((osc, i) => {
-      const { cents } = this.layers[i];
-      const f = freqOf(midi, cents);
-      // Start from the unbent pitch for bends, or a tiny scoop into the note.
-      const from = glideFrom !== undefined ? freqOf(glideFrom, cents) : f * 0.992;
-      osc.frequency.setValueAtTime(from, time);
-      osc.frequency.exponentialRampToValueAtTime(f, time + glide);
-      osc.start(time);
-    });
-    const f = midiToFreq(midi);
-    const cutoff = Math.min(6500, f * 7);
-    this.filter.frequency.setValueAtTime(cutoff * 0.45, time);
-    this.filter.frequency.exponentialRampToValueAtTime(cutoff, time + 0.07);
-    this.noiseFilter.frequency.setValueAtTime(Math.min(5000, f * 2), time);
-    this.noise.start(time);
-    this.env.triggerAttack(time);
-  }
-
-  setPitch(midi: number, ramp = 0.035) {
-    if (this.disposed) return;
-    this.oscs.forEach((osc, i) => osc.frequency.rampTo(freqOf(midi, this.layers[i].cents), ramp));
-    this.filter.frequency.rampTo(Math.min(6500, midiToFreq(midi) * 7), ramp);
-  }
-
-  stop(time: number) {
-    if (this.disposed) return;
-    this.env.triggerRelease(time);
-    const ms = Math.max(0, (time - Tone.now() + RELEASE + 0.25) * 1000);
-    setTimeout(() => this.dispose(), ms);
-  }
-
-  dispose() {
-    if (this.disposed) return;
-    this.disposed = true;
-    for (const n of [...this.oscs, this.noise, this.filter, this.noiseFilter, this.env]) n.dispose();
-  }
-}
+export { loadSamples, samplesReady, setSoundMode, setVoicing, type SoundMode, type Voicing } from './voices';
 
 // ---- Live playing -------------------------------------------------------------
 
@@ -119,12 +14,12 @@ const live = new Map<string, Voice>();
 
 export async function ensureAudio(): Promise<void> {
   if (Tone.getContext().state !== 'running') await Tone.start();
-  getMaster();
+  outputs();
 }
 
 export function noteOn(id: string, midi: number, glideFrom?: number) {
   noteOff(id);
-  const v = new Voice();
+  const v = createVoice();
   v.start(midi, Tone.now(), glideFrom);
   live.set(id, v);
 }
@@ -215,7 +110,7 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
           if (m === null) return;
           const s = ev.sounds[k];
           const glide = s.type === 'hole' && s.bend > 0 ? m + s.bend : undefined;
-          const v = new Voice(ev.midis.length > 1 ? 0.7 : 1);
+          const v = createVoice(ev.midis.length > 1 ? 0.7 : 1);
           scheduledVoices.add(v);
           v.start(m, time, glide);
           v.stop(time + dur - gap);
@@ -289,7 +184,7 @@ export function isTransportRunning(): boolean {
 export function previewMidis(midis: number[], seconds = 0.5, glides: (number | undefined)[] = []) {
   const now = Tone.now();
   midis.forEach((m, k) => {
-    const v = new Voice(midis.length > 1 ? 0.7 : 1);
+    const v = createVoice(midis.length > 1 ? 0.7 : 1);
     v.start(m, now, glides[k]);
     v.stop(now + seconds);
   });

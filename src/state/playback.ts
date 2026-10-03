@@ -79,9 +79,23 @@ export async function previewEvent(index: number) {
 // The sound follows the current harmonica (single reed, tremolo, octave).
 engine.setVoicing(getParsed(useApp.getState().text).harp.voicing);
 
+// Recorded samples load in the background; the synth plays until they're ready.
+function applySoundMode() {
+  const mode = useApp.getState().soundMode;
+  engine.setSoundMode(mode);
+  if (mode !== 'samples' || engine.samplesReady()) {
+    if (engine.samplesReady()) useApp.setState({ samplesStatus: 'ready' });
+    return;
+  }
+  useApp.setState({ samplesStatus: 'loading' });
+  void engine.loadSamples().then((ok) => useApp.setState({ samplesStatus: ok ? 'ready' : 'error' }));
+}
+applySoundMode();
+
 // Live reactions to settings while playing.
 useApp.subscribe((s, prev) => {
   if (s.text !== prev.text) engine.setVoicing(getParsed(s.text).harp.voicing);
+  if (s.soundMode !== prev.soundMode) applySoundMode();
   if (s.speed !== prev.speed && s.play !== 'stopped') {
     engine.setTempo(getParsed(s.text).doc.meta.tempo * s.speed);
   }

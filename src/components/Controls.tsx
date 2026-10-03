@@ -67,6 +67,8 @@ export function Transport({ showRecord = false }: { showRecord?: boolean }) {
   const loop = useApp((s) => s.loop);
   const metronome = useApp((s) => s.metronome);
   const speed = useApp((s) => s.speed);
+  const soundMode = useApp((s) => s.soundMode);
+  const samplesStatus = useApp((s) => s.samplesStatus);
   const recording = useApp((s) => s.recording);
   const recordAppend = useApp((s) => s.recordAppend);
   const recordGrid = useApp((s) => s.recordGrid);
@@ -120,6 +122,18 @@ export function Transport({ showRecord = false }: { showRecord?: boolean }) {
           title="Double-click to reset"
         />
         <span className="t-value">{Math.round(speed * 100)}% · {bpm} bpm</span>
+      </div>
+
+      <div className="t-group">
+        <span className="t-label">Sound</span>
+        <select
+          value={soundMode}
+          onChange={(e) => useApp.setState({ soundMode: e.target.value as 'samples' | 'synth' })}
+          title="Real harmonica: recordings of a Hohner Special 20 (public domain, VCSL). Synth: a generated reed sound."
+        >
+          <option value="samples">Real harmonica{soundMode === 'samples' && samplesStatus === 'loading' ? ' (loading…)' : ''}{samplesStatus === 'error' ? ' (unavailable)' : ''}</option>
+          <option value="synth">Synth</option>
+        </select>
       </div>
 
       {showRecord && (

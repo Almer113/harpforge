@@ -38,6 +38,8 @@ npm run build
   MIDI or mic), counting mistakes, with a Hint button.
 - **MIDI keyboard** input (Web MIDI; Chrome/Edge).
 - **Share links** — the whole tab compressed into the link's `#fragment`; nothing goes to a server.
+- **Sound** — real harmonica recordings (Hohner Special 20, VCSL, CC0) with pitch-shifted draw
+  notes and bends, or an improved synthesized reed; tremolo/octave harps layer extra reeds.
 - **Library** — tabs saved locally (IndexedDB).
 
 See [docs/htab-format.md](docs/htab-format.md) for the tab format.
@@ -53,7 +55,10 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `src/core/chords.ts` | Chord symbols and the harmonica chord finder |
 | `src/core/formats` | ABC, ChordPro / chord sheets, guitar tab, MusicXML, MIDI readers & writers |
 | `src/core/formats/pdf*.ts` | PDF text layer / OCR → positioned words → column-aligned chord sheet |
-| `src/audio/engine.ts` | Tone.js reed synth, live voices, transport playback |
+| `src/audio/engine.ts` | Live voices and transport playback |
+| `src/audio/voices.ts` | Sample player (VCSL harmonica) and synthesized reed |
+| `src/audio/pitch.ts` | Pitch detection (YIN) for the microphone |
+| `scripts/prepare-samples.py` | Turns the VCSL recordings into web-ready, looped samples |
 | `src/live` | Keyboard/mouse input and recording |
 | `src/state` | Zustand store, playback controls, actions |
 | `src/pages`, `src/components` | UI |
@@ -64,4 +69,4 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 2. ~~Tremolo & octave harmonicas~~ (numbered-notation / jianpu tabs for Asian tremolo still to come)
 3. ~~ABC / ChordPro / MusicXML / MIDI import & export, staff view~~
 4. ~~PDF chord-sheet import (then guitar tabs)~~
-5. ~~Microphone input, practice mode, MIDI keyboard, share links~~ · sampled harmonica sound
+5. ~~Microphone input, practice mode, MIDI keyboard, share links, sampled harmonica sound~~

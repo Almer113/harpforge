@@ -129,6 +129,9 @@ export interface AppState {
   micSensitivity: number;
   midi: MidiState;
   practice: PracticeState | null;
+  /** Recorded harmonica samples or the synthesized reed. */
+  soundMode: 'samples' | 'synth';
+  samplesStatus: 'idle' | 'loading' | 'ready' | 'error';
 
   setPage(p: Page): void;
   setText(t: string): void;
@@ -138,6 +141,16 @@ export interface AppState {
 }
 
 const initial = loadWorking();
+
+const PREFS_KEY = 'harpforge:prefs';
+function loadPrefs(): { soundMode?: 'samples' | 'synth' } {
+  try {
+    return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}');
+  } catch {
+    return {};
+  }
+}
+const prefs = loadPrefs();
 
 export const useApp = create<AppState>((set) => ({
   page: 'play',
@@ -164,6 +177,8 @@ export const useApp = create<AppState>((set) => ({
   micSensitivity: 0.7,
   midi: { status: 'off', devices: [] },
   practice: null,
+  soundMode: prefs.soundMode === 'synth' ? 'synth' : 'samples',
+  samplesStatus: 'idle',
 
   setPage: (page) => set({ page }),
   setText: (text) => set({ text, selectedEvent: null }),
@@ -172,6 +187,16 @@ export const useApp = create<AppState>((set) => ({
   markSaved: (docId) => set((s) => ({ docId, savedText: s.text })),
   notify: (message) => set({ toast: { message, id: Date.now() } }),
 }));
+
+// Remember preferences.
+useApp.subscribe((s, prev) => {
+  if (s.soundMode === prev.soundMode) return;
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode }));
+  } catch {
+    /* storage unavailable */
+  }
+});
 
 // Autosave the working document.
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
