@@ -53,7 +53,7 @@ function loadWorking(): { text: string; docId: string | null; savedText: string 
   return { text: TWINKLE, docId: null, savedText: TWINKLE };
 }
 
-export type SheetView = 'tab' | 'staff' | 'numbers';
+export type SheetView = 'simple' | 'tab' | 'staff' | 'numbers';
 export type EditorMode = 'visual' | 'text' | 'split';
 
 /** Visual editor UI state. Positions are (measure index, start beat). */

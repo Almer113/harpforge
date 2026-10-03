@@ -676,3 +676,18 @@ select:focus, .search:focus { border-color: var(--brass); }
 .tie-arc-icon { font-size: 16px; line-height: 1; }
 .ve-item { overflow: visible; }
 .ve-item > .ve-glyphs, .ve-item > .ve-lyric, .ve-item > .ve-chord, .ve-item > .ve-name { overflow: hidden; max-width: 100%; }
+
+/* ---------- Simple tab ---------- */
+.simpletab { display: flex; flex-direction: column; gap: 10px; font-family: var(--mono); }
+.st-line { display: flex; flex-wrap: wrap; column-gap: 26px; row-gap: 8px; }
+.st-measure { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.st-note {
+  min-width: 34px; padding: 2px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent;
+  font: inherit; font-size: 20px; font-weight: 700; line-height: 1.4; text-align: center; cursor: pointer;
+}
+.st-note.blow { color: var(--blow); }
+.st-note.draw { color: var(--draw); }
+.st-note.other { color: var(--text); }
+.st-note:hover { background: var(--panel-2); }
+.st-note.selected { border-color: var(--brass); }
+.st-note.active { background: rgba(227, 169, 72, 0.18); border-color: var(--brass-2); }
