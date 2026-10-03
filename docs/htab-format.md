@@ -53,12 +53,13 @@ Aliases accepted on import: `instrument` = `harmonica`, `bpm` = `tempo`, `meter`
 | `.` | rest (one beat, `.~` = two) |
 | `\|` `\|\|` `\|]` `\|:` `:\|` | bar lines: single, double, final, repeat start/end |
 | `[G7]` | chord symbol shown above the next note or rest |
-| `w: Twin-kle twin-kle` | lyrics for the tab line above: one syllable per note; `_` or `*` skips a note |
+| `w: Twin-kle twin-kle` | lyrics for the tab line above: one syllable per note; `_` or `*` skips a note; `~` joins words (`Hello~my` is one syllable) |
 | `@ Chorus` | section heading |
 | `# text` | comment (at line start or after whitespace) |
 
 Rhythm is optional: with no `~` or `{}`, every note is one beat, so tabs copied
-from the internet play back evenly.
+from the internet play back evenly. A beat is a quarter note; `tempo` counts
+quarter notes per minute (so a 6/8 bar is 3 beats).
 
 ## Semantics
 

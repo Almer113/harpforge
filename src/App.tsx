@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Toast } from './components/Controls';
+import { ImportDialog } from './components/ImportDialog';
 import { ConvertPage } from './pages/ConvertPage';
 import { EditorPage } from './pages/EditorPage';
 import { LibraryPage } from './pages/LibraryPage';
@@ -64,6 +65,7 @@ export function App() {
         {page === 'convert' && <ConvertPage />}
         {page === 'library' && <LibraryPage />}
       </main>
+      <ImportDialog />
       <Toast />
     </div>
   );

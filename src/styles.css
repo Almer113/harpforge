@@ -18,6 +18,7 @@
   --danger: #ef6a5a;
   --ok: #7ccf8a;
   --radius: 12px;
+  --staff-ink: #e9e1d6;
   --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
   color-scheme: dark;
 }
@@ -367,6 +368,63 @@ select:focus, .search:focus { border-color: var(--brass); }
 .lib-open:hover h3 { color: var(--brass-2); }
 .lib-preview { margin: 0; width: 100%; font-size: 12px; color: var(--muted); background: var(--bg-2); border-radius: 8px; padding: 8px 10px; overflow: hidden; white-space: pre; text-overflow: ellipsis; }
 .lib-actions { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 16px 14px; border-top: 1px solid var(--border); }
+
+/* ---------- Sheet view switch ---------- */
+.seg { display: inline-flex; background: var(--bg-2); border: 1px solid var(--border); border-radius: 9px; padding: 2px; }
+.seg button { border: 0; background: transparent; color: var(--muted); padding: 4px 12px; border-radius: 7px; cursor: pointer; font-weight: 600; font-size: 12.5px; }
+.seg button.on { background: var(--panel-2); color: var(--brass-2); box-shadow: inset 0 0 0 1px var(--border-2); }
+
+/* ---------- Staff view (abcjs) ---------- */
+.staffview { width: 100%; overflow-x: auto; }
+.staffview svg { display: block; }
+.staffview .abcjs-note, .staffview .abcjs-rest { cursor: pointer; }
+.staffview .abcjs-playing { fill: var(--brass-2) !important; stroke: var(--brass-2); }
+.staffview .abcjs-selected-note { fill: var(--draw) !important; }
+.staffview .abcjs-lyric { fill: var(--muted); }
+.staffview .abcjs-chord { fill: var(--brass-2); }
+.staffview .abcjs-title { fill: var(--text); }
+
+/* ---------- Menus ---------- */
+.menu-wrap { position: relative; display: inline-block; }
+.menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; min-width: 250px;
+  background: #241f1a; border: 1px solid var(--border-2); border-radius: 12px; padding: 6px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55); display: flex; flex-direction: column;
+}
+.lib-actions .menu { right: auto; left: 0; bottom: calc(100% + 6px); top: auto; }
+.menu-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; border: 0; background: transparent; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
+.menu-item:hover { background: var(--panel-2); }
+.mi-name { font-weight: 600; }
+.mi-ext { color: var(--faint); font-family: var(--mono); font-size: 11.5px; margin-left: 4px; }
+.mi-hint { color: var(--muted); font-size: 12px; }
+
+/* ---------- Modal ---------- */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 60; background: rgba(8, 6, 5, 0.66); backdrop-filter: blur(3px);
+  display: grid; place-items: center; padding: 24px; animation: fade-in 0.12s ease-out;
+}
+@keyframes fade-in { from { opacity: 0; } }
+.modal {
+  width: min(1060px, 100%); max-height: calc(100vh - 48px); overflow: auto;
+  background: var(--panel); border: 1px solid var(--border-2); border-radius: 16px; padding: 18px 20px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); display: flex; flex-direction: column; gap: 14px;
+}
+.modal-head { display: flex; align-items: center; gap: 10px; }
+.modal-head h2 { font-size: 18px; }
+.modal-x { margin-left: auto; border: 0; background: transparent; color: var(--muted); font-size: 24px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.modal-x:hover { color: var(--text); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.paste-box { height: 180px; }
+.import-grid { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
+.import-info { display: flex; flex-direction: column; gap: 10px; }
+.import-info h3 { font-size: 17px; }
+.import-info h4 { margin: 4px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); }
+.import-preview { max-height: 460px; overflow: auto; }
+.suggestions.compact { max-height: none; }
+.suggestions.compact .suggestion { padding: 6px 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); font-weight: 700; }
+@media (max-width: 860px) { .import-grid { grid-template-columns: 1fr; } }
 
 /* ---------- Toast ---------- */
 .toast {

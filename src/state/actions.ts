@@ -6,6 +6,8 @@ import { splitHeader } from '../core/htab/parser';
 import { bodyText } from '../core/htab/serializer';
 import { getHarmonica, specId, type HarmonicaSpec } from '../core/instruments';
 import { BLANK } from '../demo/songs';
+import { isChordSheet } from '../core/convert';
+import { decodeText, exportDoc, importBytes, IMPORT_ACCEPT, type ExportKind, type Imported } from '../core/formats';
 import { saveTab } from '../storage/library';
 import { stop } from './playback';
 import { getParsed, isDirty, useApp } from './store';
@@ -55,12 +57,9 @@ export async function saveCurrent(asCopy = false): Promise<void> {
   s.notify(asCopy ? 'Saved a copy to your library ✓' : 'Saved to your library ✓');
 }
 
-function slug(title: string): string {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'tab';
-}
-
-export function downloadText(filename: string, text: string, type = 'text/plain') {
-  const url = URL.createObjectURL(new Blob([text], { type }));
+export function downloadData(filename: string, data: string | Uint8Array, type = 'text/plain') {
+  const part: BlobPart = typeof data === 'string' ? data : new Uint8Array(data);
+  const url = URL.createObjectURL(new Blob([part], { type }));
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
@@ -70,27 +69,66 @@ export function downloadText(filename: string, text: string, type = 'text/plain'
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function exportCurrent(text = useApp.getState().text) {
-  const title = getParsed(text).doc.meta.title ?? 'tab';
-  downloadText(`${slug(title)}.htab`, text);
+/** Exports a tab (the current one by default) in any supported format. */
+export function exportAs(kind: ExportKind, text = useApp.getState().text) {
+  const p = getParsed(text);
+  try {
+    const { filename, data, mime } = exportDoc(kind, p.doc, p.harp, text);
+    downloadData(filename, data, mime);
+  } catch (e) {
+    useApp.getState().notify(`Export failed: ${(e as Error).message}`);
+  }
 }
 
-/** Opens a file picker and loads the chosen .htab / .txt file. */
+/** True when an .htab only holds pitches (no holes): it should go through conversion. */
+function isPitchOnly(imported: Imported): boolean {
+  let pitches = 0;
+  for (const l of imported.doc.lines) {
+    for (const e of l.events) {
+      if (e.kind !== 'note') continue;
+      if (e.sounds.some((s) => s.type === 'hole')) return false;
+      pitches++;
+    }
+  }
+  return pitches > 0;
+}
+
+/** Opens a file picker; tabs load directly, everything else goes through the import dialog. */
 export function importFile() {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.htab,.txt,text/plain';
+  input.accept = IMPORT_ACCEPT;
   input.onchange = async () => {
     const file = input.files?.[0];
     if (!file) return;
-    const text = (await file.text()).replace(/\r\n?/g, '\n');
-    if (!confirmDiscard()) return;
-    stop();
-    const s = useApp.getState();
-    s.loadText(text);
-    const { issues } = getParsed(text);
-    const errors = issues.filter((i) => i.severity === 'error').length;
-    s.notify(errors ? `Imported "${file.name}" with ${errors} problem(s) — see the editor.` : `Imported "${file.name}" ✓`);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let imported: ReturnType<typeof importBytes>;
+    try {
+      imported = importBytes(file.name, bytes);
+    } catch (e) {
+      useApp.setState({ importDraft: { name: file.name, error: (e as Error).message } });
+      return;
+    }
+    if (imported.kind === 'htab' && !isChordSheet(imported.doc) && !isPitchOnly(imported)) {
+      loadTabText(decodeText(bytes), file.name);
+      return;
+    }
+    useApp.setState({ importDraft: { name: file.name, imported } });
   };
   input.click();
+}
+
+/** Opens the import dialog in paste mode. */
+export function openPasteImport() {
+  useApp.setState({ importDraft: { name: 'Pasted text', pasteText: '' } });
+}
+
+export function loadTabText(text: string, name: string) {
+  if (!confirmDiscard()) return;
+  stop();
+  const s = useApp.getState();
+  s.loadText(text);
+  const { issues } = getParsed(text);
+  const errors = issues.filter((i) => i.severity === 'error').length;
+  s.notify(errors ? `Imported "${name}" with ${errors} problem(s) — see the editor.` : `Imported "${name}" ✓`);
 }

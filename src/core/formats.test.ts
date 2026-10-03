@@ -197,3 +197,10 @@ describe('MusicXML', () => {
     expect(notes.map((n) => n.lyric)).toEqual(['a', 'b-', 'c', 'd', 'e', 'f']);
   });
 });
+
+describe('chord placement', () => {
+  it('keeps words whole when a chord sits mid-word', () => {
+    const cp = chordsOverLyricsToChordPro('G                 C\nWalking down the sunny road');
+    expect(cp).toContain('[G]Walking down the [C]sunny road');
+  });
+});

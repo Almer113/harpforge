@@ -201,6 +201,8 @@ export function chordsOverLyricsToChordPro(text: string): string {
           // A chord over the gap before a word belongs to that word.
           let col = c.col;
           if (lyric[col] === ' ' && lyric[col + 1] && lyric[col + 1] !== ' ') col++;
+          // A chord over the middle of a word moves to the word's start, so lyrics stay whole.
+          while (col > pos && lyric[col] && lyric[col] !== ' ' && lyric[col - 1] !== ' ') col--;
           col = Math.max(col, pos);
           merged += lyric.slice(pos, col) + `[${c.sym}]`;
           pos = col;

@@ -21,15 +21,20 @@ export interface Parsed {
 
 let parsedCache: Parsed | null = null;
 
-/** Parses the current text (memoized on the text). */
-export function getParsed(text: string): Parsed {
-  if (parsedCache && parsedCache.text === text) return parsedCache;
+/** Parses .htab text into everything the views need (not cached). */
+export function makeParsed(text: string): Parsed {
   const { doc, issues } = parseHtab(text);
   const harp = harmonicaFromMeta(doc.meta);
   const built = buildScore(doc, harp);
   const indexByKey = new Map<string, number>();
   for (const ev of built.score.events) indexByKey.set(eventKey(ev.line, ev.eventIndex), ev.index);
-  parsedCache = { text, doc, harp, score: built.score, issues: [...issues, ...built.issues], indexByKey };
+  return { text, doc, harp, score: built.score, issues: [...issues, ...built.issues], indexByKey };
+}
+
+/** Parses the current text (memoized on the text). */
+export function getParsed(text: string): Parsed {
+  if (parsedCache && parsedCache.text === text) return parsedCache;
+  parsedCache = makeParsed(text);
   return parsedCache;
 }
 
@@ -46,6 +51,17 @@ function loadWorking(): { text: string; docId: string | null; savedText: string 
     /* storage unavailable */
   }
   return { text: TWINKLE, docId: null, savedText: TWINKLE };
+}
+
+export type SheetView = 'tab' | 'staff';
+
+/** A file or pasted text waiting in the import dialog. */
+export interface ImportDraft {
+  name: string;
+  /** Raw text for the paste box (paste mode). */
+  pasteText?: string;
+  imported?: import('../core/formats').Imported & { kind: import('../core/formats').ImportKind };
+  error?: string;
 }
 
 export interface RecordingState {
@@ -78,6 +94,8 @@ export interface AppState {
   recordAppend: boolean;
   recordGrid: number;
   toast: { message: string; id: number } | null;
+  sheetView: SheetView;
+  importDraft: ImportDraft | null;
 
   setPage(p: Page): void;
   setText(t: string): void;
@@ -107,6 +125,8 @@ export const useApp = create<AppState>((set) => ({
   recordAppend: true,
   recordGrid: 0.5,
   toast: null,
+  sheetView: 'tab',
+  importDraft: null,
 
   setPage: (page) => set({ page }),
   setText: (text) => set({ text, selectedEvent: null }),

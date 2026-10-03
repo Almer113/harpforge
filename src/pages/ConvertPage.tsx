@@ -1,13 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
-import { notesToTab, suggestHarmonicas, tabToNotes, type Suggestion } from '../core/convert';
-import { parseHtab } from '../core/htab/parser';
+import {
+  chordSheetToTab,
+  isChordSheet,
+  notesToTab,
+  STRUM_PATTERNS,
+  suggestForChordSheet,
+  suggestHarmonicas,
+  tabToNotes,
+  type StrumPattern,
+  type Suggestion,
+} from '../core/convert';
+import { FORMAT_NAMES, importText, sniffText } from '../core/formats';
+import { writeAbc } from '../core/formats/abc';
 import { serializeHtab } from '../core/htab/serializer';
 import { getHarmonica, specId } from '../core/instruments';
-import { buildScore, eventKey, harmonicaFromMeta } from '../core/score';
+import { harmonicaFromMeta } from '../core/score';
 import { TabView } from '../components/TabView';
 import { confirmDiscard } from '../state/actions';
 import { stop } from '../state/playback';
-import { useApp, useParsed, type Parsed } from '../state/store';
+import { makeParsed, useApp, useParsed } from '../state/store';
 
 const EXAMPLE = `---
 title: Amazing Grace
@@ -32,19 +43,11 @@ function loadDraft(): string {
   }
 }
 
-function asParsed(text: string): Parsed {
-  const { doc, issues } = parseHtab(text);
-  const harp = harmonicaFromMeta(doc.meta);
-  const { score } = buildScore(doc, harp);
-  const indexByKey = new Map<string, number>();
-  for (const ev of score.events) indexByKey.set(eventKey(ev.line, ev.eventIndex), ev.index);
-  return { text, doc, harp, score, issues, indexByKey };
-}
-
 export function ConvertPage() {
   const current = useParsed();
   const [input, setInput] = useState(loadDraft);
-  const [family, setFamily] = useState<'all' | 'diatonic' | 'chromatic'>('all');
+  const [family, setFamily] = useState<'all' | 'diatonic' | 'chromatic' | 'tremolo' | 'octave'>('all');
+  const [pattern, setPattern] = useState<StrumPattern>('halves');
   const [picked, setPicked] = useState<string | null>(null);
 
   useEffect(() => {
@@ -55,29 +58,46 @@ export function ConvertPage() {
     }
   }, [input]);
 
-  const parsedInput = useMemo(() => parseHtab(input), [input]);
+  // Any supported text format: notes, tabs, ABC, ChordPro, chord sheets, MusicXML.
+  const kind = useMemo(() => sniffText(input), [input]);
+  const parsedInput = useMemo(() => {
+    try {
+      const r = importText(input, kind);
+      return { doc: r.doc, issues: r.warnings.map((message) => ({ message, severity: kind === 'htab' ? 'error' : 'warning' })) };
+    } catch (e) {
+      return { doc: importText('').doc, issues: [{ message: (e as Error).message, severity: 'error' }] };
+    }
+  }, [input, kind]);
+  const chordSheet = isChordSheet(parsedInput.doc);
   const hasHoles = parsedInput.doc.lines.some((l) => l.events.some((e) => e.kind === 'note' && e.sounds.some((s) => s.type === 'hole')));
   const sourceHarp = hasHoles ? harmonicaFromMeta(parsedInput.doc.meta) : undefined;
 
-  const suggestions = useMemo<Suggestion[]>(
-    () => suggestHarmonicas(parsedInput.doc, { sourceHarp, limit: 8, families: family === 'all' ? undefined : [family] }),
-    [parsedInput, family, sourceHarp],
-  );
+  const suggestions = useMemo<Suggestion[]>(() => {
+    const families = family === 'all' ? undefined : [family];
+    return chordSheet
+      ? suggestForChordSheet(parsedInput.doc, { limit: 8, families })
+      : suggestHarmonicas(parsedInput.doc, { sourceHarp, limit: 8, families });
+  }, [parsedInput, family, sourceHarp, chordSheet]);
 
   const chosen = suggestions.find((s) => specId(s.spec) === picked) ?? suggestions[0];
 
   const result = useMemo(() => {
     if (!chosen) return null;
     const harp = getHarmonica(chosen.spec);
-    const r = notesToTab(parsedInput.doc, harp, { shift: chosen.shift, sourceHarp });
+    const r = chordSheet ? chordSheetToTab(parsedInput.doc, harp, pattern) : notesToTab(parsedInput.doc, harp, { shift: chosen.shift, sourceHarp });
     if (chosen.position) r.doc.meta.position = String(chosen.position);
     const text = serializeHtab(r.doc);
-    return { ...r, text, parsed: asParsed(text) };
-  }, [chosen, parsedInput, sourceHarp]);
+    return { ...r, text, parsed: makeParsed(text) };
+  }, [chosen, parsedInput, sourceHarp, chordSheet, pattern]);
 
   const useCurrentTab = () => {
     const { doc } = tabToNotes(current.doc, current.harp);
     setInput(serializeHtab(doc));
+    setPicked(null);
+  };
+
+  const currentAsAbc = () => {
+    setInput(writeAbc(current.doc, current.harp, { tabLine: false }).text);
     setPicked(null);
   };
 
@@ -97,17 +117,18 @@ export function ConvertPage() {
       <header className="page-head">
         <h1>Convert</h1>
         <p className="muted">
-          Type or paste a melody as notes (or a tab for any harmonica). HarpForge ranks every harmonica by how easy the song is to play,
-          then writes the tab.
+          Paste a melody as notes, ABC, MusicXML, a chord sheet or a tab for any harmonica. HarpForge ranks every harmonica by how
+          easy the song is to play, then writes the tab.
         </p>
       </header>
 
       <div className="convert-grid">
         <div className="panel">
           <div className="panel-head">
-            <h2>Input</h2>
+            <h2>Input <span className="chip plain">{chordSheet ? 'Chord sheet' : FORMAT_NAMES[kind]}</span></h2>
             <div className="tb-group">
               <button className="btn small" onClick={useCurrentTab} title="Turn the current tab into notes">Current tab → notes</button>
+              <button className="btn small" onClick={currentAsAbc} title="Turn the current tab into ABC notation">→ ABC</button>
               <button className="btn small ghost" onClick={() => setInput(EXAMPLE)}>Example</button>
             </div>
           </div>
@@ -121,7 +142,8 @@ export function ConvertPage() {
           )}
           <p className="hint">
             Notes like <code>C4 D#4 Bb3</code>, chords <code>(C4 E4 G4)</code>, rhythm <code>~</code> and <code>{'{ }'}</code>, bars{' '}
-            <code>|</code>, chord symbols <code>[G]</code>, lyrics <code>w:</code> — the same syntax as tabs.
+            <code>|</code>, chord symbols <code>[G]</code>, lyrics <code>w:</code> — the same syntax as tabs. ABC, ChordPro, chord sheets
+            and MusicXML are detected automatically.
           </p>
         </div>
 
@@ -132,7 +154,16 @@ export function ConvertPage() {
               <option value="all">All types</option>
               <option value="diatonic">Diatonic only</option>
               <option value="chromatic">Chromatic only</option>
+              <option value="tremolo">Tremolo only</option>
+              <option value="octave">Octave only</option>
             </select>
+            {chordSheet && (
+              <select value={pattern} onChange={(e) => setPattern(e.target.value as StrumPattern)} title="Chord rhythm">
+                {STRUM_PATTERNS.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="suggestions">
             {suggestions.map((s, i) => {
@@ -150,7 +181,8 @@ export function ConvertPage() {
                       {s.stats.bends > 0 && <span>{s.stats.bends} bends</span>}
                       {s.stats.overblows > 0 && <span>{s.stats.overblows} overblows</span>}
                       {s.stats.slides > 0 && <span>{s.stats.slides} slides</span>}
-                      {s.stats.unplayable + s.stats.bends + s.stats.overblows + s.stats.slides === 0 && <span className="good">no techniques needed</span>}
+                      {s.stats.reducedChords > 0 && <span>{s.stats.reducedChords} partial chords</span>}
+                      {s.stats.unplayable + s.stats.bends + s.stats.overblows + s.stats.slides + s.stats.reducedChords === 0 && <span className="good">no techniques needed</span>}
                     </span>
                   </span>
                 </button>

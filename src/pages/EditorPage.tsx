@@ -1,17 +1,15 @@
 import { useRef, useState } from 'react';
 import { CodeEditor, type CodeEditorHandle } from '../components/CodeEditor';
 import { HarmonicaPicker, Transport } from '../components/Controls';
-import { TabView } from '../components/TabView';
-import { exportCurrent, importFile, newTab, saveCurrent } from '../state/actions';
+import { importFile, newTab, openPasteImport, saveCurrent } from '../state/actions';
+import { ExportMenu } from '../components/ExportMenu';
+import { Sheet } from '../components/Sheet';
 import { previewEvent } from '../state/playback';
 import { isDirty, useApp, useParsed } from '../state/store';
 
 export function EditorPage() {
   const text = useApp((s) => s.text);
   const setText = useApp((s) => s.setText);
-  const activeEvents = useApp((s) => s.activeEvents);
-  const selectedEvent = useApp((s) => s.selectedEvent);
-  const showNoteNames = useApp((s) => s.showNoteNames);
   const dirty = useApp(isDirty);
   const parsed = useParsed();
   const editor = useRef<CodeEditorHandle>(null);
@@ -25,9 +23,10 @@ export function EditorPage() {
         <div className="tb-group">
           <button className="btn" onClick={newTab}>New</button>
           <button className="btn" onClick={importFile}>Import…</button>
+          <button className="btn" onClick={openPasteImport}>Paste…</button>
           <button className="btn primary" onClick={() => void saveCurrent()}>{dirty ? 'Save' : 'Saved ✓'}</button>
           <button className="btn" onClick={() => void saveCurrent(true)}>Save copy</button>
-          <button className="btn" onClick={() => exportCurrent()}>Export .htab</button>
+          <ExportMenu />
           <button className={`btn ghost ${showHelp ? 'on' : ''}`} onClick={() => setShowHelp(!showHelp)}>Syntax help</button>
         </div>
         <HarmonicaPicker />
@@ -52,15 +51,13 @@ export function EditorPage() {
             )}
           </div>
         </div>
-        <div className="preview-pane sheet">
-          <TabView
+        <div className="preview-pane">
+          <Sheet
             parsed={parsed}
-            activeEvents={activeEvents}
-            selectedEvent={selectedEvent}
-            showNoteNames={showNoteNames}
-            onCardClick={(i, ev) => {
+            title="Preview"
+            onSelect={(i, ev) => {
               void previewEvent(i);
-              if (ev.src) editor.current?.select(ev.src.start, ev.src.end);
+              if (ev?.src) editor.current?.select(ev.src.start, ev.src.end);
             }}
           />
         </div>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { confirmDiscard, exportCurrent, importFile, saveCurrent } from '../state/actions';
+import { confirmDiscard, importFile, openPasteImport, saveCurrent } from '../state/actions';
+import { ExportMenu } from '../components/ExportMenu';
 import { stop } from '../state/playback';
 import { useApp } from '../state/store';
 import { deleteTab, listTabs, saveTab, type SavedTab } from '../storage/library';
@@ -41,11 +42,12 @@ export function LibraryPage() {
       <header className="page-head row">
         <div>
           <h1>Library</h1>
-          <p className="muted">Your saved tabs live in this browser. Export them as .htab files to back them up or share them.</p>
+          <p className="muted">Your saved tabs live in this browser. Import ABC, MusicXML, MIDI, ChordPro or chord sheets; export to any of them.</p>
         </div>
         <div className="tb-group">
           <input className="search" placeholder="Search…" value={query} onChange={(e) => setQuery(e.target.value)} />
           <button className="btn" onClick={importFile}>Import file…</button>
+          <button className="btn" onClick={openPasteImport}>Paste…</button>
           <button className="btn primary" onClick={() => saveCurrent().then(refresh)}>Save current tab</button>
         </div>
       </header>
@@ -70,7 +72,7 @@ export function LibraryPage() {
                 <button className="btn small" onClick={() => open(t, 'play')}>Play</button>
                 <button className="btn small" onClick={() => open(t, 'editor')}>Edit</button>
                 <button className="btn small ghost" onClick={() => duplicate(t)}>Duplicate</button>
-                <button className="btn small ghost" onClick={() => exportCurrent(t.text)}>Export</button>
+                <ExportMenu text={t.text} small />
                 <button className="btn small danger" onClick={() => remove(t)}>Delete</button>
               </div>
             </article>

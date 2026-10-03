@@ -1,6 +1,6 @@
 import { HarmonicaPicker, Transport } from '../components/Controls';
 import { Harmonica } from '../components/Harmonica';
-import { TabView } from '../components/TabView';
+import { Sheet } from '../components/Sheet';
 import { useHarmonicaKeyboard } from '../live/useHarmonicaKeyboard';
 import { previewEvent } from '../state/playback';
 import { useApp, useParsed } from '../state/store';
@@ -9,9 +9,6 @@ import { rangeLabel, type Harmonica as HarmonicaT } from '../core/instruments';
 export function PlayPage() {
   useHarmonicaKeyboard(true);
   const parsed = useParsed();
-  const activeEvents = useApp((s) => s.activeEvents);
-  const selectedEvent = useApp((s) => s.selectedEvent);
-  const showNoteNames = useApp((s) => s.showNoteNames);
   const recording = useApp((s) => s.recording);
   const { meta } = parsed.doc;
 
@@ -38,22 +35,7 @@ export function PlayPage() {
         <KeyHelp harp={parsed.harp} />
       </div>
 
-      <div className="sheet">
-        <div className="sheet-head">
-          <h2>Tab</h2>
-          <label className="check">
-            <input type="checkbox" checked={showNoteNames} onChange={(e) => useApp.setState({ showNoteNames: e.target.checked })} />
-            Show note names
-          </label>
-        </div>
-        <TabView
-          parsed={parsed}
-          activeEvents={activeEvents}
-          selectedEvent={selectedEvent}
-          showNoteNames={showNoteNames}
-          onCardClick={(i) => void previewEvent(i)}
-        />
-      </div>
+      <Sheet parsed={parsed} onSelect={(i) => void previewEvent(i)} />
     </section>
   );
 }
