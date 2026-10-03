@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react';
 import type { NoteEvent, RestEvent } from '../core/htab/types';
 import { useApp, type Parsed } from '../state/store';
+import { doPitchClass } from '../core/formats/jianpu';
+import { pitchClassName, prefersFlats } from '../core/pitch';
 import { TabView } from './TabView';
 
 // Sheet music pulls in abcjs; load it only when the staff view is opened.
@@ -20,6 +22,8 @@ export function Sheet({
   const selectedEvent = useApp((s) => s.selectedEvent);
   const showNoteNames = useApp((s) => s.showNoteNames);
   const view = useApp((s) => s.sheetView);
+  // "Do" of the key: the song key's relative major, else the harmonica's key.
+  const doName = pitchClassName(doPitchClass(parsed.doc.meta.key ?? parsed.harp.spec.key.replace(/^(Low|High)\s+/i, '')), prefersFlats(parsed.doc.meta.key ?? parsed.harp.spec.key));
 
   const eventAt = (i: number) => {
     const sev = parsed.score.events[i];
@@ -30,12 +34,15 @@ export function Sheet({
   return (
     <div className="sheet">
       <div className="sheet-head">
-        <h2>{title}</h2>
+        <h2>
+          {view === 'numbers' ? 'Numbered notation' : view === 'staff' ? 'Sheet music' : title}
+          {view === 'numbers' && <span className="chip plain jp-key">1={doName}</span>}
+        </h2>
         <div className="tb-group">
-          {view === 'tab' && (
+          {view !== 'staff' && (
             <label className="check">
               <input type="checkbox" checked={showNoteNames} onChange={(e) => useApp.setState({ showNoteNames: e.target.checked })} />
-              Note names
+              {view === 'numbers' ? 'Holes' : 'Note names'}
             </label>
           )}
           <div className="seg" role="tablist" aria-label="Sheet view">
@@ -45,11 +52,27 @@ export function Sheet({
             <button role="tab" aria-selected={view === 'staff'} className={view === 'staff' ? 'on' : ''} onClick={() => useApp.setState({ sheetView: 'staff' })}>
               Staff + tab
             </button>
+            <button
+              role="tab"
+              aria-selected={view === 'numbers'}
+              className={view === 'numbers' ? 'on' : ''}
+              onClick={() => useApp.setState({ sheetView: 'numbers' })}
+              title="Numbered notation (jianpu): 1 = do of the key"
+            >
+              Numbers
+            </button>
           </div>
         </div>
       </div>
-      {view === 'tab' ? (
-        <TabView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} showNoteNames={showNoteNames} onCardClick={onSelect} />
+      {view !== 'staff' ? (
+        <TabView
+          parsed={parsed}
+          activeEvents={activeEvents}
+          selectedEvent={selectedEvent}
+          showNoteNames={showNoteNames}
+          onCardClick={onSelect}
+          notation={view === 'numbers' ? 'numbers' : 'holes'}
+        />
       ) : (
         <Suspense fallback={<p className="muted">Loading sheet music…</p>}>
           <StaffView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onNoteClick={(i) => onSelect(i, eventAt(i))} />

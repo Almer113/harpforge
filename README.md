@@ -32,6 +32,10 @@ npm run build
   Imports pick the best-fitting harmonica (or keep yours); chord sheets become harmonica chords.
 - **Export** — HarpTab, ABC (with the tab as a lyric line), MusicXML (tab as lyric line 2), MIDI, ChordPro.
 - **Staff view** — standard notation with the tab and lyrics under each note, synced to playback.
+- **Numbered notation (jianpu)** — a third sheet view (1 = do of the key, octave dots, underlines,
+  dashes, optional holes underneath), plus import/export. Text syntax: start with a key line such as
+  `1=G 4/4`, then `5 3 5 - | 6_ 5_ 3 - |`; `1'`/`1,` (or 1̇/1̣) for octaves, `#4`/`b7`, `5.` dotted,
+  `{5 6 5}` triplets, and `[G]`, `w:`, `@ Verse` as in HarpTab. See `src/core/formats/jianpu.ts`.
 - **Microphone** — play your real harmonica: live hole + note detection with a tuner (great for bends);
   recording and practice work with it. Pitch detection (YIN) runs on an AudioWorklet feed.
 - **Practice mode** — the app highlights the next hole and waits until you play it (keyboard, mouse,
@@ -66,7 +70,7 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 ## Roadmap
 
 1. ~~Core model, `.htab`, conversion~~ · ~~Playable harmonica~~ · ~~Tab view + autoplay, record, editor, library~~
-2. ~~Tremolo & octave harmonicas~~ (numbered-notation / jianpu tabs for Asian tremolo still to come)
+2. ~~Tremolo & octave harmonicas~~ · ~~numbered notation (jianpu)~~
 3. ~~ABC / ChordPro / MusicXML / MIDI import & export, staff view~~
 4. ~~PDF chord-sheet import (then guitar tabs)~~
 5. ~~Microphone input, practice mode, MIDI keyboard, share links, sampled harmonica sound~~

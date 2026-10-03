@@ -502,3 +502,19 @@ select:focus, .search:focus { border-color: var(--brass); }
 @keyframes target-pulse { 50% { background: rgba(227, 169, 72, 0.32); } }
 .input-card .t-btn.toggle:not(.on) { color: var(--text); }
 .head-actions { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+
+/* ---------- Numbered notation (jianpu) ---------- */
+.jp { display: inline-flex; align-items: center; gap: 6px; color: var(--text); }
+.jp-stack { position: relative; display: inline-flex; flex-direction: column; align-items: center; padding-bottom: 5px; }
+.jp-note { display: grid; grid-template-rows: 8px auto 8px; justify-items: center; line-height: 1; }
+.jp-stack.chord .jp-note { grid-template-rows: 6px auto 6px; }
+.jp-digit { font-family: var(--mono); font-weight: 700; font-size: 22px; position: relative; }
+.jp-stack.chord .jp-digit { font-size: 16px; }
+.jp-acc { position: absolute; right: 100%; top: -2px; font-size: 0.55em; color: var(--brass-2); }
+.jp-dots { font-size: 9px; letter-spacing: -1px; color: var(--brass-2); line-height: 8px; }
+.jp-under { position: absolute; left: -2px; right: -2px; bottom: 1px; border-bottom: 2px solid var(--muted); }
+.jp-under.u2 { bottom: -3px; box-shadow: 0 -4px 0 -2px var(--muted); }
+.jp-aug { font-size: 22px; font-weight: 700; color: var(--text); margin-left: -4px; }
+.jp-dash { font-family: var(--mono); font-size: 20px; color: var(--muted); }
+.card.active .jp-digit { color: var(--brass-2); }
+.jp-key { margin-left: 8px; font-family: var(--mono); vertical-align: middle; }

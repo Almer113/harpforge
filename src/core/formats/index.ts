@@ -7,6 +7,7 @@ import type { Harmonica } from '../instruments';
 import { parseAbc, writeAbc } from './abc';
 import { isChordLine, looksLikeChordPro, looksLikeChordSheet, parseChordPro, parseChordSheetText, writeChordPro } from './chordpro';
 import { countTabLines, looksLikeGuitarTab, parseGuitarTab } from './guitartab';
+import { looksLikeJianpu, parseJianpu, writeJianpu } from './jianpu';
 import type { Imported } from './common';
 import { slugify } from './common';
 import { parseMidi, writeMidi } from './midi';
@@ -14,7 +15,7 @@ import { parseMusicXml, unzipMxl, writeMusicXml } from './musicxml';
 
 export type { Imported } from './common';
 
-export type ImportKind = 'htab' | 'abc' | 'chordpro' | 'chordsheet' | 'guitartab' | 'musicxml' | 'mxl' | 'midi' | 'pdf';
+export type ImportKind = 'htab' | 'abc' | 'chordpro' | 'chordsheet' | 'guitartab' | 'jianpu' | 'musicxml' | 'mxl' | 'midi' | 'pdf';
 
 export const IMPORT_ACCEPT = '.htab,.txt,.pdf,.tab,.abc,.cho,.chopro,.chordpro,.crd,.pro,.musicxml,.xml,.mxl,.mid,.midi,text/plain';
 
@@ -24,6 +25,7 @@ export const FORMAT_NAMES: Record<ImportKind, string> = {
   chordpro: 'ChordPro',
   chordsheet: 'Chord sheet (chords over lyrics)',
   guitartab: 'Guitar tab',
+  jianpu: 'Numbered notation (jianpu)',
   pdf: 'PDF',
   musicxml: 'MusicXML',
   mxl: 'Compressed MusicXML',
@@ -44,6 +46,7 @@ export function sniffText(text: string): ImportKind {
   const t = normalizeText(text).trimStart();
   if (/^X:\s*\d*/m.test(t) && /^K:/m.test(t)) return 'abc';
   if (t.startsWith('<?xml') || /<score-partwise|<score-timewise/.test(t.slice(0, 2000))) return 'musicxml';
+  if (looksLikeJianpu(t)) return 'jianpu';
   if (t.startsWith('---')) return 'htab';
   if (looksLikeChordPro(t)) return 'chordpro';
   const tabLines = countTabLines(t);
@@ -80,6 +83,8 @@ export function importText(raw: string, kind: ImportKind = sniffText(raw)): Impo
       return parseChordSheetText(text);
     case 'guitartab':
       return parseGuitarTab(text);
+    case 'jianpu':
+      return parseJianpu(text);
     case 'musicxml':
       return parseMusicXml(text);
     default: {
@@ -99,7 +104,7 @@ export function importBytes(filename: string, bytes: Uint8Array): Imported & { k
 
 // ---- Export ---------------------------------------------------------------------
 
-export type ExportKind = 'htab' | 'abc' | 'musicxml' | 'midi' | 'chordpro';
+export type ExportKind = 'htab' | 'abc' | 'musicxml' | 'midi' | 'chordpro' | 'jianpu';
 
 export const EXPORTS: { id: ExportKind; name: string; ext: string; mime: string; hint: string }[] = [
   { id: 'htab', name: 'HarpTab', ext: 'htab', mime: 'text/plain', hint: 'Full tab, re-importable' },
@@ -107,6 +112,7 @@ export const EXPORTS: { id: ExportKind; name: string; ext: string; mime: string;
   { id: 'musicxml', name: 'MusicXML', ext: 'musicxml', mime: 'application/vnd.recordare.musicxml+xml', hint: 'For MuseScore, Finale, Sibelius…' },
   { id: 'midi', name: 'MIDI', ext: 'mid', mime: 'audio/midi', hint: 'Plays in any MIDI app' },
   { id: 'chordpro', name: 'ChordPro', ext: 'cho', mime: 'text/plain', hint: 'Chords + lyrics only' },
+  { id: 'jianpu', name: 'Numbered notation', ext: 'txt', mime: 'text/plain', hint: 'Jianpu (1=C …), common for tremolo' },
 ];
 
 export function exportDoc(kind: ExportKind, doc: TabDoc, harp: Harmonica, htabText?: string): { filename: string; data: string | Uint8Array; mime: string } {
@@ -128,6 +134,9 @@ export function exportDoc(kind: ExportKind, doc: TabDoc, harp: Harmonica, htabTe
       break;
     case 'chordpro':
       data = writeChordPro(doc);
+      break;
+    case 'jianpu':
+      data = writeJianpu(doc, harp);
       break;
   }
   return { filename, data, mime: info.mime };

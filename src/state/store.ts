@@ -53,7 +53,7 @@ function loadWorking(): { text: string; docId: string | null; savedText: string 
   return { text: TWINKLE, docId: null, savedText: TWINKLE };
 }
 
-export type SheetView = 'tab' | 'staff';
+export type SheetView = 'tab' | 'staff' | 'numbers';
 
 /** A file or pasted text waiting in the import dialog. */
 export interface ImportDraft {
