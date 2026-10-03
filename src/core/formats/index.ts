@@ -30,9 +30,18 @@ export const FORMAT_NAMES: Record<ImportKind, string> = {
   midi: 'MIDI',
 };
 
+/** Normalises pasted text: line endings, non-breaking/odd spaces, zero-width characters. */
+export function normalizeText(text: string): string {
+  return text
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '');
+}
+
 /** Guesses the format of text content. */
 export function sniffText(text: string): ImportKind {
-  const t = text.trimStart();
+  const t = normalizeText(text).trimStart();
   if (/^X:\s*\d*/m.test(t) && /^K:/m.test(t)) return 'abc';
   if (t.startsWith('<?xml') || /<score-partwise|<score-timewise/.test(t.slice(0, 2000))) return 'musicxml';
   if (t.startsWith('---')) return 'htab';
@@ -60,7 +69,8 @@ export function decodeText(bytes: Uint8Array): string {
   return new TextDecoder('utf-8').decode(bytes).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
 }
 
-export function importText(text: string, kind: ImportKind = sniffText(text)): Imported {
+export function importText(raw: string, kind: ImportKind = sniffText(raw)): Imported {
+  const text = normalizeText(raw);
   switch (kind) {
     case 'abc':
       return parseAbc(text);

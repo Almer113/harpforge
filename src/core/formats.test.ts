@@ -239,3 +239,47 @@ Yippee ki-yi-yay, when the round-up ends.`;
     expect((back.lines[1].events[0] as NoteEvent).sounds).toEqual((back.lines[0].events[0] as NoteEvent).sounds);
   });
 });
+
+describe('chord-sheet detection', () => {
+  const SONG = `[Verse 1]
+ C
+Let me tell you buddy, there's a faster gun,
+                         D7         G7
+comin' over yonder, when tomorrow comes.
+
+[Chorus]
+        G                   F        C
+Yippee ki-yi-yay, when the round-up ends.
+
+[Chorus]
+        G                   F       G
+Yippee ki-yi-yay, and the campfire dims.
+
+[Chorus]
+       G            F     C
+Yippee ki-yi-yay, (I'm glory bound).`;
+
+  it('does not mistake section headings for chords', () => {
+    expect(parseChord('Chorus')).toBeNull();
+    expect(parseChord('Cmaj7(#11)')).not.toBeNull();
+    expect(parseChord('Bridge')).toBeNull();
+  });
+
+  it('reads the same with or without code fences, and with non-breaking spaces', () => {
+    const variants = [SONG, '```\n' + SONG + '\n```', SONG.replace(/ /g, ' '), SONG.replace(/\n/g, '\r\n')];
+    const results = variants.map((v) => {
+      expect(sniffText(v)).toBe('chordsheet');
+      const { doc } = importText(v);
+      return doc.lines.flatMap((l) => l.events).filter((e) => e.kind === 'rest').map((e: any) => `${e.chord ?? '-'}:${e.lyric ?? ''}`);
+    });
+    for (const r of results) expect(r).toEqual(results[0]);
+    expect(results[0].slice(0, 4)).toEqual([
+      "C:Let me tell you buddy, there's a faster gun,",
+      "-:comin' over yonder, when",
+      'D7:tomorrow',
+      'G7:comes.',
+    ]);
+    const { doc } = importText(SONG);
+    expect(doc.lines.map((l) => l.section).filter(Boolean)).toEqual(['Verse 1', 'Chorus', 'Chorus', 'Chorus']);
+  });
+});

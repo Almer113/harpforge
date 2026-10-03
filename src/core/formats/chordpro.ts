@@ -299,8 +299,15 @@ export function parseChordSheetText(text: string): Imported {
 /** Heuristic: does this text look like ChordPro (directives or inline [chords])? */
 export function looksLikeChordPro(text: string): boolean {
   if (/^\s*\{\s*(title|t|artist|key|soc|start_of_\w+|comment|c)\s*[:}]/im.test(text)) return true;
-  const inline = text.match(/\[[A-G][#b]?[^\]\s]{0,8}\]/g);
-  return !!inline && inline.length >= 3;
+  // Inline style: real chord symbols in brackets inside lines that also have lyrics.
+  // ("[Chorus]" / "[Verse 1]" headings on their own line don't count.)
+  let inlineLines = 0;
+  for (const line of text.split('\n')) {
+    const chords = [...line.matchAll(/\[([^\]]{1,12})\]/g)].filter((m) => parseChord(m[1].trim()));
+    const words = line.replace(/\[[^\]]*\]/g, ' ').trim();
+    if (chords.length && /[a-z]{2,}/i.test(words)) inlineLines++;
+  }
+  return inlineLines >= 2;
 }
 
 export function looksLikeChordSheet(text: string): boolean {

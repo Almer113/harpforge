@@ -64,7 +64,10 @@ export function parseChord(symbol: string): ChordInfo | null {
     }
   }
   if (!intervals) {
-    // Unknown extension: fall back on the triad implied by its start.
+    // Unknown extension ("maj7(#11)", "7sus4add9"): fall back on the triad implied by its
+    // start — but only if it's made of chord vocabulary, so words like "Chorus" aren't chords.
+    const vocabulary = suffix.replace(/maj|min|dim|aug|sus|add|alt|no|omit|[mM°øΔ+\-#b♯♭0-9()/,.]/g, '');
+    if (vocabulary.length) return null;
     intervals = /^(m(?!aj)|min|-)/.test(suffix) ? [0, 3, 7] : [0, 4, 7];
   }
   const bass = m[3] ? parsePitchClass(m[3].replace('♯', '#').replace('♭', 'b')) ?? undefined : undefined;
