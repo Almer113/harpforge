@@ -8,6 +8,7 @@ import { PlayPage } from './pages/PlayPage';
 import { importFromFile, saveCurrent } from './state/actions';
 import { isDirty, useApp, useParsed, type Page } from './state/store';
 import { seedDemos } from './storage/library';
+import { openSharedFromUrl } from './state/share';
 
 const NAV: { id: Page; label: string }[] = [
   { id: 'play', label: 'Play' },
@@ -62,6 +63,9 @@ export function App() {
 
   useEffect(() => {
     void seedDemos();
+    openSharedFromUrl();
+    const onHash = () => openSharedFromUrl();
+    window.addEventListener('hashchange', onHash);
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
@@ -69,7 +73,10 @@ export function App() {
       }
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('hashchange', onHash);
+    };
   }, []);
 
   return (

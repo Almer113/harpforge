@@ -68,6 +68,30 @@ export interface ImportDraft {
   sourceText?: string;
 }
 
+export interface MicState {
+  status: 'off' | 'starting' | 'on' | 'error';
+  level: number;
+  reading: import('../live/inputs').MicReading | null;
+  error?: string;
+}
+
+export interface MidiState {
+  status: 'off' | 'on' | 'unsupported' | 'error';
+  devices: string[];
+  /** Last note that couldn't be played. */
+  miss?: string;
+}
+
+export interface PracticeState {
+  /** Score index of the note to play next. */
+  index: number;
+  played: number;
+  mistakes: number;
+  startedAt: number;
+  /** Time of the last wrong note (for a brief shake). */
+  wrongAt: number;
+}
+
 export interface RecordingState {
   mode: 'timed' | 'free';
   phase: 'count-in' | 'recording';
@@ -100,6 +124,11 @@ export interface AppState {
   toast: { message: string; id: number } | null;
   sheetView: SheetView;
   importDraft: ImportDraft | null;
+  mic: MicState;
+  /** 0..1: how quiet a sound the microphone still listens to. */
+  micSensitivity: number;
+  midi: MidiState;
+  practice: PracticeState | null;
 
   setPage(p: Page): void;
   setText(t: string): void;
@@ -131,6 +160,10 @@ export const useApp = create<AppState>((set) => ({
   toast: null,
   sheetView: 'tab',
   importDraft: null,
+  mic: { status: 'off', level: 0, reading: null },
+  micSensitivity: 0.7,
+  midi: { status: 'off', devices: [] },
+  practice: null,
 
   setPage: (page) => set({ page }),
   setText: (text) => set({ text, selectedEvent: null }),

@@ -1,6 +1,9 @@
 import { HarmonicaPicker, Transport } from '../components/Controls';
 import { Harmonica } from '../components/Harmonica';
+import { InputBar } from '../components/InputBar';
+import '../state/practice';
 import { Sheet } from '../components/Sheet';
+import { copyShareLink } from '../state/share';
 import { useHarmonicaKeyboard } from '../live/useHarmonicaKeyboard';
 import { previewEvent } from '../state/playback';
 import { useApp, useParsed } from '../state/store';
@@ -25,13 +28,17 @@ export function PlayPage() {
             <span className="chip plain">{meta.time} · {meta.tempo} bpm</span>
           </div>
         </div>
-        <HarmonicaPicker />
+        <div className="head-actions">
+          <button className="btn small ghost" onClick={() => void copyShareLink()} title="Copy a link that opens this tab">Share link</button>
+          <HarmonicaPicker />
+        </div>
       </header>
 
       <Transport showRecord />
 
       <div className={`stage ${recording ? 'is-recording' : ''}`}>
         <Harmonica />
+        <InputBar />
         <KeyHelp harp={parsed.harp} />
       </div>
 

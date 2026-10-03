@@ -28,7 +28,21 @@ export function Harmonica() {
   const keyOffset = useApp((s) => s.keyOffset);
   const showNames = useApp((s) => s.showNoteNames);
   const slideLatch = useApp((s) => s.slideLatch);
+  const practice = useApp((s) => s.practice);
   const flats = prefersFlats(harp.spec.key);
+
+  // Practice mode: the holes to play next.
+  const targets = useMemo(() => {
+    const map = new Map<number, HoleState>();
+    if (!practice) return map;
+    for (const s of score.events[practice.index]?.sounds ?? []) {
+      if (s.type !== 'hole') continue;
+      const st = map.get(s.hole) ?? {};
+      st[s.breath] = s;
+      map.set(s.hole, st);
+    }
+    return map;
+  }, [practice, score]);
 
   // Which reeds are lit, from live input and from playback.
   const lit = useMemo(() => {
@@ -165,7 +179,7 @@ export function Harmonica() {
           <div className="harp-holes">
             {harp.holes.map((h) => {
               const st = lit.get(h.hole);
-              return <Hole key={h.hole} harp={harp} hole={h.hole} state={st} flats={flats} />;
+              return <Hole key={h.hole} harp={harp} hole={h.hole} state={st} target={targets.get(h.hole)} flats={flats} />;
             })}
           </div>
         </div>
@@ -198,7 +212,7 @@ export function Harmonica() {
   );
 }
 
-function Hole({ harp, hole, state, flats }: { harp: Harp; hole: number; state?: HoleState; flats: boolean }) {
+function Hole({ harp, hole, state, target, flats }: { harp: Harp; hole: number; state?: HoleState; target?: HoleState; flats: boolean }) {
   const h = harp.holes[hole - 1];
   const bendsDraw = maxBend(harp, hole, 'draw');
   const bendsBlow = maxBend(harp, hole, 'blow');
@@ -215,7 +229,7 @@ function Hole({ harp, hole, state, flats }: { harp: Harp; hole: number; state?: 
     .join('\n');
   const active = state?.blow ?? state?.draw;
   return (
-    <div className={`hole ${state?.blow ? 'blow-on' : ''} ${state?.draw ? 'draw-on' : ''}`} title={tip}>
+    <div className={`hole ${state?.blow ? 'blow-on' : ''} ${state?.draw ? 'draw-on' : ''} ${target?.blow ? 'blow-target' : ''} ${target?.draw ? 'draw-target' : ''}`} title={tip}>
       <span className="hole-num">{hole}</span>
       <div className="hole-slot">
         <div className="reed blow" />

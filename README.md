@@ -32,6 +32,12 @@ npm run build
   Imports pick the best-fitting harmonica (or keep yours); chord sheets become harmonica chords.
 - **Export** — HarpTab, ABC (with the tab as a lyric line), MusicXML (tab as lyric line 2), MIDI, ChordPro.
 - **Staff view** — standard notation with the tab and lyrics under each note, synced to playback.
+- **Microphone** — play your real harmonica: live hole + note detection with a tuner (great for bends);
+  recording and practice work with it. Pitch detection (YIN) runs on an AudioWorklet feed.
+- **Practice mode** — the app highlights the next hole and waits until you play it (keyboard, mouse,
+  MIDI or mic), counting mistakes, with a Hint button.
+- **MIDI keyboard** input (Web MIDI; Chrome/Edge).
+- **Share links** — the whole tab compressed into the link's `#fragment`; nothing goes to a server.
 - **Library** — tabs saved locally (IndexedDB).
 
 See [docs/htab-format.md](docs/htab-format.md) for the tab format.
@@ -58,4 +64,4 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 2. ~~Tremolo & octave harmonicas~~ (numbered-notation / jianpu tabs for Asian tremolo still to come)
 3. ~~ABC / ChordPro / MusicXML / MIDI import & export, staff view~~
 4. ~~PDF chord-sheet import (then guitar tabs)~~
-5. Microphone input, practice mode, MIDI keyboard, share links, sampled harmonica sound
+5. ~~Microphone input, practice mode, MIDI keyboard, share links~~ · sampled harmonica sound

@@ -49,6 +49,11 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, on
     el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [activeEvents, follow]);
 
+  useEffect(() => {
+    if (!follow || selectedEvent === null || !root.current) return;
+    root.current.querySelector(`[data-index="${selectedEvent}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selectedEvent, follow]);
+
   const hasContent = doc.lines.some((l) => l.events.length || l.section);
   if (!hasContent) {
     return (

@@ -175,12 +175,13 @@ export function openPasteImport() {
   useApp.setState({ importDraft: { name: 'Pasted text', pasteText: '' } });
 }
 
-export function loadTabText(text: string, name: string) {
+/** Loads tab text as the current tab. `unchanged` marks it as having no edits yet (e.g. opened from a link). */
+export function loadTabText(text: string, name: string, opts: { unchanged?: boolean; message?: string } = {}) {
   if (!confirmDiscard()) return;
   stop();
   const s = useApp.getState();
-  s.loadText(text);
+  s.loadText(text, null, !!opts.unchanged);
   const { issues } = getParsed(text);
   const errors = issues.filter((i) => i.severity === 'error').length;
-  s.notify(errors ? `Imported "${name}" with ${errors} problem(s) — see the editor.` : `Imported "${name}" ✓`);
+  s.notify(errors ? `Imported "${name}" with ${errors} problem(s) — see the editor.` : opts.message ?? `Imported "${name}" ✓`);
 }

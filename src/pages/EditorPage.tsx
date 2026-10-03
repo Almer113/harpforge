@@ -3,6 +3,7 @@ import { CodeEditor, type CodeEditorHandle } from '../components/CodeEditor';
 import { HarmonicaPicker, Transport } from '../components/Controls';
 import { importFile, newTab, openPasteImport, saveCurrent } from '../state/actions';
 import { ExportMenu } from '../components/ExportMenu';
+import { copyShareLink } from '../state/share';
 import { Sheet } from '../components/Sheet';
 import { previewEvent } from '../state/playback';
 import { isDirty, useApp, useParsed } from '../state/store';
@@ -11,6 +12,7 @@ export function EditorPage() {
   const text = useApp((s) => s.text);
   const setText = useApp((s) => s.setText);
   const dirty = useApp(isDirty);
+  const docId = useApp((s) => s.docId);
   const parsed = useParsed();
   const editor = useRef<CodeEditorHandle>(null);
   const [showHelp, setShowHelp] = useState(false);
@@ -24,9 +26,10 @@ export function EditorPage() {
           <button className="btn" onClick={newTab}>New</button>
           <button className="btn" onClick={importFile}>Import…</button>
           <button className="btn" onClick={openPasteImport}>Paste…</button>
-          <button className="btn primary" onClick={() => void saveCurrent()}>{dirty ? 'Save' : 'Saved ✓'}</button>
+          <button className="btn primary" onClick={() => void saveCurrent()}>{dirty || !docId ? 'Save' : 'Saved ✓'}</button>
           <button className="btn" onClick={() => void saveCurrent(true)}>Save copy</button>
           <ExportMenu />
+          <button className="btn" onClick={() => void copyShareLink()} title="Copy a link that opens this tab">Share link</button>
           <button className={`btn ghost ${showHelp ? 'on' : ''}`} onClick={() => setShowHelp(!showHelp)}>Syntax help</button>
         </div>
         <HarmonicaPicker />
