@@ -1,71 +1,104 @@
 import { useRef, useState } from 'react';
 import { CodeEditor, type CodeEditorHandle } from '../components/CodeEditor';
-import { HarmonicaPicker, Transport } from '../components/Controls';
+import { Transport } from '../components/Controls';
+import { SongDetails } from '../components/editor/SongDetails';
+import { VisualEditor } from '../components/editor/VisualEditor';
 import { importFile, newTab, openPasteImport, saveCurrent } from '../state/actions';
 import { ExportMenu } from '../components/ExportMenu';
 import { copyShareLink } from '../state/share';
 import { Sheet } from '../components/Sheet';
 import { previewEvent } from '../state/playback';
-import { isDirty, useApp, useParsed } from '../state/store';
+import { isDirty, useApp, useParsed, type EditorMode } from '../state/store';
+
+const MODES: { id: EditorMode; label: string; hint: string }[] = [
+  { id: 'visual', label: 'Visual', hint: 'Drag-and-drop editor: measures, slots and note cards' },
+  { id: 'text', label: 'Text', hint: 'Edit the HarpTab text directly' },
+  { id: 'split', label: 'Split', hint: 'Text and a live preview side by side' },
+];
 
 export function EditorPage() {
-  const text = useApp((s) => s.text);
-  const setText = useApp((s) => s.setText);
+  const mode = useApp((s) => s.editorMode);
   const dirty = useApp(isDirty);
   const docId = useApp((s) => s.docId);
-  const parsed = useParsed();
-  const editor = useRef<CodeEditorHandle>(null);
   const [showHelp, setShowHelp] = useState(false);
 
-  const lineOf = (offset: number) => text.slice(0, offset).split('\n').length;
-
   return (
-    <section className="page editor-page">
-      <div className="toolbar">
-        <div className="tb-group">
-          <button className="btn" onClick={newTab}>New</button>
-          <button className="btn" onClick={importFile}>Import…</button>
-          <button className="btn" onClick={openPasteImport}>Paste…</button>
-          <button className="btn primary" onClick={() => void saveCurrent()}>{dirty || !docId ? 'Save' : 'Saved ✓'}</button>
-          <button className="btn" onClick={() => void saveCurrent(true)}>Save copy</button>
-          <ExportMenu />
-          <button className="btn" onClick={() => void copyShareLink()} title="Copy a link that opens this tab">Share link</button>
-          <button className={`btn ghost ${showHelp ? 'on' : ''}`} onClick={() => setShowHelp(!showHelp)}>Syntax help</button>
+    <section className={`page editor-page mode-${mode}`}>
+      <SongDetails />
+
+      <div className="editor-bar">
+        <div className="seg big" role="tablist" aria-label="Editor mode">
+          {MODES.map((m) => (
+            <button key={m.id} role="tab" aria-selected={mode === m.id} className={mode === m.id ? 'on' : ''} title={m.hint} onClick={() => useApp.setState({ editorMode: m.id })}>
+              {m.label}
+            </button>
+          ))}
         </div>
-        <HarmonicaPicker />
+        <div className="tb-group">
+          <button className="btn small ghost" onClick={newTab}>New</button>
+          <button className="btn small ghost" onClick={importFile}>Import…</button>
+          <button className="btn small ghost" onClick={openPasteImport}>Paste…</button>
+          <ExportMenu small />
+          <button className="btn small ghost" onClick={() => void copyShareLink()} title="Copy a link that opens this tab">Share</button>
+          <button className="btn small ghost" onClick={() => void saveCurrent(true)}>Save copy</button>
+          <button className="btn small primary" onClick={() => void saveCurrent()} title="Save to your library (Ctrl+S)">{dirty || !docId ? 'Save' : 'Saved ✓'}</button>
+        </div>
       </div>
 
       <Transport />
 
-      {showHelp && <SyntaxHelp />}
-
-      <div className="editor-split">
-        <div className="editor-pane">
-          <CodeEditor ref={editor} value={text} onChange={setText} issues={parsed.issues} />
-          <div className={`issues ${parsed.issues.length ? '' : 'ok'}`}>
-            {parsed.issues.length === 0 ? (
-              <span>✓ No problems</span>
-            ) : (
-              parsed.issues.slice(0, 50).map((is, i) => (
-                <button key={i} className={`issue ${is.severity}`} onClick={() => editor.current?.select(is.span.start, is.span.end)}>
-                  <b>Line {lineOf(is.span.start)}</b> {is.message}
-                </button>
-              ))
-            )}
+      {mode === 'visual' ? (
+        <VisualEditor />
+      ) : (
+        <>
+          <div className="text-help-row">
+            <button className={`btn small ghost ${showHelp ? 'on' : ''}`} onClick={() => setShowHelp(!showHelp)}>Syntax help</button>
           </div>
-        </div>
-        <div className="preview-pane">
-          <Sheet
-            parsed={parsed}
-            title="Preview"
-            onSelect={(i, ev) => {
-              void previewEvent(i);
-              if (ev?.src) editor.current?.select(ev.src.start, ev.src.end);
-            }}
-          />
-        </div>
-      </div>
+          {showHelp && <SyntaxHelp />}
+          <TextEditor split={mode === 'split'} />
+        </>
+      )}
     </section>
+  );
+}
+
+function TextEditor({ split }: { split: boolean }) {
+  const text = useApp((s) => s.text);
+  const setText = useApp((s) => s.setText);
+  const parsed = useParsed();
+  const editor = useRef<CodeEditorHandle>(null);
+  const lineOf = (offset: number) => text.slice(0, offset).split('\n').length;
+  const editorPane = (
+    <div className="editor-pane">
+      <CodeEditor ref={editor} value={text} onChange={(t) => setText(t, { kind: 'typing' })} issues={parsed.issues} />
+      <div className={`issues ${parsed.issues.length ? '' : 'ok'}`}>
+        {parsed.issues.length === 0 ? (
+          <span>✓ No problems</span>
+        ) : (
+          parsed.issues.slice(0, 50).map((is, i) => (
+            <button key={i} className={`issue ${is.severity}`} onClick={() => editor.current?.select(is.span.start, is.span.end)}>
+              <b>Line {lineOf(is.span.start)}</b> {is.message}
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+  if (!split) return <div className="editor-single">{editorPane}</div>;
+  return (
+    <div className="editor-split">
+      {editorPane}
+      <div className="preview-pane">
+        <Sheet
+          parsed={parsed}
+          title="Preview"
+          onSelect={(i, ev) => {
+            void previewEvent(i);
+            if (ev?.src) editor.current?.select(ev.src.start, ev.src.end);
+          }}
+        />
+      </div>
+    </div>
   );
 }
 

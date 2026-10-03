@@ -54,6 +54,25 @@ function loadWorking(): { text: string; docId: string | null; savedText: string 
 }
 
 export type SheetView = 'tab' | 'staff' | 'numbers';
+export type EditorMode = 'visual' | 'text' | 'split';
+
+/** Visual editor UI state. Positions are (measure index, start beat). */
+export interface VisualState {
+  selection: import('../core/edit/model').Pos[];
+  caret: import('../core/edit/model').Pos;
+  /** Measure shown in the inspector when no note is selected. */
+  measure: number;
+  /** Duration tool for new notes: base value in beats, dotted, triplet. */
+  dur: number;
+  dotted: boolean;
+  triplet: boolean;
+  snap: number;
+  zoom: number;
+  /** Step entry: playing a hole inserts it at the caret. */
+  step: boolean;
+  /** Sound used for notes added without the harmonica. */
+  lastSounds: import('../core/types').Sound[];
+}
 
 /** A file or pasted text waiting in the import dialog. */
 export interface ImportDraft {
@@ -131,10 +150,17 @@ export interface AppState {
   practice: PracticeState | null;
   /** Recorded harmonica samples or the synthesized reed. */
   soundMode: 'samples' | 'synth';
+  editorMode: EditorMode;
+  ve: VisualState;
+  setVe(patch: Partial<VisualState>): void;
   samplesStatus: 'idle' | 'loading' | 'ready' | 'error';
 
   setPage(p: Page): void;
-  setText(t: string): void;
+  /** Changes the tab text and records an undo step ('typing' groups quick keystrokes). */
+  setText(t: string, opts?: { kind?: 'typing' | 'edit' }): void;
+  undo(): void;
+  redo(): void;
+  history: { past: string[]; future: string[]; lastKind: string; lastAt: number };
   loadText(t: string, docId?: string | null, saved?: boolean): void;
   markSaved(docId: string): void;
   notify(message: string): void;
@@ -178,12 +204,51 @@ export const useApp = create<AppState>((set) => ({
   midi: { status: 'off', devices: [] },
   practice: null,
   soundMode: prefs.soundMode === 'synth' ? 'synth' : 'samples',
+  editorMode: 'visual',
+  ve: {
+    selection: [],
+    caret: { m: 0, start: 0 },
+    measure: 0,
+    dur: 1,
+    dotted: false,
+    triplet: false,
+    snap: 0.5,
+    zoom: 64,
+    step: false,
+    lastSounds: [{ type: 'hole', hole: 4, breath: 'blow', bend: 0, over: false, slide: false }],
+  },
+  setVe: (patch) => set((s) => ({ ve: { ...s.ve, ...patch } })),
   samplesStatus: 'idle',
 
   setPage: (page) => set({ page }),
-  setText: (text) => set({ text, selectedEvent: null }),
+  setText: (text, opts) =>
+    set((s) => {
+      if (text === s.text) return {};
+      const kind = opts?.kind ?? 'edit';
+      const now = Date.now();
+      const h = s.history;
+      const merge = kind === 'typing' && h.lastKind === 'typing' && now - h.lastAt < 1200;
+      return {
+        text,
+        selectedEvent: null,
+        history: { past: merge ? h.past : [...h.past, s.text].slice(-300), future: [], lastKind: kind, lastAt: now },
+      };
+    }),
+  undo: () =>
+    set((s) => {
+      const h = s.history;
+      if (!h.past.length) return {};
+      return { text: h.past[h.past.length - 1], selectedEvent: null, history: { past: h.past.slice(0, -1), future: [s.text, ...h.future], lastKind: 'undo', lastAt: 0 } };
+    }),
+  redo: () =>
+    set((s) => {
+      const h = s.history;
+      if (!h.future.length) return {};
+      return { text: h.future[0], selectedEvent: null, history: { past: [...h.past, s.text], future: h.future.slice(1), lastKind: 'redo', lastAt: 0 } };
+    }),
+  history: { past: [], future: [], lastKind: '', lastAt: 0 },
   loadText: (text, docId = null, saved = false) =>
-    set({ text, docId, savedText: saved ? text : null, selectedEvent: null, activeEvents: [] }),
+    set({ text, docId, savedText: saved ? text : null, selectedEvent: null, activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0 } }),
   markSaved: (docId) => set((s) => ({ docId, savedText: s.text })),
   notify: (message) => set({ toast: { message, id: Date.now() } }),
 }));

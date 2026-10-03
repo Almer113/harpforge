@@ -144,7 +144,7 @@ function breathOf(sounds: Sound[]): string {
   return 'mixed';
 }
 
-function Glyph({ sound, flats }: { sound: Sound; flats: boolean }) {
+export function Glyph({ sound, flats }: { sound: Sound; flats: boolean }) {
   if (sound.type === 'pitch') return <span className="glyph pitch">{midiToName(sound.midi, flats)}</span>;
   return (
     <span className={`glyph ${sound.breath}`}>

@@ -26,7 +26,8 @@ function isTyping(target: EventTarget | null): boolean {
   return el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
 }
 
-export function useHarmonicaKeyboard(enabled: boolean) {
+export function useHarmonicaKeyboard(enabled: boolean, opts: { arrows?: boolean } = {}) {
+  const arrows = opts.arrows ?? true;
   useEffect(() => {
     if (!enabled) return;
     let bendLevel = 0;
@@ -86,7 +87,7 @@ export function useHarmonicaKeyboard(enabled: boolean) {
         }
         return;
       }
-      if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+      if (arrows && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
         const h = harp();
         const maxOffset = Math.max(0, h.holes.length - BLOW_CODES.length);
         const { keyOffset } = useApp.getState();
@@ -149,5 +150,5 @@ export function useHarmonicaKeyboard(enabled: boolean) {
       window.removeEventListener('blur', onBlur);
       onBlur();
     };
-  }, [enabled]);
+  }, [enabled, arrows]);
 }

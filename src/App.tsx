@@ -70,6 +70,20 @@ export function App() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         void saveCurrent();
+        return;
+      }
+      // Undo / redo for every edit (visual and text). Plain inputs keep their own undo.
+      const el = e.target as HTMLElement;
+      const plainInput = (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && !el.closest('.code-editor');
+      if ((e.ctrlKey || e.metaKey) && !plainInput) {
+        const k = e.key.toLowerCase();
+        if (k === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          useApp.getState().undo();
+        } else if (k === 'y' || (k === 'z' && e.shiftKey)) {
+          e.preventDefault();
+          useApp.getState().redo();
+        }
       }
     };
     window.addEventListener('keydown', onKey);

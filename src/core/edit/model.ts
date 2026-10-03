@@ -169,6 +169,17 @@ function itemEvent(it: Item): TabEvent {
 
 // ---- Editing --------------------------------------------------------------------------------
 
+/** The "end of song" bar belongs on the last measure: move it there after the song grows. */
+function keepFinalBarLast(s: Song): Song {
+  const last = s.measures.length - 1;
+  const i = s.measures.findIndex((m, k) => k < last && m.endBar === 'final');
+  if (i >= 0 && s.measures[last].endBar === 'single') {
+    s.measures[i].endBar = 'single';
+    s.measures[last].endBar = 'final';
+  }
+  return s;
+}
+
 function cloneSong(song: Song): Song {
   return { ...song, measures: song.measures.map((m) => ({ ...m, items: m.items.map((it) => ({ ...it })) })) };
 }
@@ -202,7 +213,7 @@ export function placeItem(song: Song, m: number, item: Item): Song {
   });
   meas.items.push({ ...item, start, dur });
   meas.items.sort((a, b) => a.start - b.start);
-  return s;
+  return keepFinalBarLast(s);
 }
 
 export function removeItems(song: Song, positions: Pos[]): Song {
@@ -241,7 +252,7 @@ export function moveItem(song: Song, from: Pos, to: Pos, copy = false): Song {
 export function insertMeasure(song: Song, at: number): Song {
   const s = cloneSong(song);
   s.measures.splice(Math.max(0, Math.min(at, s.measures.length)), 0, emptyMeasure(false));
-  return s;
+  return keepFinalBarLast(s);
 }
 
 export function deleteMeasure(song: Song, m: number): Song {

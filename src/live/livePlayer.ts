@@ -20,7 +20,7 @@ function setHeld(id: string, sound: HoleSound | null) {
 }
 
 const silentIds = new Set<string>();
-type PlayedListener = (midi: number, id: string) => void;
+type PlayedListener = (midi: number, id: string, sound: HoleSound) => void;
 const playedListeners = new Set<PlayedListener>();
 
 /** Subscribe to every note started live (keyboard, mouse, MIDI, microphone). */
@@ -46,7 +46,7 @@ export function press(id: string, sound: HoleSound, opts: { silent?: boolean } =
   }
   setHeld(id, sound);
   recordPress(id, sound);
-  for (const fn of playedListeners) fn(midi, id);
+  for (const fn of playedListeners) fn(midi, id, sound);
   return true;
 }
 

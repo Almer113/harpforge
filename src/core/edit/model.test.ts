@@ -95,6 +95,12 @@ describe('edit model: measures and time signatures', () => {
     expect(body(deleteMeasure(s, 0))).toBe('-4 -5 -6 -7 |');
   });
 
+  it('moves the end bar to the new last measure when the song grows', () => {
+    const s = song('4 5 6 7 |]');
+    expect(body(insertMeasure(s, 1))).toBe('4 5 6 7 | .~~~ |]');
+    expect(body(placeItem(s, 2, { start: 0, dur: 1, sounds: [holeSound(4, 'blow')] }))).toBe('4 5 6 7 | .~~~ | 4 .~~ |]');
+  });
+
   it('keeps bars when only the meter changes, or reflows notes into the new bars', () => {
     const s = song('4 5 6 7 | -4 -5~ -6 |');
     const kept = setTimeSignature(s, '3/4', false);
