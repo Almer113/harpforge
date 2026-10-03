@@ -125,7 +125,7 @@ export function isChordLine(line: string): boolean {
   return chords.length / words.length >= 0.75 && chords.length >= 1 && !(words.length === 1 && /^(A|I)$/.test(words[0]) && line.length > 3);
 }
 
-const SECTION_RE = /^\s*[[(]?\s*(intro|verse|pre-?chorus|chorus|bridge|outro|interlude|solo|refrain|hook|instrumental|ending|coda|riff|break)\b[^\]):]*[\]):]?\s*/i;
+const SECTION_RE = /^\s*[[(]?\s*(intro|verse|pre-?chorus|post-?chorus|chorus|bridge|outro|interlude|intermezzo|solo|refrain|hook|instrumental|ending|coda|riff|break|tag|vamp)\b[^\]):]*[\]):]?\s*/i;
 
 /** Converts Ultimate-Guitar-style text (chord lines above lyric lines) to ChordPro. */
 export function chordsOverLyricsToChordPro(text: string): string {
@@ -165,12 +165,33 @@ export function chordsOverLyricsToChordPro(text: string): string {
     if (first && first.trim().length < 60) out.push(`{title: ${first.trim()}}`);
   }
 
+  let inDiagrams = false;
   while (i < src.length) {
     const line = src[i];
     const trimmed = line.trim();
-    if (!trimmed || /^(capo|key|tuning|tempo|bpm)\b/i.test(trimmed) || /\bchords\s+by\b/i.test(trimmed)) {
+    if (
+      !trimmed ||
+      /^(capo|key|tuning|tempo|bpm|description|difficulty|author|strumming|rating|transpose)\b/i.test(trimmed) ||
+      /\b(chords|tabs?)\s+by\b/i.test(trimmed) ||
+      /^[\dxXoO\s|.,-]+$/.test(trimmed) || // chord-diagram fingerings like "342" or "x32010"
+      /^\d+\s*fr\b/i.test(trimmed)
+    ) {
       i++;
       continue;
+    }
+    // A "CHORDS" heading starts the chord-diagram block: skip it until the song starts.
+    if (/^chords:?$/i.test(trimmed)) {
+      inDiagrams = true;
+      i++;
+      continue;
+    }
+    if (inDiagrams) {
+      const words = trimmed.split(/\s+/).filter((w) => /^[a-z']{2,}$/i.test(w));
+      if (SECTION_RE.test(line) || (!isChordLine(line) && words.length >= 3)) inDiagrams = false;
+      else {
+        i++;
+        continue;
+      }
     }
     // Section headers: "[Chorus]", "Verse 1:", "(Bridge)". The rest of the line may hold chords.
     const sec = SECTION_RE.exec(line);
@@ -197,21 +218,36 @@ export function chordsOverLyricsToChordPro(text: string): string {
         if (lyric.length < maxCol) lyric = lyric.padEnd(maxCol, ' ');
         let merged = '';
         let pos = 0;
+        let lastChordCol = -1;
         for (const c of chords) {
           // A chord over the gap before a word belongs to that word.
           let col = c.col;
           if (lyric[col] === ' ' && lyric[col + 1] && lyric[col + 1] !== ' ') col++;
-          // A chord over the middle of a word moves to the word's start, so lyrics stay whole.
-          while (col > pos && lyric[col] && lyric[col] !== ' ' && lyric[col - 1] !== ' ') col--;
+          // A chord over the middle of a word moves to the word's start, so lyrics stay whole —
+          // unless an earlier chord already claimed that word; then it goes after the word.
+          if (lyric[col] && lyric[col] !== ' ' && col > 0 && lyric[col - 1] !== ' ') {
+            let start = col;
+            while (start > 0 && lyric[start - 1] !== ' ') start--;
+            if (start > lastChordCol) col = start;
+            else {
+              while (col < lyric.length && lyric[col] !== ' ') col++;
+              if (col < lyric.length) col++;
+            }
+          }
           col = Math.max(col, pos);
           merged += lyric.slice(pos, col) + `[${c.sym}]`;
           pos = col;
+          lastChordCol = col;
         }
         merged += lyric.slice(pos);
         out.push(merged.replace(/\s+$/, ''));
         i += 2;
       } else {
-        out.push(chords.map((c) => `[${c.sym}]`).join(' '));
+        // A chords-only line; "x4" repeats it.
+        const rep = /(?:^|\s)[xX×](\d{1,2})\b|\b(\d{1,2})[xX×](?:\s|$)/.exec(line);
+        const times = rep ? Math.min(16, parseInt(rep[1] ?? rep[2], 10)) : 1;
+        const once = chords.map((c) => `[${c.sym}]`).join(' ');
+        out.push(Array.from({ length: times }, () => once).join(' '));
         i++;
       }
       continue;

@@ -1,11 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Toast } from './components/Controls';
 import { ImportDialog } from './components/ImportDialog';
 import { ConvertPage } from './pages/ConvertPage';
 import { EditorPage } from './pages/EditorPage';
 import { LibraryPage } from './pages/LibraryPage';
 import { PlayPage } from './pages/PlayPage';
-import { saveCurrent } from './state/actions';
+import { importFromFile, saveCurrent } from './state/actions';
 import { isDirty, useApp, useParsed, type Page } from './state/store';
 import { seedDemos } from './storage/library';
 
@@ -21,6 +21,44 @@ export function App() {
   const setPage = useApp((s) => s.setPage);
   const dirty = useApp(isDirty);
   const { doc } = useParsed();
+
+  // Drag & drop a file anywhere to import it.
+  const [dragging, setDragging] = useState(false);
+  useEffect(() => {
+    let depth = 0;
+    const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+    const enter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      depth++;
+      setDragging(true);
+    };
+    const leave = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      depth = Math.max(0, depth - 1);
+      if (!depth) setDragging(false);
+    };
+    const over = (e: DragEvent) => {
+      if (hasFiles(e)) e.preventDefault();
+    };
+    const drop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth = 0;
+      setDragging(false);
+      const file = e.dataTransfer?.files[0];
+      if (file) void importFromFile(file);
+    };
+    window.addEventListener('dragenter', enter);
+    window.addEventListener('dragleave', leave);
+    window.addEventListener('dragover', over);
+    window.addEventListener('drop', drop);
+    return () => {
+      window.removeEventListener('dragenter', enter);
+      window.removeEventListener('dragleave', leave);
+      window.removeEventListener('dragover', over);
+      window.removeEventListener('drop', drop);
+    };
+  }, []);
 
   useEffect(() => {
     void seedDemos();
@@ -65,6 +103,14 @@ export function App() {
         {page === 'convert' && <ConvertPage />}
         {page === 'library' && <LibraryPage />}
       </main>
+      {dragging && (
+        <div className="drop-overlay">
+          <div>
+            <b>Drop to import</b>
+            <span>PDF, chord sheet, ABC, MusicXML, MIDI, ChordPro or tab</span>
+          </div>
+        </div>
+      )}
       <ImportDialog />
       <Toast />
     </div>

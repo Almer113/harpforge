@@ -5,7 +5,8 @@ import { serializeHtab } from '../htab/serializer';
 import type { TabDoc } from '../htab/types';
 import type { Harmonica } from '../instruments';
 import { parseAbc, writeAbc } from './abc';
-import { looksLikeChordPro, looksLikeChordSheet, parseChordPro, parseChordSheetText, writeChordPro } from './chordpro';
+import { isChordLine, looksLikeChordPro, looksLikeChordSheet, parseChordPro, parseChordSheetText, writeChordPro } from './chordpro';
+import { countTabLines, looksLikeGuitarTab, parseGuitarTab } from './guitartab';
 import type { Imported } from './common';
 import { slugify } from './common';
 import { parseMidi, writeMidi } from './midi';
@@ -13,15 +14,17 @@ import { parseMusicXml, unzipMxl, writeMusicXml } from './musicxml';
 
 export type { Imported } from './common';
 
-export type ImportKind = 'htab' | 'abc' | 'chordpro' | 'chordsheet' | 'musicxml' | 'mxl' | 'midi';
+export type ImportKind = 'htab' | 'abc' | 'chordpro' | 'chordsheet' | 'guitartab' | 'musicxml' | 'mxl' | 'midi' | 'pdf';
 
-export const IMPORT_ACCEPT = '.htab,.txt,.abc,.cho,.chopro,.chordpro,.crd,.pro,.musicxml,.xml,.mxl,.mid,.midi,text/plain';
+export const IMPORT_ACCEPT = '.htab,.txt,.pdf,.tab,.abc,.cho,.chopro,.chordpro,.crd,.pro,.musicxml,.xml,.mxl,.mid,.midi,text/plain';
 
 export const FORMAT_NAMES: Record<ImportKind, string> = {
   htab: 'HarpTab',
   abc: 'ABC notation',
   chordpro: 'ChordPro',
   chordsheet: 'Chord sheet (chords over lyrics)',
+  guitartab: 'Guitar tab',
+  pdf: 'PDF',
   musicxml: 'MusicXML',
   mxl: 'Compressed MusicXML',
   midi: 'MIDI',
@@ -34,12 +37,16 @@ export function sniffText(text: string): ImportKind {
   if (t.startsWith('<?xml') || /<score-partwise|<score-timewise/.test(t.slice(0, 2000))) return 'musicxml';
   if (t.startsWith('---')) return 'htab';
   if (looksLikeChordPro(t)) return 'chordpro';
+  const tabLines = countTabLines(t);
+  const chordLines = t.split('\n').filter((l) => isChordLine(l)).length;
+  if (looksLikeGuitarTab(t) && tabLines >= chordLines) return 'guitartab';
   if (looksLikeChordSheet(t)) return 'chordsheet';
   return 'htab';
 }
 
 export function detectKind(filename: string, bytes: Uint8Array): ImportKind {
   const ext = filename.toLowerCase().split('.').pop() ?? '';
+  if (ext === 'pdf' || (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46)) return 'pdf';
   if (ext === 'mid' || ext === 'midi' || (bytes[0] === 0x4d && bytes[1] === 0x54 && bytes[2] === 0x68 && bytes[3] === 0x64)) return 'midi';
   if (ext === 'mxl' || (bytes[0] === 0x50 && bytes[1] === 0x4b)) return 'mxl';
   if (ext === 'abc') return 'abc';
@@ -61,6 +68,8 @@ export function importText(text: string, kind: ImportKind = sniffText(text)): Im
       return parseChordPro(text);
     case 'chordsheet':
       return parseChordSheetText(text);
+    case 'guitartab':
+      return parseGuitarTab(text);
     case 'musicxml':
       return parseMusicXml(text);
     default: {
@@ -74,6 +83,7 @@ export function importBytes(filename: string, bytes: Uint8Array): Imported & { k
   const kind = detectKind(filename, bytes);
   if (kind === 'midi') return { ...parseMidi(bytes), kind };
   if (kind === 'mxl') return { ...parseMusicXml(unzipMxl(bytes)), kind };
+  if (kind === 'pdf') throw new Error('PDFs are read asynchronously — use importPdf().');
   return { ...importText(decodeText(bytes), kind), kind };
 }
 

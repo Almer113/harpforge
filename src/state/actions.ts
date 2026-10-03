@@ -7,7 +7,7 @@ import { bodyText } from '../core/htab/serializer';
 import { getHarmonica, specId, type HarmonicaSpec } from '../core/instruments';
 import { BLANK } from '../demo/songs';
 import { isChordSheet, octaveOptions } from '../core/convert';
-import { decodeText, exportDoc, importBytes, IMPORT_ACCEPT, type ExportKind, type Imported } from '../core/formats';
+import { decodeText, detectKind, exportDoc, FORMAT_NAMES, importBytes, IMPORT_ACCEPT, importText, sniffText, type ExportKind, type Imported } from '../core/formats';
 import { saveTab } from '../storage/library';
 import { stop } from './playback';
 import { getParsed, isDirty, useApp } from './store';
@@ -109,29 +109,65 @@ function isPitchOnly(imported: Imported): boolean {
   return pitches > 0;
 }
 
-/** Opens a file picker; tabs load directly, everything else goes through the import dialog. */
+/** Imports a file: tabs load directly, everything else goes through the import dialog. */
+export async function importFromFile(file: File) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (detectKind(file.name, bytes) === 'pdf') {
+    await importPdfFile(file.name, bytes);
+    return;
+  }
+  let imported: ReturnType<typeof importBytes>;
+  try {
+    imported = importBytes(file.name, bytes);
+  } catch (e) {
+    useApp.setState({ importDraft: { name: file.name, error: (e as Error).message } });
+    return;
+  }
+  if (imported.kind === 'htab' && !isChordSheet(imported.doc) && !isPitchOnly(imported)) {
+    loadTabText(decodeText(bytes), file.name);
+    return;
+  }
+  useApp.setState({ importDraft: { name: file.name, imported } });
+}
+
+/** Opens a file picker and imports the chosen file. */
 export function importFile() {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = IMPORT_ACCEPT;
-  input.onchange = async () => {
+  input.onchange = () => {
     const file = input.files?.[0];
-    if (!file) return;
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    let imported: ReturnType<typeof importBytes>;
-    try {
-      imported = importBytes(file.name, bytes);
-    } catch (e) {
-      useApp.setState({ importDraft: { name: file.name, error: (e as Error).message } });
-      return;
-    }
-    if (imported.kind === 'htab' && !isChordSheet(imported.doc) && !isPitchOnly(imported)) {
-      loadTabText(decodeText(bytes), file.name);
-      return;
-    }
-    useApp.setState({ importDraft: { name: file.name, imported } });
+    if (file) void importFromFile(file);
   };
   input.click();
+}
+
+async function importPdfFile(name: string, bytes: Uint8Array) {
+  const stillOpen = () => useApp.getState().importDraft?.name === name;
+  useApp.setState({ importDraft: { name, progress: { message: 'Opening PDF…', fraction: 0 } } });
+  try {
+    const { readPdf } = await import('../core/formats/pdf');
+    const res = await readPdf(bytes, (message, fraction) => {
+      const d = useApp.getState().importDraft;
+      if (d?.name === name && d.progress) useApp.setState({ importDraft: { ...d, progress: { message, fraction } } });
+    });
+    if (!stillOpen()) return;
+    if (!res.text.trim()) throw new Error('No text could be found in this PDF.');
+    const sniffed = sniffText(res.text);
+    const kind = sniffed === 'htab' ? 'chordsheet' : sniffed;
+    const imp = importText(res.text, kind);
+    const hasContent = imp.doc.lines.some((l) => l.events.some((e) => e.kind === 'note' || (e.kind === 'rest' && e.chord)));
+    if (!hasContent) throw new Error('Couldn’t find chords or tab in this PDF. You can paste its text instead (Paste…).');
+    imp.format = `PDF → ${FORMAT_NAMES[kind]}`;
+    if (res.ocrPages) {
+      imp.warnings.unshift(
+        `${res.ocrPages === res.pages ? 'This PDF is made of images' : `${res.ocrPages} page(s) are images`}, so the text was recognised by OCR — check the chords and lyrics (or edit the recognised text).`,
+      );
+    }
+    useApp.setState({ importDraft: { name, imported: { ...imp, kind }, sourceText: res.text } });
+  } catch (e) {
+    if (stillOpen()) useApp.setState({ importDraft: { name, error: (e as Error).message } });
+  }
 }
 
 /** Opens the import dialog in paste mode. */

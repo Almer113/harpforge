@@ -444,3 +444,21 @@ select:focus, .search:focus { border-color: var(--brass); }
 .octave-ctl > span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); font-weight: 700; }
 .octave-ctl .seg button { padding: 5px 11px; font-size: 11px; }
 .seg button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Import progress */
+.progress-box { display: flex; gap: 16px; align-items: center; padding: 18px 4px; }
+.progress-text { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.progress-bar { height: 6px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
+.progress-bar > div { height: 100%; background: var(--brass); transition: width 0.25s; }
+.spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--panel-2); border-top-color: var(--brass); animation: spin 0.8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Drag & drop */
+.drop-overlay {
+  position: fixed; inset: 0; z-index: 70; pointer-events: none;
+  display: grid; place-items: center; background: rgba(19, 17, 15, 0.7);
+  border: 3px dashed var(--brass); border-radius: 18px; margin: 10px;
+}
+.drop-overlay div { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.drop-overlay b { font-size: 22px; color: var(--brass-2); }
+.drop-overlay span { color: var(--muted); }

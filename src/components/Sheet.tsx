@@ -1,7 +1,10 @@
+import { lazy, Suspense } from 'react';
 import type { NoteEvent, RestEvent } from '../core/htab/types';
 import { useApp, type Parsed } from '../state/store';
-import { StaffView } from './StaffView';
 import { TabView } from './TabView';
+
+// Sheet music pulls in abcjs; load it only when the staff view is opened.
+const StaffView = lazy(() => import('./StaffView').then((m) => ({ default: m.StaffView })));
 
 /** The song sheet with a Tab / Staff switch. */
 export function Sheet({
@@ -48,7 +51,9 @@ export function Sheet({
       {view === 'tab' ? (
         <TabView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} showNoteNames={showNoteNames} onCardClick={onSelect} />
       ) : (
-        <StaffView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onNoteClick={(i) => onSelect(i, eventAt(i))} />
+        <Suspense fallback={<p className="muted">Loading sheet music…</p>}>
+          <StaffView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onNoteClick={(i) => onSelect(i, eventAt(i))} />
+        </Suspense>
       )}
     </div>
   );

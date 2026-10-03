@@ -49,7 +49,7 @@ export function ImportDialog() {
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div className="modal" role="dialog" aria-modal="true" aria-label="Import">
-        <ImportBody key={draft.name} />
+        <ImportBody key={`${draft.name}:${draft.pasteText !== undefined ? "paste" : "file"}`} />
       </div>
     </div>
   );
@@ -127,6 +127,28 @@ function ImportBody() {
     useApp.getState().setPage('play');
   };
 
+  if (draft.progress && !draft.imported) {
+    return (
+      <>
+        <div className="modal-head">
+          <h2>Importing “{draft.name}”</h2>
+          <button className="modal-x" onClick={close} aria-label="Cancel">×</button>
+        </div>
+        <div className="progress-box">
+          <div className="spinner" aria-hidden />
+          <div className="progress-text">
+            <b>{draft.progress.message}</b>
+            <span className="muted">Image-based PDFs are read with text recognition, which can take a few seconds per page.</span>
+            <div className="progress-bar"><div style={{ width: `${Math.round(draft.progress.fraction * 100)}%` }} /></div>
+          </div>
+        </div>
+        <div className="modal-actions">
+          <button className="btn" onClick={close}>Cancel</button>
+        </div>
+      </>
+    );
+  }
+
   if (draft.error) {
     return (
       <>
@@ -142,13 +164,22 @@ function ImportBody() {
   }
 
   const meta = imported?.doc.meta;
-  const formatName = imported ? (imported.kind && imported.kind in FORMAT_NAMES ? FORMAT_NAMES[imported.kind as keyof typeof FORMAT_NAMES] : imported.format) : null;
+  const formatName = imported
+    ? imported.format.includes('→') || !(imported.kind && imported.kind in FORMAT_NAMES)
+      ? imported.format
+      : FORMAT_NAMES[imported.kind as keyof typeof FORMAT_NAMES]
+    : null;
 
   return (
     <>
       <div className="modal-head">
         <h2>{pasteMode ? 'Paste & import' : `Import “${draft.name}”`}</h2>
         {formatName && <span className="chip">{formatName}</span>}
+        {draft.sourceText && (
+          <button className="btn small ghost" onClick={() => useApp.setState({ importDraft: { name: draft.name, pasteText: draft.sourceText } })} title="Fix any recognition mistakes, then import">
+            Edit recognised text
+          </button>
+        )}
         <button className="modal-x" onClick={close} aria-label="Close">×</button>
       </div>
 

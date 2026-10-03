@@ -62,6 +62,10 @@ export interface ImportDraft {
   pasteText?: string;
   imported?: import('../core/formats').Imported & { kind: import('../core/formats').ImportKind };
   error?: string;
+  /** While a PDF is being read. */
+  progress?: { message: string; fraction: number };
+  /** Text recognised from a PDF, so it can be corrected by hand. */
+  sourceText?: string;
 }
 
 export interface RecordingState {

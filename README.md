@@ -24,8 +24,11 @@ npm run build
 - **Editor** — syntax-highlighted `.htab` text with error squiggles and a live, clickable tab preview.
 - **Convert** — paste notes (or a tab), get a ranked list of the best harmonicas/positions,
   and the tab for the one you pick. Switching a song's harmonica re-tabs it automatically.
-- **Import** — HarpTab, ABC, MusicXML (`.musicxml`/`.xml`/`.mxl`), MIDI, ChordPro, and plain
-  "chords over lyrics" sheets (Ultimate Guitar style, with capo handling) — from a file or pasted text.
+- **Import** — HarpTab, ABC, MusicXML (`.musicxml`/`.xml`/`.mxl`), MIDI, ChordPro, plain
+  "chords over lyrics" sheets (Ultimate Guitar style, with capo and `x4` repeats), ASCII guitar tab,
+  and **PDF** — from a file, drag & drop, or pasted text. Image-only PDFs (like Ultimate Guitar's
+  downloads) are read with OCR (Tesseract, loaded on demand), with chord-aware corrections and an
+  "Edit recognised text" step.
   Imports pick the best-fitting harmonica (or keep yours); chord sheets become harmonica chords.
 - **Export** — HarpTab, ABC (with the tab as a lyric line), MusicXML (tab as lyric line 2), MIDI, ChordPro.
 - **Staff view** — standard notation with the tab and lyrics under each note, synced to playback.
@@ -42,7 +45,8 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `src/core/score.ts` | Timed, pitched view of a tab (what plays) |
 | `src/core/convert.ts` | tab ↔ notes, re-tabbing, chord sheets, harmonica suggestions |
 | `src/core/chords.ts` | Chord symbols and the harmonica chord finder |
-| `src/core/formats` | ABC, ChordPro / chord sheets, MusicXML, MIDI readers & writers |
+| `src/core/formats` | ABC, ChordPro / chord sheets, guitar tab, MusicXML, MIDI readers & writers |
+| `src/core/formats/pdf*.ts` | PDF text layer / OCR → positioned words → column-aligned chord sheet |
 | `src/audio/engine.ts` | Tone.js reed synth, live voices, transport playback |
 | `src/live` | Keyboard/mouse input and recording |
 | `src/state` | Zustand store, playback controls, actions |
@@ -53,5 +57,5 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 1. ~~Core model, `.htab`, conversion~~ · ~~Playable harmonica~~ · ~~Tab view + autoplay, record, editor, library~~
 2. ~~Tremolo & octave harmonicas~~ (numbered-notation / jianpu tabs for Asian tremolo still to come)
 3. ~~ABC / ChordPro / MusicXML / MIDI import & export, staff view~~
-4. PDF chord-sheet import (then guitar tabs)
+4. ~~PDF chord-sheet import (then guitar tabs)~~
 5. Microphone input, practice mode, MIDI keyboard, share links, sampled harmonica sound
