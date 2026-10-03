@@ -14,10 +14,9 @@ interface Props {
   onSelect?: (scoreIndex: number, ev: NoteEvent) => void;
 }
 
+/** A note's holes; a chord's holes sit side by side ("456", "-1-2-3"). */
 function tokenText(ev: NoteEvent): string {
-  if (ev.sounds.length === 1) return soundText(ev.sounds[0]);
-  const holes = ev.sounds.map((s) => (s.type === 'hole' ? holeSoundText(s) : soundText(s)));
-  return `(${holes.join(' ')})`;
+  return ev.sounds.map((s) => (s.type === 'hole' ? holeSoundText(s) : soundText(s))).join('');
 }
 
 function breathClass(ev: NoteEvent): string {
