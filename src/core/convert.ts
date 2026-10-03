@@ -305,16 +305,25 @@ export function suggestHarmonicas(doc: TabDoc, opts: { sourceHarp?: Harmonica; l
     if (opts.families && !opts.families.includes(spec.family)) continue;
     const harp = getHarmonica(spec);
     let best: Suggestion | null = null;
+    const position = spec.family === 'diatonic' && tonic !== undefined ? positionFor(spec.key, tonic) : undefined;
+    // Prefer what most players own: standard Richter diatonics in common positions.
+    let preference = 0;
+    if (spec.family === 'chromatic') preference += spec.tuning === 'solo-12' ? 1 : 1.5;
+    else {
+      if (spec.tuning !== 'richter') preference += 0.8;
+      if (/Low|High/.test(spec.key)) preference += 0.6;
+      if (position !== undefined) preference += position <= 2 ? 0 : position === 3 ? 0.4 : 1.2;
+    }
     for (const shift of [0, -12, 12]) {
       const r = notesToTab(doc, harp, { shift, sourceHarp: opts.sourceHarp });
-      const unusual = spec.family === 'diatonic' && (spec.tuning !== 'richter' || /Low|High/.test(spec.key)) ? 0.5 : 0;
-      const score = r.stats.cost + Math.abs(shift) / 4 + 3 * r.stats.reducedChords + unusual;
+      // Octave choice matters little on a harmonica, so it's only a tie-breaker.
+      const score = r.stats.cost + Math.abs(shift) / 24 + 3 * r.stats.reducedChords + preference;
       if (!best || score < best.score) {
         best = { spec, name: harmonicaName(spec), shift, score, stats: r.stats };
       }
     }
     if (best) {
-      if (spec.family === 'diatonic' && tonic !== undefined) best.position = positionFor(spec.key, tonic);
+      best.position = position;
       results.push(best);
     }
   }

@@ -1,0 +1,61 @@
+# HarpTab (`.htab`) format — v0.1
+
+A plain-text format for harmonica tabs that reads like the tabs people already
+write online, plus a header that says which harmonica the tab is for and an
+optional rhythm layer. The same syntax also holds pitch-only melodies (`C4 E4 G4`),
+which is what the converter uses.
+
+## Header
+
+Optional front matter between `---` lines. Unknown fields are kept as-is.
+
+```
+---
+title: Oh! Susanna
+artist: Stephen Foster
+harmonica: diatonic      # diatonic | chromatic
+tuning: richter          # richter, paddy-richter, country, melody-maker, harmonic-minor,
+                         # solo-10, solo-12, solo-14, solo-16
+harp-key: C              # key of the harmonica (G…F#, Low C…Low F#, High G)
+key: G                   # key of the song (optional)
+position: 2              # optional
+tempo: 100               # beats per minute
+time: 4/4
+---
+```
+
+Defaults: `diatonic`, `richter`, harp key `C`, tempo 100, time 4/4.
+Aliases accepted on import: `instrument` = `harmonica`, `bpm` = `tempo`, `meter` = `time`.
+
+## Body
+
+| Syntax | Meaning |
+| --- | --- |
+| `4` / `-4` | blow / draw hole 4. Import also accepts `+4`, `4B`, `4D`, `4d` |
+| `-3'` `-3''` `-3'''` | bend down ½, 1, 1½ steps. `b` and `"` (=2) also accepted |
+| `6o` / `-7o` | overblow / overdraw (`°`, `O` accepted) |
+| `<5` | chromatic: slide button in (`5<`, `5*` accepted) |
+| `C4` `F#5` `Bb3` | a pitch instead of a hole (octave defaults to 4) |
+| `(4 5 6)` | harmonica chord: sounds played together |
+| `-(1 2 3)` / `+(…)` | chord with a default breath for every hole |
+| `~` | hold: each `~` adds one beat (`4~~` = 3 beats) |
+| `{a b c}` | split one beat between the items, weighted by their `~` (`{4~ 5}` = ⅔ + ⅓) |
+| `{a b}~` | the group lasts 2 beats instead of 1 |
+| `.` | rest (one beat, `.~` = two) |
+| `\|` `\|\|` `\|]` `\|:` `:\|` | bar lines: single, double, final, repeat start/end |
+| `[G7]` | chord symbol shown above the next note or rest |
+| `w: Twin-kle twin-kle` | lyrics for the tab line above: one syllable per note; `_` or `*` skips a note |
+| `@ Chorus` | section heading |
+| `# text` | comment (at line start or after whitespace) |
+
+Rhythm is optional: with no `~` or `{}`, every note is one beat, so tabs copied
+from the internet play back evenly.
+
+## Semantics
+
+* A tab line holds events; blank lines are ignored; each line is shown as one row.
+* Hole numbers mean different pitches on different harmonicas. Changing `harp-key`
+  transposes the tab; changing `harmonica`/`tuning` needs re-tabbing (the app does
+  this automatically, keeping pitches).
+* A pitch (`C4`) sounds the same on any harmonica — that's the instrument-neutral
+  "notes" form. Converting notes → tab chooses the easiest playable way.

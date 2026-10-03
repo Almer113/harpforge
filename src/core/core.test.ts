@@ -171,3 +171,18 @@ describe('score + conversion', () => {
     expect(positionFor('G', 7)).toBe(1);
   });
 });
+
+describe('suggestion ranking', () => {
+  it('prefers a standard diatonic in a common position for a simple G melody', () => {
+    const doc = parseHtab(`---
+key: G
+time: 3/4
+---
+D4 | G4~ {B4 G4} | B4~ A4 | G4~ E4 | D4~ D4 | G4~ {B4 G4} | B4~ A4 | D5~~ | D5~ |]`).doc;
+    const top = suggestHarmonicas(doc, { limit: 3 });
+    expect(top[0].spec.family).toBe('diatonic');
+    expect(top[0].spec.tuning).toBe('richter');
+    expect([1, 2]).toContain(top[0].position);
+    expect(top[0].stats.bends).toBe(0);
+  });
+});
