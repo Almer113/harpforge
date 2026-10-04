@@ -146,16 +146,14 @@ export function notesToTab(doc: TabDoc, harp: Harmonica, opts: NotesToTabOptions
   const stats: ConvertStats = { notes: 0, bends: 0, overblows: 0, slides: 0, unplayable: 0, reducedChords: 0, cost: 0 };
 
   // 1. Candidates per note event.
-  // `missing`: holes the source harp doesn't have (no pitch to convert); the note is kept as written.
-  type Slot = { line: number; index: number; event: NoteEvent; cands: Candidate[]; pitches: number[]; missing?: boolean };
+  // `missing`: sounds the source harp doesn't have (no pitch to convert), kept as written;
+  // the rest of a chord is converted as usual.
+  type Slot = { line: number; index: number; event: NoteEvent; cands: Candidate[]; pitches: number[]; missing: HoleSound[] };
   const slots: Slot[] = [];
   doc.lines.forEach((l, li) =>
     l.events.forEach((e, ei) => {
       if (e.kind !== 'note' || e.tied) return;
-      if (e.sounds.some((s) => s.type === 'hole' && (!opts.sourceHarp || soundPitch(opts.sourceHarp, s) === null))) {
-        slots.push({ line: li, index: ei, event: e, cands: [], pitches: [], missing: true });
-        return;
-      }
+      const missing = e.sounds.filter((s): s is HoleSound => s.type === 'hole' && (!opts.sourceHarp || soundPitch(opts.sourceHarp, s) === null));
       const raw = eventPitches(e, opts.sourceHarp).filter((m): m is number => m !== null).map((m) => m + shift);
       const pitches = [...new Set(raw)].sort((a, b) => a - b);
       let cands: Candidate[] = [];
@@ -167,7 +165,7 @@ export function notesToTab(doc: TabDoc, harp: Harmonica, opts: NotesToTabOptions
           for (let k = pitches.length - 1; k >= 0 && !cands.length; k--) cands = singleCandidates(harp, pitches[k], 2, true);
         }
       }
-      slots.push({ line: li, index: ei, event: e, cands, pitches });
+      slots.push({ line: li, index: ei, event: e, cands, pitches, missing });
     }),
   );
 
@@ -233,18 +231,22 @@ export function notesToTab(doc: TabDoc, harp: Harmonica, opts: NotesToTabOptions
         }
         const slot = lookup.get(`${li}:${ei}`)!;
         const c = chosen.get(slot);
-        if (slot.missing) {
+        if (slot.missing.length) {
           stats.unplayable++;
           stats.cost += 25;
-          const holes = e.sounds.filter((s) => s.type === 'hole' && (!opts.sourceHarp || soundPitch(opts.sourceHarp, s) === null)).map((s) => holeSoundText(s as HoleSound));
-          warnings.push(`hole ${holes.join(' ')} doesn't exist on ${opts.sourceHarp?.name ?? 'this harmonica'}, so it was kept as written`);
-          return { ...e };
+          // "hole 11" for a plain hole; a bend or overblow says itself ("4''").
+          const what = slot.missing.map((m) => (m.bend || m.over ? holeSoundText(m) : `hole ${holeSoundText(m)}`)).join(', ');
+          warnings.push(`${what} isn't on ${opts.sourceHarp?.name ?? 'this harmonica'}, so it was kept as written`);
+          if (!slot.pitches.length) return { ...e };
+          // A chord: its other notes are converted; the missing sound stays as written.
+          const rest = c ? c.sounds : slot.pitches.map((midi) => ({ type: 'pitch' as const, midi }));
+          return { ...e, sounds: [...rest, ...slot.missing] };
         }
         if (!c) {
           if (slot.pitches.length) {
             stats.unplayable++;
             stats.cost += 25;
-            warnings.push(`${slot.pitches.map((p) => midiToName(p)).join('+')} isn't playable on ${harp.name}`);
+            warnings.push(`${slot.pitches.map((p) => midiToName(p)).join('+')} isn't playable on ${harp.name}, so it was kept as a note name`);
             // Keep the music: the note stays as a note name rather than becoming a rest.
             return { ...e, sounds: slot.pitches.map((midi) => ({ type: 'pitch' as const, midi })) };
           }
@@ -266,7 +268,8 @@ export function notesToTab(doc: TabDoc, harp: Harmonica, opts: NotesToTabOptions
   out.meta.tuning = harp.spec.tuning;
   out.meta.harpKey = harp.spec.key;
   delete out.meta.extra.notation;
-  return { doc: out, warnings, stats };
+  // The same problem on several notes is said once.
+  return { doc: out, warnings: [...new Set(warnings)], stats };
 }
 
 /** Re-tabs a tab for a different harmonica, keeping the pitches. */

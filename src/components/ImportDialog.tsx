@@ -450,7 +450,7 @@ function ImportBody() {
                 {playing ? '■' : '▶'}
               </button>
               <span className="muted small">{choice ? harmonicaName(choice.spec) : ''}</span>
-              <button className="btn small ghost" disabled={!result} onClick={() => result && navigator.clipboard?.writeText(result.text).then(() => useApp.getState().notify('Copied ✓'))}>
+              <button className="btn small ghost" disabled={!result} onClick={() => result && navigator.clipboard?.writeText(result.text).then(() => useApp.getState().notify('Copied ✓'), () => useApp.getState().notify('Couldn’t copy; open it and copy from the editor instead.'))}>
                 Copy text
               </button>
             </div>

@@ -86,6 +86,11 @@ export function onPitchPlayed(fn: (midi: number, id: string) => void): () => voi
   return () => pitchListeners.delete(fn);
 }
 
+/** Ids of notes held off the harmonica (MIDI). */
+export function heldPitchIds(): string[] {
+  return [...pitchIds];
+}
+
 /** Plays a note that isn't on the harmonica (released with `release`). */
 export function pressPitch(id: string, midi: number) {
   pitchIds.add(id);

@@ -31,11 +31,17 @@ export function keysTaken(e: KeyboardEvent): boolean {
   return isTyping(e.target) || controlKey(e) || overlayOpen();
 }
 
-// After you pick from a dropdown, the keyboard goes back to the harmonica and the editor
-// (a focused dropdown would otherwise take every letter and number key).
+// After you pick from a dropdown with the mouse, the keyboard goes back to the harmonica
+// and the editor (a focused dropdown would otherwise take every letter and number key).
+// Not when you're using the keyboard to choose (arrows change the value as you go), and
+// not in a dialog or popover, where focus has to stay.
 if (typeof document !== 'undefined') {
+  let pointerSelect: EventTarget | null = null;
+  document.addEventListener('pointerdown', (e) => (pointerSelect = e.target), true);
+  document.addEventListener('keydown', () => (pointerSelect = null), true);
   document.addEventListener('change', (e) => {
     const el = e.target as HTMLElement | null;
-    if (el?.tagName === 'SELECT') el.blur();
+    if (el?.tagName !== 'SELECT' || el !== pointerSelect || el.closest(OVERLAYS + ', .modal')) return;
+    el.blur();
   });
 }

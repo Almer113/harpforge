@@ -86,8 +86,10 @@ function CaretPanel({ song }: { song: Song }) {
  * Applies `text` to the note at `pos` in the current tab, after the click that moved
  * away from it has been handled. `toSounds` reads the text (null if it can't).
  */
-function applyLater(pos: Pos, text: string, toSounds: (song: Song, text: string) => Sound[] | null) {
+function applyLater(pos: Pos, text: string, seq: number, toSounds: (song: Song, text: string) => Sound[] | null) {
+  // Typed for the tab open then (`seq`): if another one has been opened, the edit doesn't go there.
   queueMicrotask(() => {
+    if (useApp.getState().loadSeq !== seq) return;
     const song = fromDoc(getParsed(useApp.getState().text).doc);
     if (!findItem(song, pos)) return;
     const sounds = toSounds(song, text);
@@ -121,7 +123,8 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
     setInput(soundsText(item.sounds));
     setBad(false);
   }, [item.sounds]);
-  useApplyOnLeave(input !== soundsText(item.sounds) ? input : null, (t) => applyLater(pos, t, (_, x) => parseSoundsInput(x)));
+  const seq = useApp((s) => s.loadSeq);
+  useApplyOnLeave(input !== soundsText(item.sounds) ? input : null, (t) => applyLater(pos, t, seq, (_, x) => parseSoundsInput(x)));
 
   const set = (patch: Partial<Item>) => apply(updateItem(song, pos, patch));
   const asNotes = useApp((s) => s.readAs === 'notes');
@@ -330,8 +333,9 @@ function NoteFields({ song, pos, item, flats }: { song: Song; pos: Pos; item: It
     setInput(names(item.sounds));
     setBad(false);
   }, [item.sounds, harp]);
+  const seq = useApp((s) => s.loadSeq);
   useApplyOnLeave(input !== names(item.sounds) ? input : null, (t) =>
-    applyLater(pos, t, (s, x) => {
+    applyLater(pos, t, seq, (s, x) => {
       const midis = parseNotes(x);
       return midis ? chooseSounds(harp, midis, neighbours(s, pos)) : null;
     }),

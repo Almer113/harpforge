@@ -21,7 +21,7 @@ vi.mock('../storage/library', () => ({
   seedDemos: async () => undefined,
 }));
 
-import { readWorking, writeWorking } from './working';
+import { pruneWorking, readWorking, writeWorking } from './working';
 import { decodeTab, encodeTab, MAX_SHARED_BYTES, SharedTooLarge } from './share';
 import { saveCurrent } from './actions';
 import { useApp } from './store';
@@ -112,12 +112,18 @@ describe('working copies', () => {
     expect(readWorking(store, 'new')?.text).toBe('A');
   });
 
-  it('forgets the oldest copies of closed tabs', () => {
+  it('forgets only copies unused for a month, however many tabs there are', () => {
     const store = memory();
-    for (let i = 0; i < 12; i++) writeWorking(store, `t${i}`, copy(String(i)), i);
-    expect(store.length).toBe(8);
-    expect(readWorking(store, 't11')?.text).toBe('11');
-    expect(store.getItem('harpforge:working:t0')).toBeNull();
+    const day = 24 * 3600 * 1000;
+    const now = 100 * day;
+    writeWorking(store, 'old', copy('old'), now - 40 * day);
+    // An idle tab with unsaved work, and a dozen busier ones.
+    writeWorking(store, 'idle', copy('idle'), now - 2 * day);
+    for (let i = 0; i < 12; i++) writeWorking(store, `t${i}`, copy(String(i)), now - i);
+    pruneWorking(store, 't0', now);
+    expect(store.getItem('harpforge:working:old')).toBeNull();
+    expect(readWorking(store, 'idle')?.text).toBe('idle');
+    expect(store.length).toBe(13);
   });
 });
 

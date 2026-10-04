@@ -14,31 +14,35 @@ import type { ParseIssue, TabLine } from '../htab/types';
 import { keyUsesFlats } from '../pitch';
 import { EPS, fromDoc, lineGroups, toDoc, type Song } from './model';
 
-/** What a rewrite had to keep in a comment: tokens that couldn't be read. */
+/** What a rewrite had to keep in a comment: text that couldn't be read. */
 export interface SpliceReport {
   kept: string[];
 }
 
-/** A message for the kept tokens, or null if there were none. */
+/** A message for the kept text, or null if there was none. */
 export function keptMessage(report: SpliceReport): string | null {
   if (!report.kept.length) return null;
   const list = report.kept.slice(0, 3).map((k) => `“${k}”`).join(', ') + (report.kept.length > 3 ? '…' : '');
-  return `Kept ${list} in a comment on its line: ${report.kept.length === 1 ? 'it isn’t' : 'they aren’t'} tab the app can read.`;
+  return `Kept ${list} in a comment: ${report.kept.length === 1 ? 'it isn’t' : 'they aren’t'} tab the app can read.`;
 }
 
-interface Chunk {
-  /** Raw line indexes of the tab line and the lyrics lines right after it. */
+/** A line's own comment, and text on it that couldn't be read, as one comment ("" if none). */
+interface Tail {
+  tail: string;
+  kept: string[];
+}
+
+interface Chunk extends Tail {
+  /** Raw line indexes of the tab line and the lyrics lines that belong to it. */
   from: number;
   to: number;
   /** Raw lines before the chunk that aren't part of another chunk (comments, blanks, headings), and where they start. */
   glue: string[];
   glueStart: number;
-  /** Blank lines and comments between the tab line and its lyrics. */
-  between: string[];
-  /** Lyrics lines after the first (more verses): kept as written. */
-  verses: string[];
-  /** The line's own "# comment" and unreadable tokens, as a comment to put back on a rewritten line. */
-  tail: string;
+  /** Lines between the tab line and its (first) lyrics line: blank lines and comments. */
+  before: string[];
+  /** Lines after the first lyrics line, in order: more verses and the comments among them. */
+  after: string[];
 }
 
 const isHeading = (raw: string) => raw.trim().startsWith('@');
@@ -46,16 +50,20 @@ const isLyrics = (raw: string) => /^\s*w:/i.test(raw);
 const isComment = (raw: string) => raw.trim().startsWith('#');
 
 /**
- * Last raw line belonging to the tab line at `from`: its lyrics lines, which (as the
- * parser reads them) may come after blank lines or comments. Those in-between lines are
- * returned too, so they can be kept when the line is rewritten, and so are the lyrics
- * lines after the first (extra verses).
+ * The raw lines belonging to the tab line at `from`: its lyrics lines, which (as the
+ * parser reads them) may come after blank lines or comments, and the lines around them.
  */
-function chunkEnd(raw: string[], from: number): { to: number; between: string[]; verses: string[] } {
+function chunkEnd(raw: string[], from: number): { to: number; before: string[]; after: string[] } {
   let to = from;
   for (let k = from + 1; k < raw.length && (isLyrics(raw[k]) || isComment(raw[k]) || raw[k].trim() === ''); k++) if (isLyrics(raw[k])) to = k;
-  const span = raw.slice(from + 1, to + 1);
-  return { to, between: span.filter((l) => !isLyrics(l)), verses: span.filter(isLyrics).slice(1) };
+  let first = -1;
+  for (let k = from + 1; k <= to; k++)
+    if (isLyrics(raw[k])) {
+      first = k;
+      break;
+    }
+  if (first < 0) return { to, before: [], after: [] };
+  return { to, before: raw.slice(from + 1, first), after: raw.slice(first + 1, to + 1) };
 }
 
 /** A line holding only chord symbols (no notes, rests or bar lines). */
@@ -73,7 +81,7 @@ function commentAt(raw: string): number {
  * The comment to put back on a rewritten line: its own comment, and anything on it the
  * parser couldn't read ("# kept: x"). `at` is the raw line's offset in `text`.
  */
-function tailOf(rawLine: string, at: number, text: string, issues: ParseIssue[], report?: SpliceReport): string {
+function tailOf(rawLine: string, at: number, text: string, issues: ParseIssue[]): Tail {
   const c = commentAt(rawLine);
   const end = at + (c < 0 ? rawLine.length : c);
   const kept: string[] = [];
@@ -82,25 +90,33 @@ function tailOf(rawLine: string, at: number, text: string, issues: ParseIssue[],
     const t = text.slice(is.span.start, is.span.end).trim();
     if (t && !kept.includes(t)) kept.push(t);
   }
-  report?.kept.push(...kept);
   const own = c < 0 ? '' : rawLine.slice(c).trimEnd();
-  if (!kept.length) return own;
-  return `# kept: ${kept.join(' ')}` + (own ? ` · ${own.replace(/^#\s*/, '')}` : '');
+  if (!kept.length) return { tail: own, kept };
+  return { tail: `# kept: ${kept.join(' ')}` + (own ? ` · ${own.replace(/^#\s*/, '')}` : ''), kept };
 }
 
-/** The rewritten lines of a chunk: the new text with its comment, then extra verses and in-between lines. */
-function rewritten(text: string[], tail: string, verses: string[], between: string[]): string[] {
-  const out = [...text];
-  if (tail && out.length) out[0] = `${out[0]} ${tail}`;
+/**
+ * The rewritten lines of a chunk: the new tab line with its comment, the lines that were
+ * between it and its lyrics, the new lyrics, then the rest (more verses) as written.
+ */
+function rewritten(text: string[], tail: string, before: string[], after: string[]): string[] {
+  const [tab, ...lyrics] = text;
+  const out: string[] = [];
+  if (tab !== undefined) out.push(tail ? `${tab} ${tail}` : tab);
   else if (tail) out.push(tail);
+  out.push(...before, ...lyrics);
   // Verse 1 is gone but more verses follow: an empty lyrics line keeps them in their places.
-  if (verses.length && !out.some(isLyrics)) out.push('w:');
-  return [...out, ...verses, ...between];
+  if (after.some(isLyrics) && !lyrics.length) out.push('w:');
+  return [...out, ...after];
 }
 
-/** Whether to spell pitches with flats: from the key, or because the text already does. */
+/** Whether to spell pitches with flats: as the text already does, else from the key. */
 export function flatsFor(text: string, key: string | undefined): boolean {
-  return keyUsesFlats(key) || /(^|[\s([{|])[A-G]b-?\d/.test(text.slice(splitHeader(text).bodyStart));
+  const body = text.slice(splitHeader(text).bodyStart);
+  const flat = /(^|[\s([{|])[A-G]b-?\d/.test(body);
+  // A tab written with sharps stays that way, whatever the key says.
+  if (!flat && /(^|[\s([{|])[A-G]#-?\d/.test(body)) return false;
+  return flat || keyUsesFlats(key);
 }
 
 /** Each measure-set of a song as lines: the text of each line plus the source line its measures came from. */
@@ -152,9 +168,10 @@ export function replaceLines(oldText: string, lines: TabLine[], flats?: boolean,
     const before = lineText(l, opts).join('\n');
     const after = lineText(next, newOpts);
     if (after.join('\n') === before) return;
-    const { to, between, verses } = chunkEnd(raw, from);
-    const tail = tailOf(raw[from], bodyStart + starts[from], oldText, issues, report);
-    replace.set(from, { to, text: rewritten(after, tail, verses, between) });
+    const chunk = chunkEnd(raw, from);
+    const { tail, kept } = tailOf(raw[from], bodyStart + starts[from], oldText, issues);
+    report?.kept.push(...kept);
+    replace.set(from, { to: chunk.to, text: rewritten(after, tail, chunk.before, chunk.after) });
   });
   const out: string[] = [];
   for (let i = 0; i < raw.length; i++) {
@@ -173,6 +190,7 @@ export function spliceBody(oldText: string, song: Song, report?: SpliceReport): 
   const { bodyStart } = splitHeader(oldText);
   const { doc: oldDoc, issues } = parseHtab(oldText);
   const opts: SerializeOptions = { flats: flatsFor(oldText, oldDoc.meta.key) };
+  const tell = (kept: string[]) => report?.kept.push(...kept);
 
   // Raw lines of the body, and which belong to each tab line.
   const { raw, starts } = rawLines(oldText, bodyStart);
@@ -180,51 +198,65 @@ export function spliceBody(oldText: string, song: Song, report?: SpliceReport): 
   starts.forEach((off, i) => lineAt.set(off, i));
   const chunks = new Map<number, Chunk>();
   // Lines of only chord symbols: the editor moves their chord onto the next note, so they
-  // travel with the next line (kept while it's unchanged, dropped when it's rewritten).
-  const chordRows = new Set<number>();
+  // travel with the next line (kept while it's unchanged; when it's rewritten the chord is
+  // in the new line, and only the row's comment, if any, is left in its place).
+  const chordRows = new Map<number, Tail>();
   let prevEnd = -1;
   oldDoc.lines.forEach((l, li) => {
     if (!l.src) return;
     const from = lineAt.get(l.src.start - bodyStart);
     if (from === undefined) return;
     if (chordOnly(l)) {
-      chordRows.add(from);
+      chordRows.set(from, tailOf(raw[from], l.src.start, oldText, issues));
       return;
     }
-    const { to, between, verses } = chunkEnd(raw, from);
-    const tail = tailOf(raw[from], l.src.start, oldText, issues);
-    chunks.set(li, { from, to, glue: raw.slice(prevEnd + 1, from), glueStart: prevEnd + 1, between, verses, tail });
-    prevEnd = to;
+    const chunk = chunkEnd(raw, from);
+    chunks.set(li, { from, glue: raw.slice(prevEnd + 1, from), glueStart: prevEnd + 1, ...chunk, ...tailOf(raw[from], l.src.start, oldText, issues) });
+    prevEnd = chunk.to;
   });
   const trailingStart = prevEnd + 1;
   const trailing = raw.slice(trailingStart);
-  const keepGlue = (c: Chunk, keep: (g: string, row: number) => boolean) => c.glue.filter((g, i) => keep(g, c.glueStart + i));
+  /** `lines` (starting at raw row `start`) with chord rows replaced by their comment. */
+  const withoutChordRows = (lines: string[], start: number) =>
+    lines.flatMap((g, i) => {
+      const row = chordRows.get(start + i);
+      if (!row) return [g];
+      tell(row.kept);
+      return row.tail ? [row.tail] : [];
+    });
 
+  const oldSong = fromDoc(oldDoc);
   const oldCanon = new Map<number, string>();
-  for (const c of canonicalLines(fromDoc(oldDoc), opts)) if (c.whole) oldCanon.set(c.first!, c.text.join('\n'));
+  for (const c of canonicalLines(oldSong, opts)) if (c.whole) oldCanon.set(c.first!, c.text.join('\n'));
+  // Source lines that had music, and those whose music is still in the song.
+  const hadMusic = new Set(oldSong.measures.map((m) => m.src));
+  const hasMusic = new Set(song.measures.map((m) => m.src));
 
   const out: string[] = [];
   const used = new Set<number>();
-  const emitted = new Set<number>(); // lines whose in-between comments were written
+  const emitted = new Set<number>(); // lines whose in-between lines were written
   const verbatimLines = new Set<number>();
   const order = [...chunks.keys()];
-  const tellKept = (tail: string) => {
-    const m = /^# kept: (.*?)(?: · |$)/.exec(tail);
-    if (m && report) report.kept.push(...m[1].split(' '));
-  };
-  // Comments from lines that are gone move along to the next line written (with the
-  // line's own comment and anything unreadable on it).
+  // Lines whose music isn't written under their own line any more.
   const flushBefore = (li: number) => {
     for (const k of order) {
       if (k >= li) break;
       if (used.has(k)) continue;
       used.add(k);
       const c = chunks.get(k)!;
-      out.push(...c.glue.filter(isComment));
+      // A line the parser read no music from (a typo): nothing about it changed, so it stays.
+      if (!hadMusic.has(k)) {
+        out.push(...withoutChordRows(c.glue, c.glueStart), ...raw.slice(c.from, c.to + 1));
+        continue;
+      }
+      out.push(...withoutChordRows(c.glue, c.glueStart).filter((g) => isComment(g) || isLyrics(g)));
       if (c.tail) {
         out.push(c.tail);
-        tellKept(c.tail);
+        tell(c.kept);
       }
+      // Merged into the line before: its extra verses follow that line's lyrics. Deleted: only comments stay.
+      const merged = hasMusic.has(k);
+      out.push(...c.before.filter(isComment), ...c.after.filter((a) => isComment(a) || (merged && isLyrics(a))));
     }
   };
 
@@ -237,7 +269,7 @@ export function spliceBody(oldText: string, song: Song, report?: SpliceReport): 
     if (chunk && !used.has(L!)) {
       flushBefore(L!);
       used.add(L!);
-      let glue = verbatim ? [...chunk.glue] : keepGlue(chunk, (g, row) => !isLyrics(g) && !chordRows.has(row));
+      let glue = verbatim ? [...chunk.glue] : withoutChordRows(chunk.glue, chunk.glueStart);
       if (section !== oldDoc.lines[L!].section) {
         const h = glue.map(isHeading).lastIndexOf(true);
         if (section === undefined) glue = glue.filter((_, i) => i !== h);
@@ -251,16 +283,15 @@ export function spliceBody(oldText: string, song: Song, report?: SpliceReport): 
     }
     if (verbatim) out.push(...raw.slice(chunk!.from, chunk!.to + 1));
     else if (chunk && L !== undefined && !emitted.has(L)) {
-      out.push(...rewritten(c.text, chunk.tail, chunk.verses, chunk.between));
-      tellKept(chunk.tail);
+      out.push(...rewritten(c.text, chunk.tail, chunk.before, chunk.after));
+      tell(chunk.kept);
     } else out.push(...c.text);
     if (L !== undefined) emitted.add(L);
   }
   flushBefore(Infinity);
-  // Chord-only lines after the last line belong to it: dropped when it was rewritten.
+  // Chord-only lines after the last line belong to it: replaced by their comment when it was rewritten.
   const lastLine = order[order.length - 1];
   const lastKept = lastLine === undefined || verbatimLines.has(lastLine);
-  out.push(...trailing.filter((_, i) => lastKept || !chordRows.has(trailingStart + i)));
+  out.push(...(lastKept ? trailing : withoutChordRows(trailing, trailingStart)));
   return out.join('\n');
 }
-

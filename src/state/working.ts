@@ -12,8 +12,11 @@ const PREFIX = 'harpforge:working:';
 /** Before working copies were per tab: one shared copy, still read once by a new tab. */
 const LEGACY = 'harpforge:working';
 const SESSION = 'harpforge:session';
-/** Copies kept from tabs that were closed (the newest ones). */
-const KEEP = 8;
+/**
+ * Copies of closed tabs are forgotten after this long unused. (Not by count: a tab left
+ * open and idle for a while still has unsaved work in its copy.)
+ */
+const KEEP_MS = 30 * 24 * 3600 * 1000;
 
 type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 'key' | 'length'>;
 
@@ -78,13 +81,24 @@ export function readWorking(store: Store, id: string): WorkingCopy | null {
   }
 }
 
-/** Writes this tab's working copy and forgets the oldest copies of closed tabs. Throws if storage is full. */
+let pruned = false;
+
+/** Writes this tab's working copy (and, once a session, forgets long-unused copies). Throws if storage is full. */
 export function writeWorking(store: Store, id: string, copy: WorkingCopy, now = Date.now()) {
   store.setItem(PREFIX + id, JSON.stringify({ ...copy, at: now }));
-  const all = keys(store)
-    .map((k) => ({ k, at: parse(store.getItem(k))?.at ?? 0 }))
-    .sort((a, b) => b.at - a.at);
-  for (const { k } of all.slice(KEEP)) if (k !== PREFIX + id) store.removeItem(k);
+  if (!pruned) {
+    pruned = true;
+    pruneWorking(store, id, now);
+  }
+}
+
+/** Forgets copies unused for KEEP_MS, and the old shared copy (this tab has its own now). */
+export function pruneWorking(store: Store, id: string, now = Date.now()) {
+  for (const k of keys(store)) {
+    if (k === PREFIX + id) continue;
+    const at = parse(store.getItem(k))?.at ?? 0;
+    if (now - at > KEEP_MS) store.removeItem(k);
+  }
   store.removeItem(LEGACY);
 }
 

@@ -1,4 +1,5 @@
-import { DEFAULT_PLAIN_TEXT } from '../core/formats/plaintext';
+import { DEFAULT_PLAIN_TEXT, type PlainTextOptions } from '../core/formats/plaintext';
+import { FAMILIES, keysFor, type Family, type HarmonicaSpec } from '../core/instruments';
 import { create } from 'zustand';
 import { parseHtab } from '../core/htab/parser';
 import type { ParseIssue, TabDoc } from '../core/htab/types';
@@ -256,11 +257,28 @@ function loadPrefs(): {
     readAs: p.readAs === 'notes' ? 'notes' : p.readAs === 'holes' ? 'holes' : undefined,
     sheetShow: { tab: like(sheet.tab, SHOW_ALL.tab), numbers: like(sheet.numbers, SHOW_ALL.numbers), staff: like(sheet.staff, SHOW_ALL.staff) },
     printPrefs: print as Partial<import('../pages/PrintPage').PrintPrefs>,
-    textPrefs: like(p.textPrefs, DEFAULT_PLAIN_TEXT),
+    textPrefs: textPrefsFrom(p.textPrefs),
     ownedHarps: Array.isArray(p.ownedHarps)
-      ? p.ownedHarps.filter((h): h is import('../core/instruments').HarmonicaSpec => isObject(h) && typeof h.family === 'string' && typeof h.key === 'string')
+      ? p.ownedHarps.filter(
+          (h): h is HarmonicaSpec =>
+            isObject(h) && FAMILIES.some((f) => f.id === h.family) && typeof h.key === 'string' && keysFor(h.family as Family).includes(h.key),
+        )
       : undefined,
   };
+}
+
+/** Plain-text choices, each one of its allowed values. */
+function textPrefsFrom(v: unknown): Partial<PlainTextOptions> {
+  const t = like(v, DEFAULT_PLAIN_TEXT);
+  const allowed: Partial<Record<keyof PlainTextOptions, unknown[]>> = {
+    spelling: ['holes', 'notes'],
+    style: ['htab', 'plusminus', 'letters'],
+    bend: ['apostrophe', 'b'],
+    over: ['o', 'ob'],
+  };
+  for (const [k, values] of Object.entries(allowed) as [keyof PlainTextOptions, unknown[]][]) if (k in t && !values.includes(t[k])) delete t[k];
+  if (t.width !== undefined && !(t.width >= 40 && t.width <= 120)) delete t.width;
+  return t;
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -434,13 +452,15 @@ export function isDirty(s: Pick<AppState, 'text' | 'savedText'>): boolean {
 
 // The keyboard's position along a long harmonica (← →) belongs to that harmonica: it
 // starts over whenever the harmonica changes (picker, another tab, undo).
-let harpId = '';
+const harpIdOf = (text: string) => {
+  const { spec, holes } = getParsed(text).harp;
+  return `${spec.family}/${spec.tuning}/${spec.key}/${holes.length}`;
+};
+let harpId = harpIdOf(useApp.getState().text);
 useApp.subscribe((s, prev) => {
   if (s.text === prev.text) return;
-  const { spec, holes } = getParsed(s.text).harp;
-  const id = `${spec.family}/${spec.tuning}/${spec.key}/${holes.length}`;
+  const id = harpIdOf(s.text);
   if (id === harpId) return;
-  const first = harpId === '';
   harpId = id;
-  if (!first && s.keyOffset) useApp.setState({ keyOffset: 0 });
+  if (s.keyOffset) useApp.setState({ keyOffset: 0 });
 });

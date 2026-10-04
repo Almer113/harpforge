@@ -62,15 +62,24 @@ export function splitHeader(text: string): { header: { key: string; value: strin
   return { header, bodyStart: text.length, headerEnd: text.length };
 }
 
-/** A header value as written: a "#" that would start a comment (" # ") is written "\#". */
+/**
+ * A header value as written: a "#" that would start a comment is written "\#" (and a "\"
+ * before a "#" is doubled, so it reads back as itself).
+ */
 export function headerValue(v: string | number): string {
-  return String(v).replace(/(^|\s)#(?=\s|$)/g, '$1\\#');
+  return String(v)
+    .replace(/\\#/g, '\\\\#')
+    .replace(/(^|\s)#(?!\d)/g, '$1\\#');
 }
 
-/** A header line without its comment: "#" after a space and before a space or the end ("title: Song #2" keeps its "#2"). */
+/**
+ * A header line without its comment. A line starting with "#" is all comment; otherwise
+ * "#" after a space starts one, unless a digit follows ("title: Song #2" keeps its "#2").
+ */
 function stripComment(line: string): string {
-  for (let i = 0; i < line.length; i++) {
-    if (line[i] === '#' && (i === 0 || /\s/.test(line[i - 1])) && (i === line.length - 1 || /\s/.test(line[i + 1]))) return line.slice(0, i);
+  if (line.trimStart().startsWith('#')) return '';
+  for (let i = 1; i < line.length; i++) {
+    if (line[i] === '#' && /\s/.test(line[i - 1]) && !/\d/.test(line[i + 1] ?? '')) return line.slice(0, i);
   }
   return line;
 }

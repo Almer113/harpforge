@@ -66,7 +66,7 @@ export function setHarmonica(spec: HarmonicaSpec, keep: 'holes' | 'notes' = 'not
   const body = replaceLines(s.text, r.doc.lines, undefined, report);
   s.setText(setMetaFields(header, fields) + body + (body ? '\n' : ''));
   if (r.stats.unplayable)
-    s.notify(`Re-tabbed for ${to.name} — ${r.stats.unplayable} note(s) don't fit this harmonica and are kept as note names or as written (${r.warnings[0]}).${withKept(report)}`);
+    s.notify(`Re-tabbed for ${to.name}, but ${r.stats.unplayable} note${r.stats.unplayable === 1 ? '' : 's'} didn't fit: ${r.warnings.slice(0, 2).join('; ')}${r.warnings.length > 2 ? '; …' : ''}.${withKept(report)}`);
   else if (r.warnings.length) s.notify(`Re-tabbed for ${to.name} — ${r.warnings.join('; ')}.${withKept(report)}`);
   else if (r.stats.notes) s.notify(`Re-tabbed for ${to.name} ✓${withKept(report)}`);
 }

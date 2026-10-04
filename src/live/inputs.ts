@@ -6,7 +6,7 @@ import { midiToName, keyUsesFlats } from '../core/pitch';
 import { holeSoundText } from '../core/htab/serializer';
 import type { HoleSound } from '../core/types';
 import { getParsed, useApp } from '../state/store';
-import { press, pressPitch, release, releaseAll } from './livePlayer';
+import { heldPitchIds, press, pressPitch, release, releaseAll } from './livePlayer';
 import * as engine from '../audio/engine';
 
 /** The easiest way to play a (possibly fractional) pitch on the harmonica, if any. */
@@ -65,15 +65,25 @@ let mic: { ctx: AudioContext; stream: MediaStream; source: MediaStreamAudioSourc
 let lastUiUpdate = 0;
 export const MIC_ID = 'mic';
 
+/** A note heard while the app was sounding: counted once the app is quiet, if it's still held. */
+let heldBack: number | null = null;
+
+function micNoteOn(note: number) {
+  const found = soundForPitch(harp(), note);
+  if (found) press(MIC_ID, found.sound, { silent: true });
+}
+
 const tracker = new NoteTracker({
   on: (note) => {
     // The app's own sound coming back through the microphone isn't you playing.
-    if (engine.appSounding()) return;
-    const found = soundForPitch(harp(), note);
-    if (found) press(MIC_ID, found.sound, { silent: true });
+    if (engine.appSounding()) heldBack = note;
+    else micNoteOn(note);
   },
   move: () => {},
-  off: () => release(MIC_ID),
+  off: () => {
+    heldBack = null;
+    release(MIC_ID);
+  },
 });
 
 function analyse(buf: Float32Array, sampleRate: number) {
@@ -98,6 +108,10 @@ function analyse(buf: Float32Array, sampleRate: number) {
     }
   }
   tracker.push(reading ? reading.midi : null);
+  if (heldBack !== null && !engine.appSounding()) {
+    micNoteOn(heldBack);
+    heldBack = null;
+  }
   const now = performance.now();
   if (now - lastUiUpdate > 50) {
     lastUiUpdate = now;
@@ -171,6 +185,7 @@ export function stopMic() {
   stream.getTracks().forEach((t) => t.stop());
   void ctx.close();
   tracker.reset();
+  heldBack = null;
   useApp.setState({ mic: { status: 'off', level: 0, reading: null } });
 }
 
@@ -183,7 +198,8 @@ function onMidiMessage(e: MIDIMessageEvent) {
   if (!data || data.length < 3) return;
   const type = data[0] & 0xf0;
   const note = data[1];
-  const id = `midi:${note}`;
+  // Per keyboard, so unplugging one releases only its notes.
+  const id = `midi:${(e.target as MIDIInput | null)?.id ?? ''}:${note}`;
   if (type === 0x90 && data[2] > 0) {
     const found = soundForPitch(harp(), note);
     if (found) press(id, found.sound);
@@ -200,12 +216,18 @@ function onMidiMessage(e: MIDIMessageEvent) {
 function refreshMidiDevices() {
   if (!midiAccess) return;
   const devices: string[] = [];
+  const connected = new Set<string>();
   midiAccess.inputs.forEach((input) => {
     input.onmidimessage = onMidiMessage;
     devices.push(input.name || 'MIDI input');
+    if (input.state !== 'disconnected') connected.add(input.id);
   });
-  // A keyboard unplugged mid-note never sends the note-off.
-  if (devices.length < useApp.getState().midi.devices.length) releaseAll('midi:');
+  // A keyboard unplugged mid-note never sends the note-off: release what it was holding.
+  const held = [...Object.keys(useApp.getState().held), ...heldPitchIds()];
+  for (const id of held) {
+    const m = /^midi:(.*):\d+$/.exec(id);
+    if (m && !connected.has(m[1])) release(id);
+  }
   useApp.setState({ midi: { status: 'on', devices } });
 }
 

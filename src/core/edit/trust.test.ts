@@ -142,3 +142,73 @@ describe('lyrics', () => {
     expect(lyricsOf(doc(out))).toEqual([['la', '-', 'di']]);
   });
 });
+
+describe('review fixes', () => {
+  it('a chord-only line passes on its comment and unreadable text', () => {
+    const report: SpliceReport = { kept: [] };
+    expect(edit(doc('[G] # intro\n4 5 6 7 |'), setSound(0, 0, 3))).toBe('# intro\n[G] 3 5 6 7 |');
+    expect(edit(doc('[G] xyz\n4 5 6 7 |'), setSound(0, 0, 3), report)).toBe('# kept: xyz\n[G] 3 5 6 7 |');
+    expect(report.kept).toEqual(['xyz']);
+  });
+
+  it('a line merged into the one before keeps its extra verses', () => {
+    const text = doc('4 5 6 7 |\nw: a b c d\n-4 -5 -6 -7 |\nw: e f g h\nw: E F G H');
+    const merge = (s: Song) => ({ ...s, measures: s.measures.map((m, i) => (i === 1 ? { ...m, lineBreak: false } : m)) });
+    expect(edit(text, merge)).toBe('4 5 6 7 | -4 -5 -6 -7 |\nw: a b c d e f g h\nw: E F G H');
+  });
+
+  it('reports kept text once, not again on later edits', () => {
+    const first: SpliceReport = { kept: [] };
+    const once = edit(doc('4 5 x 6 |'), setSound(0, 0, 3), first);
+    const again: SpliceReport = { kept: [] };
+    edit(doc(once), setSound(0, 1, 4), again);
+    expect(first.kept).toEqual(['x']);
+    expect(again.kept).toEqual([]);
+  });
+
+  it('leaves a line it read no music from as written', () => {
+    const text = doc('(4 5 6 7 |\n4 5 6 7 |');
+    const report: SpliceReport = { kept: [] };
+    expect(edit(text, (s) => updateItem(s, { m: s.measures.length - 1, start: 0 }, { sounds: [holeSound(3, 'blow')] }), report)).toBe('(4 5 6 7 |\n3 5 6 7 |');
+    expect(report.kept).toEqual([]);
+  });
+
+  it('keeps comments among the verses in their order', () => {
+    const text = doc('4 5 6 7 |\n# breathe\nw: a b c d\n\n# verse 2:\nw: e f g h');
+    expect(edit(text, setSound(0, 0, 3))).toBe('3 5 6 7 |\n# breathe\nw: a b c d\n\n# verse 2:\nw: e f g h');
+  });
+
+  it('keeps a stray lyrics line after a heading', () => {
+    expect(edit(doc('@ Chorus\nw: la la\n4 5 6 7 |'), setSound(0, 0, 3))).toContain('w: la la');
+  });
+
+  it('keeps sharps in a tab written with sharps, whatever the key', () => {
+    const text = '---\nkey: Dm\n---\nA#4 A4 |\nA#4 A4 G4 F4 |\n';
+    const out = edit(text, (s) => updateItem(s, { m: 1, start: 3 }, { sounds: [{ type: 'pitch', midi: 64 }] }));
+    expect(out.split('\n')[1]).toBe('A#4 A4 G4 E4 |');
+  });
+
+  it('re-tabs the playable notes of a chord with a missing hole, and says so once', () => {
+    const G = getHarmonica({ family: 'diatonic', tuning: 'richter', key: 'G' });
+    const r = retab(parseHtab(doc('(4 5 11) 11 4 |')).doc, C, G);
+    const [chord] = r.doc.lines[0].events.filter((e) => e.kind === 'note');
+    expect(chord.kind === 'note' && chord.sounds).toContainEqual(holeSound(11, 'blow'));
+    expect(chord.kind === 'note' && chord.sounds).not.toContainEqual(holeSound(4, 'blow'));
+    expect(r.warnings.filter((w) => w.includes('11'))).toHaveLength(1);
+  });
+});
+
+describe('header comments', () => {
+  it('a line starting with # is a comment; "#" before a word starts one, before a digit doesn’t', () => {
+    const meta = parseHtab('---\n#note: x\ntitle: Song #2\nkey: G #from the LP\n---\n4 |\n').doc.meta;
+    expect(meta.extra).toEqual({});
+    expect(meta).toMatchObject({ title: 'Song #2', key: 'G' });
+  });
+
+  it('round-trips a backslash before "#" and a "#" before a word', () => {
+    for (const title of ['a\#b', 'Op. #five', 'C# minor']) {
+      const t = setMetaFields(doc('4 |'), { title });
+      expect(parseHtab(t).doc.meta.title).toBe(title);
+    }
+  });
+});
