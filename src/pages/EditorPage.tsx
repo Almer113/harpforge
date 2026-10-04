@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CodeEditor, type CodeEditorHandle } from '../components/CodeEditor';
-import { Transport } from '../components/Controls';
+import { PlayStop, Transport } from '../components/Controls';
 import { Popover } from '../components/Popover';
 import { SongFields, SongTitle } from '../components/editor/SongDetails';
 import { UndoRedo, VisualEditor, VisualToolbar } from '../components/editor/VisualEditor';
@@ -35,6 +35,8 @@ export function EditorPage() {
       {/* One bar: the mode switch always first, the editor's tools, then play and the harmonica. */}
       <div className="edit-sticky" ref={head}>
         <div className="editor-bar">
+          <PlayStop />
+          <span className="tb-sep" />
           <div className="seg" role="radiogroup" aria-label="Editor mode">
             {MODES.map((m) => (
               <button key={m.id} role="radio" aria-checked={mode === m.id} className={mode === m.id ? 'on' : ''} title={m.hint} onClick={() => useApp.setState({ editorMode: m.id })}>

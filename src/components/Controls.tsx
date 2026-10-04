@@ -181,8 +181,24 @@ function PlaybackSettings() {
   );
 }
 
+/** Play / pause and stop (the editor bar starts with them, as the Play page's transport does). */
+export function PlayStop() {
+  const play = useApp((s) => s.play);
+  const recording = useApp((s) => s.recording);
+  return (
+    <div className="t-group play-stop">
+      <button className="t-btn primary" onClick={togglePlay} disabled={!!recording} title="Play / pause (Enter)" aria-label={play === 'playing' ? 'Pause' : 'Play'}>
+        {play === 'playing' ? Icon.pause : Icon.play}
+      </button>
+      <button className="t-btn" onClick={stop} disabled={play === 'stopped' || !!recording} title="Stop (Esc)" aria-label="Stop">
+        {Icon.stop}
+      </button>
+    </div>
+  );
+}
+
 /**
- * Play and stop, and the harmonica. `compact` (the editor): loop, metronome, speed and sound
+ * Play and stop, and the harmonica. `compact` (the editor: play and stop are PlayStop, at its start): loop, metronome, speed and sound
  * are in a ♫ menu, which shows a dot while loop or the metronome is on.
  */
 export function Transport({ compact = false }: { compact?: boolean }) {
@@ -225,12 +241,6 @@ export function Transport({ compact = false }: { compact?: boolean }) {
     const on = loop || metronome || speed !== 1;
     return (
       <div className="transport compact">
-        <button className="t-btn primary" onClick={togglePlay} disabled={!!recording} title="Play / pause (Enter)" aria-label={play === 'playing' ? 'Pause' : 'Play'}>
-          {play === 'playing' ? Icon.pause : Icon.play}
-        </button>
-        <button className="t-btn" onClick={stop} disabled={play === 'stopped' || !!recording} title="Stop (Esc)" aria-label="Stop">
-          {Icon.stop}
-        </button>
         <Popover
           label={
             <>

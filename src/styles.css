@@ -1136,3 +1136,20 @@ button.ve-mnum:hover { color: var(--brass-2); background: var(--panel-2); }
   html:not(.printing) .page { max-width: none; padding: 0; }
   html:not(.printing) .sheet, html:not(.printing) .lib-card { box-shadow: none; }
 }
+
+/* ---------- Editor follow-ups ---------- */
+/* The page keeps room for its scrollbar, so Visual, Text and Split are exactly as wide
+   whether or not the page scrolls. */
+html { scrollbar-gutter: stable; }
+/* Play and stop start the editor bar (as on the Play page). */
+.editor-bar .play-stop { display: inline-flex; gap: 6px; }
+.editor-bar .play-stop .t-btn { width: 34px; height: 32px; }
+/* The docked harmonica floats at the bottom, a card like the toolbar at the top. */
+.ve-dock {
+  position: sticky; bottom: 8px; z-index: 12; margin: 0; padding: 4px 12px 0;
+  background: rgba(26, 23, 20, 0.97); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.35);
+}
+.ve-status { border-top: 1px solid var(--border); }
+/* The text editor fills the window under the bar. */
+.editor-single .code-editor { height: calc(100vh - var(--topbar-h) - var(--edit-head-h, 50px) - 130px); min-height: 320px; }
