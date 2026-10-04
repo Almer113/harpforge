@@ -6,12 +6,11 @@ const svg = (children: React.ReactNode) => (
   </svg>
 );
 
-/** Visual: note cards side by side, as the editor shows them. */
+/** Visual: an eye (the music shown, rather than its text). */
 export const VisualIcon = svg(
   <>
-    <rect x="2.5" y="6" width="6" height="12" rx="1.5" />
-    <rect x="10.5" y="6" width="4" height="12" rx="1.5" />
-    <rect x="16.5" y="6" width="5" height="12" rx="1.5" />
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+    <circle cx="12" cy="12" r="3" />
   </>,
 );
 
@@ -47,5 +46,23 @@ export const NotesIcon = svg(
   <>
     <circle cx="8" cy="17.5" r="2.5" fill="currentColor" />
     <path d="M10.5 17.5V4.5l7 2.5" />
+  </>,
+);
+
+/** Overwrite: the middle card filled in, as the one a new note replaces. */
+export const OverwriteIcon = svg(
+  <>
+    <rect x="3" y="6" width="5" height="12" rx="1.5" />
+    <rect x="10" y="6" width="5" height="12" rx="1.5" fill="currentColor" />
+    <rect x="17" y="6" width="4" height="12" rx="1.5" />
+  </>,
+);
+
+/** Insert: a text cursor between two cards, where a new note squeezes in. */
+export const InsertIcon = svg(
+  <>
+    <rect x="2" y="6" width="5" height="12" rx="1.5" />
+    <path d="M12 4v16M10 4h4M10 20h4" />
+    <rect x="17" y="6" width="5" height="12" rx="1.5" />
   </>,
 );

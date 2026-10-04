@@ -48,6 +48,7 @@ import { MIC_ID } from '../../live/inputs';
 import { useHarmonicaKeyboard } from '../../live/useHarmonicaKeyboard';
 import { commitSong, DURATIONS, describeDuration, durationLabel, retabSelection, stepPitch } from '../../state/editor';
 import { Popover } from '../Popover';
+import { InsertIcon, OverwriteIcon } from '../icons';
 import { MicControl, MidiControl } from '../InputBar';
 import { getParsed, useApp, useParsed, type VisualState } from '../../state/store';
 import { Harmonica } from '../Harmonica';
@@ -491,14 +492,14 @@ function Toolbar({ song }: { song: Song }) {
       <button className={`btn small step-btn ${ve.step ? 'on' : ''}`} aria-pressed={ve.step} onClick={() => setVe({ step: !ve.step, justEntered: undefined })} title="Step entry: every hole you play (keyboard, mouse, MIDI, mic) is written at the caret">
         <span className="rec-dot" /> Step entry
       </button>
-      <button
-        className={`btn small ghost ${ve.insert ? 'on' : ''}`}
-        onClick={() => setVe({ insert: !ve.insert })}
-        title={ve.insert ? 'Insert: new or longer notes push the music after them along; deleting closes the gap (Ins)' : 'Overwrite: new notes replace what’s there (Ins switches to insert)'}
-        aria-pressed={ve.insert}
-      >
-        {ve.insert ? 'Insert' : 'Overwrite'}
-      </button>
+      <div className="seg icons" role="radiogroup" aria-label="Writing over or in between">
+        <button role="radio" aria-checked={!ve.insert} aria-label="Overwrite" className={ve.insert ? '' : 'on'} onClick={() => setVe({ insert: false })} title="Overwrite: new notes replace what’s there (Ins switches)">
+          {OverwriteIcon}
+        </button>
+        <button role="radio" aria-checked={ve.insert} aria-label="Insert" className={ve.insert ? 'on' : ''} onClick={() => setVe({ insert: true })} title="Insert: new or longer notes push the music after them along; deleting closes the gap (Ins switches)">
+          {InsertIcon}
+        </button>
+      </div>
       <ReadAsSwitch icons />
       <Popover label="⋯" buttonClass="icon-btn more-btn" title="More tools" ariaLabel="More tools" kind="panel" panelClass="menu more-menu" panelLabel="More tools">
         {(close) => {
