@@ -587,48 +587,41 @@ export function updateMeasure(song: Song, m: number, patch: Partial<Omit<Measure
 
 // ---- Time signature -----------------------------------------------------------------------
 
-/**
- * Changes the time signature. With `reflow`, notes are re-barred (notes crossing a new
- * bar are split into ties). A pickup bar stays a pickup; repeat signs and other bar
- * lines stay where they were when a new bar line falls on the same beat.
- */
-export function setTimeSignature(song: Song, time: string, reflow: boolean): Song {
-  const meta = { ...song.meta, time };
-  const cap = beatsPerBar(meta);
-  if (!reflow) return { ...cloneSong(song), meta, cap };
+type AbsItem = Item & { at: number };
+type Mark = { at: number; end: number; m: Measure };
 
-  // Flatten to absolute time; each old measure spans its real length.
-  type Abs = Item & { at: number };
-  const abs: Abs[] = [];
-  const marks: { at: number; end: number; m: Measure }[] = [];
+/** Measures as one timeline (tied pieces joined back into whole notes), from the first given measure. */
+function flatten(song: Song, measures: Measure[]): { abs: AbsItem[]; marks: Mark[]; t: number } {
+  const abs: AbsItem[] = [];
+  const marks: Mark[] = [];
   let t = 0;
-  for (const m of song.measures) {
+  for (const m of measures) {
     for (const it of [...m.items].sort((a, b) => a.start - b.start)) {
       const at = t + it.start;
       const last = abs[abs.length - 1];
-      // Tied pieces merge back into one note before re-barring.
+      // Tied pieces merge back into one note; a tie at the very start continues a note before it.
       if (it.tied && last && near(last.at + last.dur, at) && sameSounds(last.sounds, it.sounds)) last.dur += it.dur;
-      else abs.push({ ...it, at, tied: it.tied && !!last && near(last.at + last.dur, at) ? true : undefined });
+      else abs.push({ ...it, at, tied: it.tied && (!last || near(last.at + last.dur, at)) ? true : undefined });
     }
     const span = measureSpan(song, m);
     marks.push({ at: t, end: t + span, m });
     t += span;
   }
-  // A pickup (short first bar) keeps its length; the new bars start after it.
-  const first = song.measures[0];
-  // (A first bar that only runs on to the next line of text isn't a pickup.)
-  const pickup = first?.len !== undefined && first.len < song.cap - EPS && first.endBar !== 'none' ? marks[0].end : 0;
-  const pickupNew = pickup > EPS && pickup < cap - EPS ? pickup : 0;
-  const indexAt = (at: number) => (pickupNew && at < pickupNew - EPS ? 0 : (pickupNew ? 1 : 0) + Math.floor((at - pickupNew) / cap + EPS));
-  const startOf = (mi: number) => (pickupNew ? (mi === 0 ? 0 : pickupNew + (mi - 1) * cap) : mi * cap);
-  const spanOf = (mi: number) => (pickupNew && mi === 0 ? pickupNew : cap);
+  return { abs, marks, t };
+}
 
-  // Re-bar up to the end of the last note (trailing empty space isn't music).
-  const lastNoteEnd = abs.reduce((a, it) => Math.max(a, it.at + it.dur), 0);
-  const total = lastNoteEnd > EPS ? lastNoteEnd : t;
+/**
+ * Cuts a timeline into bars of `cap` beats (after an optional pickup); notes crossing a
+ * bar line become ties. Sections, line breaks and bar lines go where their marks fall.
+ */
+function rebar(cap: number, abs: AbsItem[], marks: Mark[], total: number, opts: { pickup: number; lastShort: boolean; firstBreak: boolean }): Measure[] {
+  const { pickup } = opts;
+  const indexAt = (at: number) => (pickup && at < pickup - EPS ? 0 : (pickup ? 1 : 0) + Math.floor((at - pickup) / cap + EPS));
+  const startOf = (mi: number) => (pickup ? (mi === 0 ? 0 : pickup + (mi - 1) * cap) : mi * cap);
+  const spanOf = (mi: number) => (pickup && mi === 0 ? pickup : cap);
   const count = Math.max(1, indexAt(total - 1e-3) + 1);
-  const measures: Measure[] = Array.from({ length: count }, (_, i) => emptyMeasure(i === 0));
-  if (pickupNew) measures[0].len = pickupNew;
+  const measures: Measure[] = Array.from({ length: count }, (_, i) => emptyMeasure(i === 0 && opts.firstBreak));
+  if (pickup) measures[0].len = pickup;
   for (const it of abs) {
     let at = it.at;
     let left = it.dur;
@@ -639,7 +632,7 @@ export function setTimeSignature(song: Song, time: string, reflow: boolean): Son
       const start = at - startOf(mi);
       const take = left <= EPS ? 0 : mi === count - 1 ? left : Math.min(left, spanOf(mi) - start);
       const piece: Item = { ...it, start, dur: take };
-      delete (piece as Partial<Abs>).at;
+      delete (piece as Partial<AbsItem>).at;
       if (!firstPiece) {
         delete piece.chord;
         delete piece.lyric;
@@ -653,7 +646,7 @@ export function setTimeSignature(song: Song, time: string, reflow: boolean): Son
     } while (left > EPS);
   }
   for (const mk of marks) {
-    const mi = Math.min(count - 1, indexAt(mk.at));
+    const mi = Math.max(0, Math.min(count - 1, indexAt(mk.at)));
     const nm = measures[mi];
     if (mk.m.section !== undefined) nm.section = mk.m.section;
     if (mk.m.lineBreak) nm.lineBreak = true;
@@ -661,17 +654,144 @@ export function setTimeSignature(song: Song, time: string, reflow: boolean): Son
     // Bar lines move with the music when a new bar line falls on the same beat.
     if (mk.m.startBar && near(startOf(mi), mk.at)) nm.startBar = mk.m.startBar;
     if (mk.m.endBar !== 'single' && mk.m.endBar !== 'none') {
-      const ei = Math.min(count - 1, indexAt(mk.end - 1e-3));
+      const ei = Math.max(0, Math.min(count - 1, indexAt(mk.end - 1e-3)));
       if (near(startOf(ei) + spanOf(ei), mk.end) || ei === count - 1) measures[ei].endBar = mk.m.endBar;
     }
   }
   // A short last bar stays short.
-  const last = song.measures[song.measures.length - 1];
-  if (last?.len !== undefined && count > 1) {
+  if (opts.lastShort && count > 1) {
     const rest = total - startOf(count - 1);
     if (rest < cap - EPS) measures[count - 1].len = rest;
   }
+  return measures;
+}
+
+/**
+ * Changes the time signature. With `reflow`, notes are re-barred (notes crossing a new
+ * bar are split into ties). A pickup bar stays a pickup; repeat signs and other bar
+ * lines stay where they were when a new bar line falls on the same beat.
+ */
+export function setTimeSignature(song: Song, time: string, reflow: boolean): Song {
+  const meta = { ...song.meta, time };
+  const cap = beatsPerBar(meta);
+  if (!reflow) return { ...cloneSong(song), meta, cap };
+  const { abs, marks, t } = flatten(song, song.measures);
+  // A pickup (short first bar) keeps its length; the new bars start after it.
+  // (A first bar that only runs on to the next line of text isn't a pickup.)
+  const first = song.measures[0];
+  const pickup = first?.len !== undefined && first.len < song.cap - EPS && first.endBar !== 'none' ? marks[0].end : 0;
+  // Re-bar up to the end of the last note (trailing empty space isn't music).
+  const lastNoteEnd = abs.reduce((a, it) => Math.max(a, it.at + it.dur), 0);
+  const total = lastNoteEnd > EPS ? lastNoteEnd : t;
+  const last = song.measures[song.measures.length - 1];
+  const measures = rebar(cap, abs, marks, total, { pickup: pickup > EPS && pickup < cap - EPS ? pickup : 0, lastShort: last?.len !== undefined, firstBreak: true });
   return { meta, measures, cap };
+}
+
+/** Where a position is in played time (short and overfull bars take their real length). */
+export function realBeat(song: Song, pos: Pos): number {
+  let t = 0;
+  for (let i = 0; i < pos.m && i < song.measures.length; i++) t += measureSpan(song, song.measures[i]);
+  if (pos.m > song.measures.length) t += (pos.m - song.measures.length) * song.cap;
+  return t + pos.start;
+}
+
+/** The position at a time in played time (the inverse of realBeat). */
+export function posAtReal(song: Song, beat: number): Pos {
+  let t = 0;
+  for (let i = 0; i < song.measures.length; i++) {
+    const span = measureSpan(song, song.measures[i]);
+    if (beat < t + span - EPS) return { m: i, start: Math.max(0, beat - t) };
+    t += span;
+  }
+  const extra = beat - t;
+  const m = Math.floor(extra / song.cap + EPS);
+  return { m: song.measures.length + m, start: Math.max(0, extra - m * song.cap) };
+}
+
+/**
+ * Insert mode: everything from `at` on moves by `delta` beats (later for room, earlier
+ * to close a gap), flowing over the bar lines. Bars before `at`'s bar are untouched.
+ */
+export function ripple(song: Song, at: Pos, delta: number): Song {
+  if (Math.abs(delta) < EPS || at.m >= song.measures.length) return song;
+  const k = at.m;
+  const tail = song.measures.slice(k);
+  const { abs, marks, t } = flatten(song, tail);
+  const from = at.start;
+  const moved = abs
+    // Closing a gap: whatever is still in it goes (callers clear it first).
+    .filter((it) => !(delta < 0 && it.at >= from + delta - EPS && it.at < from - EPS))
+    .map((it) => (it.at >= from - EPS ? { ...it, at: it.at + delta } : it));
+  const shifted = marks.map((mk) => ({ ...mk, at: mk.at > from + EPS ? mk.at + delta : mk.at, end: mk.end > from + EPS ? mk.end + delta : mk.end }));
+  const lastNoteEnd = moved.reduce((a, it) => Math.max(a, it.at + it.dur), 0);
+  const total = Math.max(lastNoteEnd, t + delta, EPS);
+  const last = tail[tail.length - 1];
+  const measures = rebar(song.cap, moved, shifted, total, { pickup: 0, lastShort: last?.len !== undefined, firstBreak: tail[0].lineBreak });
+  return keepFinalBarLast({ ...song, measures: [...cloneSong(song).measures.slice(0, k), ...measures] });
+}
+
+// ---- Insert mode ------------------------------------------------------------------------------
+
+/** Where a (tied) note ends: the slot right after its last piece. */
+function afterChain(song: Song, chain: Pos[]): Pos {
+  const last = chain[chain.length - 1];
+  return posAtReal(song, realBeat(song, last) + findItem(song, last)!.dur);
+}
+
+/** Makes room for `dur` beats at `at` (insert mode); in overwrite mode nothing moves. */
+export function makeRoom(song: Song, at: Pos, dur: number, insert: boolean): Song {
+  return insert ? ripple(song, at, dur) : song;
+}
+
+/** Deletes notes; in insert mode the music after each closes the gap. */
+export function deleteNotes(song: Song, positions: Pos[], insert: boolean): Song {
+  if (!insert) return removeChains(song, positions);
+  const chains: Pos[][] = [];
+  for (const p of positions) {
+    const c = chainAt(song, p);
+    if (c.length && !chains.some((x) => samePos(x[0], c[0]))) chains.push(c);
+  }
+  // Last first, so earlier positions stay valid.
+  chains.sort((a, b) => realBeat(song, b[0]) - realBeat(song, a[0]));
+  let s = song;
+  for (const c of chains) {
+    const end = afterChain(s, c);
+    const len = chainLength(s, c);
+    s = ripple(removeChains(s, [c[0]]), end, -len);
+  }
+  return s;
+}
+
+/**
+ * Gives notes a new length. In insert mode the music after each note moves along
+ * (later when it grows, earlier when it shrinks); otherwise see setLengths.
+ */
+export function changeLengths(song: Song, sel: Pos[], beats: number, insert: boolean): { song: Song; selection: Pos[] } {
+  if (!insert) return setLengths(song, sel, beats);
+  const heads: { pos: Pos; real: number; len: number }[] = [];
+  for (const p of sel) {
+    const c = chainAt(song, p);
+    if (c.length && !heads.some((h) => samePos(h.pos, c[0]))) heads.push({ pos: c[0], real: realBeat(song, c[0]), len: chainLength(song, c) });
+  }
+  heads.sort((a, b) => b.real - a.real);
+  let s = song;
+  for (const h of heads) {
+    const d = beats - h.len;
+    if (Math.abs(d) < EPS) continue;
+    const end = afterChain(s, chainAt(s, h.pos));
+    if (d > 0) s = updateItem(ripple(s, end, d), h.pos, { dur: beats });
+    else s = ripple(updateItem(s, h.pos, { dur: beats }), end, d);
+  }
+  // Each note moved by the growth of the notes before it.
+  const order = [...heads].sort((a, b) => a.real - b.real);
+  let shift = 0;
+  const selection = order.map((h) => {
+    const pos = posAtReal(s, h.real + shift);
+    shift += beats - h.len;
+    return pos;
+  });
+  return { song: s, selection };
 }
 
 // ---- Positions ------------------------------------------------------------------------------

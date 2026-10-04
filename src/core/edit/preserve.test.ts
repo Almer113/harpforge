@@ -8,7 +8,7 @@ import { buildScore, harmonicaFromMeta } from '../score';
 import { holeSound } from '../types';
 import { retab } from '../convert';
 import { getHarmonica } from '../instruments';
-import { deleteMeasure, duplicateMeasure, findItem, fromDoc, moveItems, positionsBetween, setLengths, setTimeSignature, toDoc, updateItem, type Song } from './model';
+import { changeLengths, deleteMeasure, deleteNotes, duplicateMeasure, findItem, fromDoc, moveItems, positionsBetween, removeChains, ripple, setLengths, setTimeSignature, toDoc, updateItem, type Song } from './model';
 import { copyText, pasteText } from './clipboard';
 import { replaceLines, spliceBody } from './splice';
 
@@ -181,5 +181,40 @@ describe('copy then paste', () => {
     const text = doc('. . . . | . . . . |');
     const r = pasteText(fromDoc(parseHtab(text).doc), clip, { m: 0, start: 1 })!;
     expect(spliceBody(text, r.song)).toBe('. -4 . -5 | 6~ .~ |');
+  });
+});
+
+describe('insert mode (ripple)', () => {
+  const text = doc('4 5 6 7 | 8 9 10 9 |');
+  const s = () => fromDoc(parseHtab(text).doc);
+  it('makes room: later notes move along over the bar lines', () => {
+    expect(spliceBody(text, ripple(s(), { m: 0, start: 1 }, 1))).toBe('4 . 5 6 | 7 8 9 10 | 9 .~~ |');
+  });
+  it('closes a gap', () => {
+    const cleared = removeChains(s(), [{ m: 0, start: 1 }]);
+    expect(spliceBody(text, ripple(cleared, { m: 0, start: 2 }, -1))).toBe('4 6 7 8 | 9 10 9 . |');
+  });
+  it('leaves earlier bars alone and keeps notes tied over the edit', () => {
+    const t2 = doc('# keep\n4 4 4 4 |\n5 6 7~ | ~ 8 9 10 |');
+    const r = ripple(fromDoc(parseHtab(t2).doc), { m: 1, start: 0 }, 1);
+    const body = spliceBody(t2, r);
+    expect(body.split('\n').slice(0, 2)).toEqual(['# keep', '4 4 4 4 |']);
+    expect(music(doc(body)).map((e) => [e[0], e[1]])).toEqual([[0, 1], [1, 1], [2, 1], [3, 1], [5, 1], [6, 1], [7, 3], [10, 1], [11, 1], [12, 1]]);
+  });
+});
+
+describe('insert mode edits', () => {
+  const text = doc('4 5 6 7 | 8 9 10 9 |');
+  const s = () => fromDoc(parseHtab(text).doc);
+  it('deleting closes the gap', () => {
+    expect(spliceBody(text, deleteNotes(s(), [{ m: 0, start: 1 }, { m: 0, start: 3 }], true))).toBe('4 6 8 9 | 10 9 .~ |');
+  });
+  it('a longer note pushes the rest along; a shorter one pulls it back', () => {
+    const r = changeLengths(s(), [{ m: 0, start: 1 }], 2, true);
+    expect(spliceBody(text, r.song)).toBe('4 5~ 6 | 7 8 9 10 | 9 .~~ |');
+    expect(r.selection).toEqual([{ m: 0, start: 1 }]);
+    const r2 = changeLengths(s(), [{ m: 0, start: 0 }, { m: 0, start: 1 }], 0.5, true);
+    expect(spliceBody(text, r2.song)).toBe('{4 5} 6 7 8 | 9 10 9 . |');
+    expect(r2.selection).toEqual([{ m: 0, start: 0 }, { m: 0, start: 0.5 }]);
   });
 });

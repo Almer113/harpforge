@@ -71,6 +71,8 @@ export interface VisualState {
   triplet: boolean;
   snap: number;
   zoom: number;
+  /** Insert mode: new notes and longer notes push the music after them along; deleting closes the gap. */
+  insert: boolean;
   /** Step entry: playing a hole inserts it at the caret. */
   step: boolean;
   /** Sound used for notes added without the harmonica. */
@@ -268,6 +270,7 @@ export const useApp = create<AppState>((set) => ({
     snap: 0.5,
     zoom: 64,
     step: false,
+    insert: false,
     lastSounds: [{ type: 'hole', hole: 4, breath: 'blow', bend: 0, over: false, slide: false }],
   },
   setVe: (patch) => set((s) => ({ ve: { ...s.ve, ...patch } })),

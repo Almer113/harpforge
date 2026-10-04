@@ -25,7 +25,11 @@ import {
   placeItem,
   removeChains,
   samePos,
-  setLengths,
+  changeLengths,
+  deleteNotes,
+  makeRoom,
+  realBeat,
+  ripple,
   setTie,
   snapTo,
   updateItem,
@@ -130,7 +134,7 @@ export function VisualEditor() {
           }
           const dur = toolDuration(v);
           const pos = v.caret;
-          const next = placeItem(s, pos.m, { start: pos.start, dur, sounds: [sound] });
+          const next = placeItem(makeRoom(s, pos, dur, v.insert), pos.m, { start: pos.start, dur, sounds: [sound] });
           lastInsert.current = { at: now, pos };
           apply(next, { caret: advance(next, pos, dur), selection: [pos], measure: pos.m, lastSounds: [sound] });
           return;
@@ -161,7 +165,7 @@ export function VisualEditor() {
       if (!text) return;
       e.clipboardData?.setData('text/plain', text);
       e.preventDefault();
-      if (cut) apply(removeChains(s, sel), { selection: [], caret: sel[0] });
+      if (cut) apply(deleteNotes(s, sel, st.ve.insert), { selection: [], caret: sel[0] });
       st.notify(`${cut ? 'Cut' : 'Copied'} ${sel.length} note${sel.length === 1 ? '' : 's'} — paste them here or anywhere as text`);
     };
     const onCopy = (e: ClipboardEvent) => copyOut(e, false);
@@ -171,7 +175,10 @@ export function VisualEditor() {
       const text = e.clipboardData?.getData('text/plain') ?? '';
       const st = useApp.getState();
       const s = fromDoc(getParsed(st.text).doc);
-      const r = pasteText(s, text, st.ve.caret);
+      // Insert mode: room for what's pasted first.
+      const probe = st.ve.insert ? pasteText(s, text, st.ve.caret) : null;
+      const room = probe ? realBeat(probe.song, probe.end) - realBeat(probe.song, st.ve.caret) : 0;
+      const r = pasteText(room > 0 ? ripple(s, st.ve.caret, room) : s, text, st.ve.caret);
       e.preventDefault();
       if (!r) {
         st.notify('The clipboard doesn’t hold tab or notes to paste.');
@@ -239,7 +246,12 @@ export function VisualEditor() {
         case 'Backspace':
           if (!sel.length) return;
           e.preventDefault();
-          apply(removeChains(s, sel), { selection: [], caret: sel[0] });
+          apply(deleteNotes(s, sel, v.insert), { selection: [], caret: sel[0] });
+          return;
+        case 'Insert':
+          e.preventDefault();
+          setVe({ insert: !v.insert });
+          st.notify(v.insert ? 'Overwrite: new notes replace what’s there' : 'Insert: new notes push the rest along');
           return;
         case 'Escape':
           setVe({ selection: [] });
@@ -323,7 +335,7 @@ function setDuration(base: number, dotted: boolean, triplet: boolean) {
   if (!v.selection.length) return;
   const beats = base * (dotted ? 1.5 : 1) * (triplet ? 2 / 3 : 1);
   const s = fromDoc(getParsed(st.text).doc);
-  const { song, selection } = setLengths(s, v.selection, beats);
+  const { song, selection } = changeLengths(s, v.selection, beats, v.insert);
   apply(song, { selection });
 }
 
@@ -351,7 +363,7 @@ function insertRest() {
   const v = st.ve;
   const s = fromDoc(getParsed(st.text).doc);
   const dur = toolDuration(v);
-  const cleared = removeChains(placeItem(s, v.caret.m, { start: v.caret.start, dur, sounds: [] }), [v.caret]);
+  const cleared = removeChains(placeItem(makeRoom(s, v.caret, dur, v.insert), v.caret.m, { start: v.caret.start, dur, sounds: [] }), [v.caret]);
   apply(cleared, { caret: advance(cleared, v.caret, dur), selection: [] });
 }
 
@@ -360,7 +372,7 @@ function addNoteAtCaret() {
   const v = st.ve;
   const s = fromDoc(getParsed(st.text).doc);
   const dur = toolDuration(v);
-  const next = placeItem(s, v.caret.m, { start: v.caret.start, dur, sounds: v.lastSounds });
+  const next = placeItem(makeRoom(s, v.caret, dur, v.insert), v.caret.m, { start: v.caret.start, dur, sounds: v.lastSounds });
   apply(next, { selection: [v.caret], caret: advance(next, v.caret, dur), measure: v.caret.m });
   playSounds(v.lastSounds, dur);
 }
@@ -419,7 +431,7 @@ function Toolbar({ song }: { song: Song }) {
       <div className="tb-group">
         <button className="btn small" onClick={addNoteAtCaret} title="Add a note at the caret (double-click an empty slot also works)">+ Note</button>
         <button className="btn small ghost" onClick={insertRest} title="Insert a rest at the caret (/)">Rest</button>
-        <button className="btn small ghost" disabled={!sel.length} onClick={() => apply(removeChains(fromDoc(getParsed(useApp.getState().text).doc), sel), { selection: [] })} title="Delete selected notes (Del)">
+        <button className="btn small ghost" disabled={!sel.length} onClick={() => apply(deleteNotes(fromDoc(getParsed(useApp.getState().text).doc), sel, ve.insert), { selection: [] })} title="Delete selected notes (Del)">
           Delete
         </button>
         <button className={`btn small ghost tie-btn ${selTied ? 'on' : ''}`} disabled={sel.length !== 1} onClick={toggleTie} title="Tie: the selected note continues the note before it, across bar lines too (L)">
@@ -427,6 +439,14 @@ function Toolbar({ song }: { song: Song }) {
         </button>
       </div>
       <div className="tb-group">
+        <button
+          className={`btn small ghost ${ve.insert ? 'on' : ''}`}
+          onClick={() => setVe({ insert: !ve.insert })}
+          title={ve.insert ? 'Insert: new or longer notes push the music after them along; deleting closes the gap (Ins)' : 'Overwrite: new notes replace what’s there (Ins switches to insert)'}
+          aria-pressed={ve.insert}
+        >
+          {ve.insert ? 'Insert' : 'Overwrite'}
+        </button>
         <button className={`btn small step-btn ${ve.step ? 'on' : ''}`} onClick={() => setVe({ step: !ve.step })} title="Step entry: every hole you play (keyboard, mouse, MIDI, mic) is written at the caret">
           <span className="rec-dot" /> Step entry
         </button>
@@ -562,7 +582,8 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
           // The dragged piece changes length; the whole (tied) note follows.
           const chain = chainAt(s, d.pos);
           const total = chainLength(s, chain) - d.item.dur + rd.dur;
-          apply(updateItem(s, d.pos, { dur: total }));
+          const ins = useApp.getState().ve.insert;
+          apply(ins ? changeLengths(s, [d.pos], total, true).song : updateItem(s, d.pos, { dur: total }));
         }
         return;
       }
@@ -649,7 +670,7 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const start = Math.max(0, Math.min(song.cap - ve.snap, Math.floor((e.clientX - r.left) / zoom / ve.snap + EPS) * ve.snap));
     const dur = toolDuration(ve);
-    const next = placeItem(song, m, { start, dur, sounds: ve.lastSounds });
+    const next = placeItem(makeRoom(song, { m, start }, dur, ve.insert), m, { start, dur, sounds: ve.lastSounds });
     apply(next, { selection: [{ m, start }], caret: advance(next, { m, start }, dur), measure: m });
     playSounds(ve.lastSounds, dur);
   };

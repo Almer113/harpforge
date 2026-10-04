@@ -12,7 +12,9 @@ import {
   findItem,
   insertMeasure,
   placeItem,
-  removeChains,
+  changeLengths,
+  deleteNotes,
+  makeRoom,
   setTie,
   updateItem,
   updateMeasure,
@@ -108,7 +110,12 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
     playSounds(parsed);
   };
 
-  const setDur = (base: number, dotted: boolean, triplet: boolean) => set({ dur: base * (dotted ? 1.5 : 1) * (triplet ? 2 / 3 : 1) });
+  const insert = useApp((s) => s.ve.insert);
+  const setDur = (base: number, dotted: boolean, triplet: boolean) => {
+    const beats = base * (dotted ? 1.5 : 1) * (triplet ? 2 / 3 : 1);
+    if (insert) apply(changeLengths(song, [pos], beats, true).song);
+    else set({ dur: beats });
+  };
 
   return (
     <section className="insp-card">
@@ -247,13 +254,13 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
           onClick={() => {
             const head = findItem(song, chain[0])!;
             const to = advance(song, chain[0], total);
-            apply(placeItem(song, to.m, { ...head, tied: undefined, start: to.start, dur: total }), { selection: [to], caret: advance(song, to, total), measure: to.m });
+            apply(placeItem(makeRoom(song, to, total, insert), to.m, { ...head, tied: undefined, start: to.start, dur: total }), { selection: [to], caret: advance(song, to, total), measure: to.m });
           }}
           title="Copy this note into the next slot"
         >
           Repeat
         </button>
-        <button className="btn small danger" onClick={() => apply(removeChains(song, [pos]), { selection: [], caret: chain[0] })}>
+        <button className="btn small danger" onClick={() => apply(deleteNotes(song, [pos], insert), { selection: [], caret: chain[0] })}>
           Delete
         </button>
       </div>
@@ -285,7 +292,7 @@ function MultiPanel({ song, sel }: { song: Song; sel: Pos[] }) {
       <div className="row">
         <button className="btn small" onClick={() => step(1)}>Pitch ▲</button>
         <button className="btn small" onClick={() => step(-1)}>Pitch ▼</button>
-        <button className="btn small danger" onClick={() => apply(removeChains(song, sel), { selection: [] })}>Delete</button>
+        <button className="btn small danger" onClick={() => apply(deleteNotes(song, sel, useApp.getState().ve.insert), { selection: [] })}>Delete</button>
       </div>
     </section>
   );
