@@ -88,7 +88,7 @@ export interface VisualState {
   /** Sound used for notes added without the harmonica. */
   lastSounds: import('../core/types').Sound[];
   /** The inspector tab chosen by hand; otherwise it follows the selection (note, or the song). */
-  panel?: 'note' | 'measure' | 'song';
+  panel?: 'note' | 'measure';
   /** The note step entry wrote last (outlined; it isn't selected, so length keys set the next note). */
   justEntered?: import('../core/edit/model').Pos;
 }
@@ -196,6 +196,8 @@ export interface AppState {
   fitWidth: boolean;
   /** Editor: the docked harmonica is open (remembered). */
   dockOpen: boolean;
+  /** Editor: a time-signature change re-bars the notes (⋯ → Measures). */
+  rebar: boolean;
   editorMode: EditorMode;
   ve: VisualState;
   setVe(patch: Partial<VisualState>): void;
@@ -345,6 +347,7 @@ export const useApp = create<AppState>((set) => ({
   },
   fitWidth: prefs.fitWidth !== false,
   dockOpen: prefs.dockOpen !== false,
+  rebar: true,
   editorMode: 'visual',
   ve: {
     selection: [],

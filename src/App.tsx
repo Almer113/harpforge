@@ -193,7 +193,8 @@ export function App() {
             </button>
           ))}
         </div>
-        <div className="doc-status" title={saved ? 'Saved in your library' : docId ? 'Unsaved changes (Ctrl+S to save)' : 'Not in your library yet (Ctrl+S to save)'}>
+        {/* On Play and Edit the page shows the title itself, big. */}
+        <div className={`doc-status ${page === 'play' || page === 'editor' ? 'hidden-here' : ''}`} title={saved ? 'Saved in your library' : docId ? 'Unsaved changes (Ctrl+S to save)' : 'Not in your library yet (Ctrl+S to save)'}>
           <span className={`dot ${saved ? 'clean' : 'dirty'}`} aria-hidden />
           <span className="doc-title">{doc.meta.title || 'Untitled'}</span>
         </div>

@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CodeEditor, type CodeEditorHandle } from '../components/CodeEditor';
 import { PlayStop, Transport } from '../components/Controls';
-import { Popover } from '../components/Popover';
-import { SongFields, SongTitle } from '../components/editor/SongDetails';
+import { SongLine } from '../components/editor/SongDetails';
 import { UndoRedo, VisualEditor, VisualToolbar } from '../components/editor/VisualEditor';
 import { Sheet } from '../components/Sheet';
 import { selectEvent } from '../state/playback';
@@ -32,6 +31,7 @@ export function EditorPage() {
 
   return (
     <section className={`page editor-page mode-${mode}`}>
+      <SongLine editable />
       {/* One bar: the mode switch always first, the editor's tools, then play and the harmonica. */}
       <div className="edit-sticky" ref={head}>
         <div className="editor-bar">
@@ -51,17 +51,12 @@ export function EditorPage() {
             <div className="tb-group">
               <span className="tb-sep" />
               <button className={`btn small ghost ${showHelp ? 'on' : ''}`} onClick={() => setShowHelp(!showHelp)} aria-pressed={showHelp}>Syntax help</button>
-              <Popover label="Song ▾" title="Title, key, time and tempo" kind="panel" panelClass="menu song-pop" panelLabel="Song">
-                <SongFields />
-              </Popover>
             </div>
           )}
           <span className="bar-spacer" />
           <Transport compact />
         </div>
       </div>
-
-      <SongTitle />
 
       {mode === 'visual' ? (
         <VisualEditor />

@@ -451,6 +451,7 @@ function deleteSelection() {
 
 function Toolbar({ song }: { song: Song }) {
   const fit = useApp((s) => s.fitWidth);
+  const rebar = useApp((s) => s.rebar);
   const ve = useApp((s) => s.ve);
   const setVe = useApp((s) => s.setVe);
   const sel = ve.selection;
@@ -529,9 +530,19 @@ function Toolbar({ song }: { song: Song }) {
               <button className="menu-item" onClick={run(() => apply(insertMeasure(song, song.measures.length), { caret: { m: song.measures.length, start: 0 }, measure: song.measures.length }))}>
                 <span className="mi-name">+ Measure at the end</span>
               </button>
-              <label className="pb-row check">
-                <input type="checkbox" checked={fit} onChange={(e) => useApp.setState({ fitWidth: e.target.checked })} /> Fit measures to the width
-                <span className="mi-hint">Off: rows follow the tab’s lines of text</span>
+              <label className="pb-check">
+                <input type="checkbox" checked={rebar} onChange={(e) => useApp.setState({ rebar: e.target.checked })} />
+                <span>
+                  Re-bar notes when the time changes
+                  <span className="mi-hint">Notes crossing a new bar line are split; off: the bars stay as they are</span>
+                </span>
+              </label>
+              <label className="pb-check">
+                <input type="checkbox" checked={fit} onChange={(e) => useApp.setState({ fitWidth: e.target.checked })} />
+                <span>
+                  Fit measures to the width
+                  <span className="mi-hint">Off: rows follow the tab’s lines of text</span>
+                </span>
               </label>
               <div className="mi-label">Grid</div>
               <label className="pb-row">

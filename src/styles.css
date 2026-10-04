@@ -1153,3 +1153,32 @@ html { scrollbar-gutter: stable; }
 .ve-status { border-top: 1px solid var(--border); }
 /* The text editor fills the window under the bar. */
 .editor-single .code-editor { height: calc(100vh - var(--topbar-h) - var(--edit-head-h, 50px) - 130px); min-height: 320px; }
+
+/* ---------- The song line (Edit: editable, Play: read-only), above the floating bar ---------- */
+.song-line { display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; min-height: 44px; margin: 2px 2px 0; }
+.song-line .sl-title { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; margin: 0; line-height: 1.2; color: var(--text); }
+.song-line .sl-artist { color: var(--muted); font-size: 14px; }
+.sl-item { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+.sl-label { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint); }
+.song-line.editable .meta-input { border-color: transparent; background: transparent; padding: 3px 6px; margin-left: -6px; }
+.song-line.editable .meta-input:hover, .song-line.editable .meta-input:focus { border-color: var(--border-2); background: var(--bg); }
+.song-line.editable .sl-title { max-width: 100%; }
+.song-line.editable select { padding: 3px 6px; }
+.song-line.editable .sl-tempo { width: 64px; margin-left: 0; border-color: var(--border-2); background: var(--bg); }
+.song-line.editable .sl-item:first-of-type { margin-left: 4px; }
+.editor-page .song-line, .play-page .song-line { margin-bottom: 0; }
+.doc-status.hidden-here { visibility: hidden; }
+
+/* The Play page's transport looks like the editor's bar: same card, same buttons. */
+.play-page .transport { padding: 6px 10px; gap: 8px; background: rgba(26, 23, 20, 0.97); }
+.play-page .transport .t-btn { min-width: 34px; height: 32px; padding: 0 8px; }
+.play-page .transport .t-btn.primary { width: 34px; }
+/* Play and Edit share width and spacing, so the song line and the bar sit in the same place. */
+.page.play-page { max-width: 1440px; gap: 10px; }
+.editor-bar .play-stop .t-btn { min-width: 34px; padding: 0; }
+.pb-check { display: flex; align-items: flex-start; gap: 9px; padding: 6px 10px; font-size: 13px; cursor: pointer; border-radius: 6px; }
+.pb-check:hover { background: var(--panel-2); }
+.pb-check input { margin-top: 3px; accent-color: var(--brass); }
+.pb-check > span { display: flex; flex-direction: column; gap: 1px; }
+/* The song line's title and artist are as wide as their text. */
+.song-line.editable .sl-title, .song-line.editable .sl-artist { field-sizing: content; min-width: 4ch; width: auto; }

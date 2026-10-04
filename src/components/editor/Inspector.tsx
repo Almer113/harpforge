@@ -33,7 +33,6 @@ import { chooseSounds, neighbours, offHarp, parseNotes, pitchOf, stepNotes, step
 import { getParsed, useApp, useParsed } from '../../state/store';
 import { Glyph, NoteGlyph } from '../TabView';
 import { apply, playSounds } from './VisualEditor';
-import { SongFields } from './SongDetails';
 
 const soundsText = (sounds: Sound[]) =>
   sounds.length === 0 ? '' : sounds.length === 1 ? soundText(sounds[0]) : '(' + sounds.map((s) => soundText(s)).join(' ') + ')';
@@ -55,22 +54,21 @@ function LiveInput({ value, placeholder, onCommit, className }: { value: string;
   );
 }
 
-type Tab = 'note' | 'measure' | 'song';
+type Tab = 'note' | 'measure';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'note', label: 'Note' },
   { id: 'measure', label: 'Measure' },
-  { id: 'song', label: 'Song' },
 ];
 
 /**
- * Note, Measure and Song tabs. The tab follows what you click (a note: Note; a bar number:
- * Measure; empty space: Song) until you pick one yourself.
+ * Note and Measure tabs. The tab follows what you click (a note: Note; a bar number or an
+ * empty slot: the measure there) until you pick one yourself.
  */
 export function Inspector({ song }: { song: Song }) {
   const ve = useApp((s) => s.ve);
   const sel = ve.selection;
   const items = sel.map((p) => ({ p, it: findItem(song, p) })).filter((x): x is { p: Pos; it: Item } => !!x.it);
-  const tab: Tab = ve.panel ?? (items.length ? 'note' : 'song');
+  const tab: Tab = ve.panel === 'note' || ve.panel === 'measure' ? ve.panel : items.length ? 'note' : 'measure';
   const m = Math.min(sel[0]?.m ?? ve.measure, song.measures.length - 1);
   return (
     <aside className="ve-inspector">
@@ -93,11 +91,6 @@ export function Inspector({ song }: { song: Song }) {
             <p className="muted small insp-empty">Select a note to see it here, or turn on Step entry and play the harmonica to write notes at the caret.</p>
           ))}
         {tab === 'measure' && <MeasurePanel song={song} m={m} />}
-        {tab === 'song' && (
-          <section className="insp-card">
-            <SongFields />
-          </section>
-        )}
       </div>
     </aside>
   );

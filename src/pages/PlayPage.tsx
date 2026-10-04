@@ -3,6 +3,7 @@ import { Harmonica, NowPlaying } from '../components/Harmonica';
 import { InputBar } from '../components/InputBar';
 import '../state/practice';
 import { Sheet } from '../components/Sheet';
+import { SongLine } from '../components/editor/SongDetails';
 import { Popover } from '../components/Popover';
 import { useHarmonicaKeyboard } from '../live/useHarmonicaKeyboard';
 import { selectEvent } from '../state/playback';
@@ -23,18 +24,10 @@ export function PlayPage() {
   const practising = useApp((s) => !!s.practice);
   // Practising with the harmonica hidden: the slim one shows, so the next hole can be seen.
   const shown = harpSize === 'hidden' && practising ? 'slim' : harpSize;
-  const { meta } = parsed.doc;
 
   return (
     <section className="page play-page">
-      <header className="song-head slim">
-        <h1>{meta.title || 'Untitled'}</h1>
-        <div className="chips">
-          {meta.artist && <span className="chip plain">{meta.artist}</span>}
-          {meta.key && <span className="chip plain">Key {meta.key}</span>}
-          <span className="chip plain">{meta.time} · {meta.tempo} bpm</span>
-        </div>
-      </header>
+      <SongLine editable={false} />
 
       <Transport />
 
