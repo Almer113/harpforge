@@ -3,7 +3,7 @@
 
 import { useApp, type Page } from './store';
 
-const SLUGS: Record<Page, string> = { play: 'play', editor: 'edit', library: 'library' };
+const SLUGS: Record<Page, string> = { play: 'play', editor: 'edit', library: 'library', print: 'print' };
 
 function pageFromHash(hash: string): Page | null {
   const m = /^#\/([a-z]+)/.exec(hash);

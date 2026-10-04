@@ -22,6 +22,8 @@ const NAV: { id: Page; label: string }[] = [
 
 startRouter();
 
+const PrintPage = lazy(() => import('./pages/PrintPage').then((m) => ({ default: m.PrintPage })));
+
 // The editor is the biggest page: it loads the first time it's opened.
 const EditorPage = lazy(() => import('./pages/EditorPage').then((m) => ({ default: m.EditorPage })));
 
@@ -103,6 +105,13 @@ export function App() {
     const onHash = () => openSharedFromUrl();
     window.addEventListener('hashchange', onHash);
     const onKey = (e: KeyboardEvent) => {
+      // Ctrl+P: the print view (printing the app itself would be dark pages); on it, print.
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        if (useApp.getState().page === 'print') window.print();
+        else useApp.getState().setPage('print');
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         void saveCurrent();
@@ -164,6 +173,11 @@ export function App() {
             </Suspense>
           )}
           {page === 'library' && <LibraryPage />}
+          {page === 'print' && (
+            <Suspense fallback={<section className="page"><p className="muted">Loading…</p></section>}>
+              <PrintPage />
+            </Suspense>
+          )}
         </ErrorBoundary>
       </main>
       {dragging && (

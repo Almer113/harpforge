@@ -99,7 +99,7 @@ export function Sheet({
 }
 
 /** "Show ▾": what the Tab or Numbers view shows besides the notes. */
-function ShowMenu({ view }: { view: 'tab' | 'numbers' | 'staff' }) {
+export function ShowMenu({ view }: { view: 'tab' | 'numbers' | 'staff' }) {
   const show = useApp((s) => s.sheetShow);
   const names = useApp((s) => s.showNoteNames);
   const [open, setOpen] = useState(false);

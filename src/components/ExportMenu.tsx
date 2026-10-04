@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useKeepInView } from './keepInView';
 import { EXPORTS } from '../core/formats';
 import { exportAs } from '../state/actions';
+import { useApp } from '../state/store';
 
 /** "Export ▾" button with every export format. Exports `text`, or the current tab. */
 export function ExportMenu({ text, small = false, label = 'Export' }: { text?: string; small?: boolean; label?: string }) {
@@ -30,6 +31,19 @@ export function ExportMenu({ text, small = false, label = 'Export' }: { text?: s
       </button>
       {open && (
         <div className="menu" role="menu">
+          {text === undefined && (
+            <button
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                setOpen(false);
+                useApp.getState().setPage('print');
+              }}
+            >
+              <span className="mi-name">Print or save as PDF… <span className="mi-ext">Ctrl+P</span></span>
+              <span className="mi-hint">Ink on white, with a choice of view and size</span>
+            </button>
+          )}
           {EXPORTS.map((f) => (
             <button
               key={f.id}

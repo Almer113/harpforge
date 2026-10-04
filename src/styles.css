@@ -883,3 +883,43 @@ html { scroll-padding-top: calc(var(--topbar-h) + var(--edit-head-h, 64px) + 14p
 .show-item > span { display: flex; flex-direction: column; gap: 1px; }
 .lib-actions .menu-wrap .menu { min-width: 270px; }
 .lib-actions .menu-wrap:last-child .menu { min-width: 160px; }
+
+/* ---------- Print view ---------- */
+.print-controls { display: flex; flex-direction: column; gap: 10px; }
+.print-controls h1 { font-size: 22px; }
+.print-controls p { margin: 0; }
+.print-options { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.print-options .btn.primary { margin-left: auto; }
+
+/* Paper: ink on white. The sheet views draw with these colours. */
+.paper {
+  --text: #1a1714; --muted: #4f463c; --faint: #6d6357; --border: #cfc6ba; --border-2: #a99e90;
+  --panel: transparent; --panel-2: #f1ece5; --bg-2: #f6f2ec; --brass: #8a5a12; --brass-2: #8a5a12;
+  --blow: #b8570a; --draw: #11638c; --pitch: #6b3fa0; --staff-ink: #111111;
+  color: var(--text); background: #fff; border-radius: 6px;
+  width: min(100%, 210mm); margin: 0 auto; padding: 14mm 14mm 16mm;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  zoom: var(--paper-zoom, 1);
+}
+.paper .card, .paper .st-note { cursor: default; }
+.paper .card:hover, .paper .st-note:hover { background: transparent; border-color: transparent; }
+.paper-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; padding-bottom: 8px; margin-bottom: 12px; border-bottom: 2px solid var(--text); }
+.paper-head h1 { font-size: 24px; color: var(--text); }
+.paper-artist { color: var(--muted); font-size: 14px; }
+.paper-details { color: var(--muted); font-size: 12.5px; text-align: right; white-space: pre; }
+.hole-chart { border-collapse: collapse; margin: 0 0 14px; font-family: var(--mono); font-size: 12px; }
+.hole-chart th, .hole-chart td { border: 1px solid var(--border); padding: 2px 7px; text-align: center; }
+.hole-chart th { text-align: left; font-family: Inter, system-ui, sans-serif; font-weight: 600; color: var(--muted); }
+.hole-chart tr.blow td { color: var(--blow); }
+.hole-chart tr.draw td { color: var(--draw); }
+.hole-chart caption { caption-side: bottom; text-align: left; color: var(--faint); font-size: 11px; padding-top: 3px; }
+.paper .tab-line-wrap, .paper .st-line, .paper .abcjs-container > svg, .paper .abcjs-container { break-inside: avoid; }
+.paper .tab-section { break-after: avoid; }
+
+@media print {
+  @page { margin: 12mm; }
+  html, body { background: #fff !important; }
+  .topbar, .no-print, .toast { display: none !important; }
+  .page.print-page { padding: 0; max-width: none; }
+  .paper { width: auto; margin: 0; padding: 0; box-shadow: none; border-radius: 0; }
+}

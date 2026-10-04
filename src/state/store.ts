@@ -6,7 +6,7 @@ import type { Harmonica } from '../core/instruments';
 import type { HoleSound } from '../core/types';
 import { TWINKLE } from '../demo/songs';
 
-export type Page = 'play' | 'editor' | 'library';
+export type Page = 'play' | 'editor' | 'library' | 'print';
 export type PlayState = 'stopped' | 'playing' | 'paused';
 
 export interface Parsed {
@@ -160,6 +160,8 @@ export interface AppState {
   soundMode: 'samples' | 'synth';
   /** What the Tab and Numbers views show besides the notes (note names in Tab = showNoteNames). */
   sheetShow: SheetShow;
+  /** Print view choices (remembered). */
+  printPrefs: import('../pages/PrintPage').PrintPrefs;
   /** Play page: the harmonica is folded away (the keyboard still plays). */
   harpHidden: boolean;
   /** Visual editor: measures fill each row (true) or follow the text's lines. */
@@ -196,7 +198,14 @@ const SHOW_ALL: SheetShow = {
   staff: { holes: true, lyrics: true, chords: true, header: false },
 };
 
-function loadPrefs(): { soundMode?: 'samples' | 'synth'; harpHidden?: boolean; fitWidth?: boolean; showNoteNames?: boolean; sheetShow?: Partial<SheetShow> } {
+function loadPrefs(): {
+  soundMode?: 'samples' | 'synth';
+  harpHidden?: boolean;
+  fitWidth?: boolean;
+  showNoteNames?: boolean;
+  sheetShow?: Partial<SheetShow>;
+  printPrefs?: Partial<import('../pages/PrintPage').PrintPrefs>;
+} {
   try {
     return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}');
   } catch {
@@ -232,6 +241,7 @@ export const useApp = create<AppState>((set) => ({
   practice: null,
   soundMode: prefs.soundMode === 'synth' ? 'synth' : 'samples',
   harpHidden: !!prefs.harpHidden,
+  printPrefs: { view: 'tab', size: 'normal', title: true, details: true, chart: false, ...prefs.printPrefs },
   sheetShow: {
     tab: { ...SHOW_ALL.tab, ...prefs.sheetShow?.tab },
     numbers: { ...SHOW_ALL.numbers, ...prefs.sheetShow?.numbers },
@@ -292,9 +302,9 @@ export const useApp = create<AppState>((set) => ({
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode && s.harpHidden === prev.harpHidden && s.fitWidth === prev.fitWidth && s.showNoteNames === prev.showNoteNames && s.sheetShow === prev.sheetShow) return;
+  if (s.soundMode === prev.soundMode && s.harpHidden === prev.harpHidden && s.fitWidth === prev.fitWidth && s.showNoteNames === prev.showNoteNames && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpHidden: s.harpHidden, fitWidth: s.fitWidth, showNoteNames: s.showNoteNames, sheetShow: s.sheetShow }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpHidden: s.harpHidden, fitWidth: s.fitWidth, showNoteNames: s.showNoteNames, sheetShow: s.sheetShow, printPrefs: s.printPrefs }));
   } catch {
     /* storage unavailable */
   }

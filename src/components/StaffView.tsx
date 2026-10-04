@@ -15,9 +15,11 @@ interface Props {
   selectedEvent: number | null;
   onNoteClick?: (scoreIndex: number) => void;
   show?: { holes: boolean; lyrics: boolean; chords: boolean; header: boolean };
+  /** One drawing per line, so printed pages can break between lines. */
+  oneSvgPerLine?: boolean;
 }
 
-export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, show = { holes: true, lyrics: true, chords: true, header: true } }: Props) {
+export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, show = { holes: true, lyrics: true, chords: true, header: true }, oneSvgPerLine = false }: Props) {
   const host = useRef<HTMLDivElement>(null);
   // k-th rendered note/rest → its SVG elements and score index.
   const map = useRef<{ elems: SVGElement[][]; scoreIndex: (number | undefined)[]; abcElems: unknown[] }>({ elems: [], scoreIndex: [], abcElems: [] });
@@ -32,9 +34,11 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
 
   useEffect(() => {
     if (!host.current) return;
-    const fg = getComputedStyle(document.documentElement).getPropertyValue('--staff-ink').trim() || '#e9e1d6';
+    // Ink colour from where the staff is shown (light on the dark app, black on paper).
+    const fg = getComputedStyle(host.current).getPropertyValue('--staff-ink').trim() || '#e9e1d6';
     const tunes = abcjs.renderAbc(host.current, abc.text, {
       add_classes: true,
+      oneSvgPerLine,
       responsive: 'resize',
       foregroundColor: fg,
       minPadding: 8,
@@ -71,7 +75,7 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
     }
     const scoreIndex = abc.order.map(([l, e]) => parsed.indexByKey.get(eventKey(l, e)));
     map.current = { elems, scoreIndex, abcElems };
-  }, [abc, parsed]);
+  }, [abc, parsed, oneSvgPerLine]);
 
   // Highlight sounding + selected notes.
   useEffect(() => {
