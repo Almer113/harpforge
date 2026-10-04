@@ -96,8 +96,6 @@ function ImportBody() {
   const [picked, setPicked] = useState<string | null>(null);
   const [pattern, setPattern] = useState<StrumPattern>('halves');
   const [family, setFamily] = useState<string>('all');
-  // Octave for "my harmonica": null = the best fit.
-  const [myShift, setMyShift] = useState<number | null>(null);
   const pasteMode = draft.pasteText !== undefined;
   const close = () => useApp.setState({ importDraft: null });
 
@@ -129,30 +127,50 @@ function ImportBody() {
     families: family === 'all' ? undefined : [family],
   });
 
-  // Your own harmonica, at the octave that fits best unless you move it.
+  // Your harmonicas (the current one and the ones you own), each at the octave that fits
+  // best unless you move it, best first.
+  const owned = useApp((st) => st.ownedHarps);
+  const [shifts, setShifts] = useState<Record<string, number>>({});
   const mine = useMemo(() => {
-    if (!analysis) return null;
-    const harp = current.harp;
-    if (analysis.chordSheet) return { spec: harp.spec as HarmonicaSpec, shift: 0, best: 0, stats: chordSheetToTab(analysis.doc, harp, 'hold').stats };
-    let best = 0;
-    let bestCost = Infinity;
-    for (const s of [0, -12, 12, -24, 24]) {
-      const c = notesToTab(analysis.doc, harp, { shift: s, sourceHarp: analysis.sourceHarp }).stats.cost + Math.abs(s) / 48;
-      if (c < bestCost) {
-        bestCost = c;
-        best = s;
-      }
-    }
-    const shift = myShift ?? best;
-    return { spec: harp.spec as HarmonicaSpec, shift, best, stats: notesToTab(analysis.doc, harp, { shift, sourceHarp: analysis.sourceHarp }).stats };
-  }, [analysis, current.harp, myShift]);
+    if (!analysis) return [];
+    const specs = [current.harp.spec as HarmonicaSpec, ...owned].filter((sp, i, all) => all.findIndex((x) => specId(x) === specId(sp)) === i);
+    return specs
+      .map((spec) => {
+        const harp = getHarmonica(spec);
+        const id = `${MINE}:${specId(spec)}`;
+        if (analysis.chordSheet) {
+          const stats = chordSheetToTab(analysis.doc, harp, 'hold').stats;
+          return { id, spec, shift: 0, stats, score: stats.cost, current: specId(spec) === specId(current.harp.spec) };
+        }
+        let best = 0;
+        let bestCost = Infinity;
+        for (const sh of [0, -12, 12, -24, 24]) {
+          const c = notesToTab(analysis.doc, harp, { shift: sh, sourceHarp: analysis.sourceHarp }).stats.cost + Math.abs(sh) / 48;
+          if (c < bestCost) {
+            bestCost = c;
+            best = sh;
+          }
+        }
+        const shift = shifts[id] ?? best;
+        const stats = notesToTab(analysis.doc, harp, { shift, sourceHarp: analysis.sourceHarp }).stats;
+        return { id, spec, shift, stats, score: bestCost, current: specId(spec) === specId(current.harp.spec) };
+      })
+      .sort((x, y) => x.score - y.score);
+  }, [analysis, current.harp, owned, shifts]);
+  const ownedIds = new Set(owned.map(specId));
 
   const choice = useMemo(() => {
-    const id = picked ?? (suggestions[0] ? specId(suggestions[0].spec) : MINE);
-    if (id === MINE || !suggestions.length) return mine ? { id: MINE, spec: mine.spec, shift: mine.shift, position: undefined as number | undefined } : null;
+    // With harps of your own, one of them unless none can play every note.
+    const yours = owned.length ? mine.find((m) => !m.stats.unplayable) : undefined;
+    const id = picked ?? yours?.id ?? (suggestions[0] ? specId(suggestions[0].spec) : mine[0]?.id);
+    const own = mine.find((m) => m.id === id);
+    if (own || !suggestions.length) {
+      const m = own ?? mine[0];
+      return m ? { id: m.id, spec: m.spec, shift: m.shift, position: undefined as number | undefined } : null;
+    }
     const s = suggestions.find((x) => specId(x.spec) === id) ?? suggestions[0];
     return { id: specId(s.spec), spec: s.spec, shift: s.shift, position: s.position };
-  }, [suggestions, picked, mine]);
+  }, [suggestions, picked, mine, owned.length]);
 
   const result = useMemo(() => {
     if (!analysis || !choice) return null;
@@ -286,7 +304,7 @@ function ImportBody() {
             onChange={(e) => {
               setPaste(e.target.value);
               setPicked(null);
-              setMyShift(null);
+              setShifts({});
             }}
             spellCheck={false}
           />
@@ -321,25 +339,29 @@ function ImportBody() {
               </div>
             )}
 
-            <h4>Your harmonica</h4>
+            <h4>{mine.length > 1 ? 'Your harmonicas' : 'Your harmonica'}</h4>
             <div className="suggestions compact">
-              <button className={`suggestion ${choice?.id === MINE ? 'active' : ''}`} onClick={() => setPicked(MINE)}>
-                <span className="rank">✓</span>
-                <span className="s-main">
-                  <b>{harmonicaName(current.harp.spec)}</b>
-                  <span className="s-tags">
-                    {mine && mine.shift !== 0 && <span>{mine.shift > 0 ? '+' : '−'}{Math.abs(mine.shift / 12)} oct</span>}
-                    {mine && techniqueTags(mine).map((t) => <span key={t.text} className={t.cls}>{t.text}</span>)}
+              {mine.map((m) => (
+                <button key={m.id} className={`suggestion ${choice?.id === m.id ? 'active' : ''}`} onClick={() => setPicked(m.id)}>
+                  <span className="rank">{m.current ? '✓' : '★'}</span>
+                  <span className="s-main">
+                    <b>{harmonicaName(m.spec)}</b>
+                    <span className="s-tags">
+                      {m.current && <span>open now</span>}
+                      {m.shift !== 0 && <span>{m.shift > 0 ? '+' : '−'}{Math.abs(m.shift / 12)} oct</span>}
+                      {techniqueTags(m).map((t) => <span key={t.text} className={t.cls}>{t.text}</span>)}
+                    </span>
                   </span>
-                </span>
-                {!analysis.chordSheet && mine && (
-                  <span className="oct-btns" onClick={(e) => e.stopPropagation()}>
-                    <button className="icon-btn" title="An octave lower" disabled={mine.shift <= -24} onClick={() => { setPicked(MINE); setMyShift(mine.shift - 12); }}>▼</button>
-                    <button className="icon-btn" title="An octave higher" disabled={mine.shift >= 24} onClick={() => { setPicked(MINE); setMyShift(mine.shift + 12); }}>▲</button>
-                  </span>
-                )}
-              </button>
+                  {!analysis.chordSheet && (
+                    <span className="oct-btns" onClick={(e) => e.stopPropagation()}>
+                      <button className="icon-btn" title="An octave lower" disabled={m.shift <= -24} onClick={() => { setPicked(m.id); setShifts((x) => ({ ...x, [m.id]: m.shift - 12 })); }}>▼</button>
+                      <button className="icon-btn" title="An octave higher" disabled={m.shift >= 24} onClick={() => { setPicked(m.id); setShifts((x) => ({ ...x, [m.id]: m.shift + 12 })); }}>▲</button>
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
+            {!owned.length && <p className="muted small">Tip: mark the harps you own (harmonica menu → ☆) and they'll be listed here first.</p>}
 
             <div className="sugg-head">
               <h4>Best fits {pending && <span className="muted small">· working…</span>}</h4>
@@ -357,7 +379,7 @@ function ImportBody() {
                   <button key={id} className={`suggestion ${choice?.id === id ? 'active' : ''}`} onClick={() => setPicked(id)}>
                     <span className="rank">{i + 1}</span>
                     <span className="s-main">
-                      <b>{s.name}</b>
+                      <b>{s.name}{ownedIds.has(id) && <span className="owned-star" title="You have this harp"> ★</span>}</b>
                       <span className="s-tags">
                         {s.position && <span>{positionName(s.position)} pos.</span>}
                         {s.shift !== 0 && <span>{s.shift > 0 ? '+' : '−'}{Math.abs(s.shift / 12)} oct</span>}

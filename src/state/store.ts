@@ -165,6 +165,8 @@ export interface AppState {
   soundMode: 'samples' | 'synth';
   /** What the Tab and Numbers views show besides the notes (note names in Tab = showNoteNames). */
   sheetShow: SheetShow;
+  /** The harmonicas you own (remembered): import ranks them first. */
+  ownedHarps: import('../core/instruments').HarmonicaSpec[];
   /** Plain-text export: open, and its choices (remembered). */
   plainTextOpen: boolean;
   textPrefs: import('../core/formats/plaintext').PlainTextOptions;
@@ -214,6 +216,7 @@ function loadPrefs(): {
   sheetShow?: Partial<SheetShow>;
   printPrefs?: Partial<import('../pages/PrintPage').PrintPrefs>;
   textPrefs?: Partial<import('../core/formats/plaintext').PlainTextOptions>;
+  ownedHarps?: import('../core/instruments').HarmonicaSpec[];
 } {
   try {
     return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}');
@@ -252,6 +255,7 @@ export const useApp = create<AppState>((set) => ({
   harpHidden: !!prefs.harpHidden,
   printPrefs: { view: 'tab', size: 'normal', title: true, details: true, chart: false, ...prefs.printPrefs },
   plainTextOpen: false,
+  ownedHarps: Array.isArray(prefs.ownedHarps) ? prefs.ownedHarps : [],
   textPrefs: { ...DEFAULT_PLAIN_TEXT, ...prefs.textPrefs },
   sheetShow: {
     tab: { ...SHOW_ALL.tab, ...prefs.sheetShow?.tab },
@@ -314,9 +318,9 @@ export const useApp = create<AppState>((set) => ({
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode && s.harpHidden === prev.harpHidden && s.fitWidth === prev.fitWidth && s.showNoteNames === prev.showNoteNames && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs) return;
+  if (s.soundMode === prev.soundMode && s.harpHidden === prev.harpHidden && s.fitWidth === prev.fitWidth && s.showNoteNames === prev.showNoteNames && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpHidden: s.harpHidden, fitWidth: s.fitWidth, showNoteNames: s.showNoteNames, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpHidden: s.harpHidden, fitWidth: s.fitWidth, showNoteNames: s.showNoteNames, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps }));
   } catch {
     /* storage unavailable */
   }

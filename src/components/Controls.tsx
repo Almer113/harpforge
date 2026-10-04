@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FAMILIES, getHarmonica, keysFor, rangeLabel, tuningsFor, type Family, type HarmonicaSpec } from '../core/instruments';
+import { FAMILIES, getHarmonica, harmonicaName, keysFor, rangeLabel, specId, tuningsFor, type Family, type HarmonicaSpec } from '../core/instruments';
 import { keysTaken } from '../live/focus';
 import { stopRecording } from '../live/recorder';
 import { isKeyChange, keyDistance, setHarmonica, shiftOctave } from '../state/actions';
@@ -251,7 +251,35 @@ export function HarmonicaChip() {
       {open && (
         <div className="harp-pop" role="dialog" aria-label="Harmonica">
           <HarmonicaPicker />
+          <OwnedHarps />
           <p className="muted small">{rangeLabel(harp)} · Changing the key asks whether to keep the holes or the notes; type and tuning keep the notes.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "I have this harp" and quick switches to the other harps you own. */
+function OwnedHarps() {
+  const { harp } = useParsed();
+  const owned = useApp((s) => s.ownedHarps);
+  const id = specId(harp.spec);
+  const have = owned.some((o) => specId(o) === id);
+  const toggle = () => useApp.setState({ ownedHarps: have ? owned.filter((o) => specId(o) !== id) : [...owned, harp.spec] });
+  const others = owned.filter((o) => specId(o) !== id);
+  return (
+    <div className="owned">
+      <button className={`btn small ghost ${have ? 'on' : ''}`} onClick={toggle} title="Your harmonicas are suggested first when importing">
+        {have ? '★ You have this harp' : '☆ I have this harp'}
+      </button>
+      {others.length > 0 && (
+        <div className="owned-list">
+          <span className="muted small">Switch to (keeps the notes):</span>
+          {others.map((o) => (
+            <button key={specId(o)} className="chip owned-chip" onClick={() => setHarmonica(o, 'notes')} title={`Re-tab for your ${harmonicaName(o)}`}>
+              {harmonicaName(o)}
+            </button>
+          ))}
         </div>
       )}
     </div>
