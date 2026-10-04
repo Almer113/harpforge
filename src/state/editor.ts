@@ -1,7 +1,10 @@
 // Glue between the visual editor's measure model and the .htab text.
 
 import { fromDoc, type Song } from '../core/edit/model';
+import { retabNotes } from '../core/edit/retab';
 import { spliceBody } from '../core/edit/splice';
+import { transposeChord } from '../core/chords';
+import { keyUsesFlats, transposeKey } from '../core/pitch';
 import { setMetaFields } from '../core/htab/meta';
 import { parseHtab, splitHeader } from '../core/htab/parser';
 import { allOptions, canOver, maxBend, soundPitch, type Harmonica } from '../core/instruments';
@@ -19,6 +22,38 @@ export function songText(song: Song): string {
   let text = current.slice(0, splitHeader(current).bodyStart) + spliceBody(current, song) + '\n';
   if (song.meta.time !== getParsed(current).doc.meta.time) text = setMetaFields(text, { time: song.meta.time });
   return text;
+}
+
+/**
+ * Transposes (shift ≠ 0) or makes easier (shift 0) the selected notes, or the whole song
+ * when nothing is selected. A whole song moved by a semitone takes its key and chord
+ * symbols along. Says what happened.
+ */
+export function retabSelection(shift: number) {
+  const st = useApp.getState();
+  const parsed = getParsed(st.text);
+  const song = fromDoc(parsed.doc);
+  const sel = st.ve.selection;
+  const r = retabNotes(song, parsed.harp, sel, shift);
+  let out = r.song;
+  const whole = !sel.length;
+  if (whole && shift % 12 !== 0) {
+    const key = song.meta.key ? transposeKey(song.meta.key, shift) : undefined;
+    const flats = keyUsesFlats(key ?? parsed.harp.spec.key);
+    out = { ...out, meta: { ...out.meta, key: key ?? out.meta.key }, measures: out.measures.map((m) => ({ ...m, items: m.items.map((it) => (it.chord ? { ...it, chord: transposeChord(it.chord, shift, flats) } : it)) })) };
+  }
+  if (!r.changed && out === r.song) {
+    st.notify(shift ? 'Nothing to move.' : 'Already the easiest way to play these notes.');
+    return;
+  }
+  let text = songText(out);
+  if (whole && shift % 12 !== 0 && out.meta.key && out.meta.key !== song.meta.key) text = setMetaFields(text, { key: out.meta.key });
+  st.setText(text);
+  const what = whole ? 'the song' : `${sel.length} note${sel.length === 1 ? '' : 's'}`;
+  const tech = (t: { bends: number; overblows: number }) => `${t.bends} bend${t.bends === 1 ? '' : 's'}${t.overblows ? `, ${t.overblows} overblow${t.overblows === 1 ? '' : 's'}` : ''}`;
+  const lost = r.unplayable ? ` — ${r.unplayable} note${r.unplayable === 1 ? '' : 's'} don't fit this harp (kept as note names)` : '';
+  if (shift === 0) st.notify(`Made ${what} easier: ${r.changed} note${r.changed === 1 ? '' : 's'} changed (${tech(r.before)} → ${tech(r.after)})`);
+  else st.notify(`Moved ${what} ${Math.abs(shift) === 12 ? 'an octave' : `${Math.abs(shift)} semitone${Math.abs(shift) === 1 ? '' : 's'}`} ${shift > 0 ? 'up' : 'down'}${lost}`);
 }
 
 /** Writes a song back into the text as one undo step ('typing' groups keystrokes). */

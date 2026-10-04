@@ -10,6 +10,7 @@ import { retab } from '../convert';
 import { getHarmonica } from '../instruments';
 import { changeLengths, deleteMeasure, deleteNotes, duplicateMeasure, findItem, fromDoc, moveItems, positionsBetween, removeChains, ripple, setLengths, setTimeSignature, toDoc, updateItem, type Song } from './model';
 import { copyText, pasteText } from './clipboard';
+import { retabNotes } from './retab';
 import { replaceLines, spliceBody } from './splice';
 
 const doc = (body: string, time = '4/4') => `---\ntime: ${time}\n---\n${body}\n`;
@@ -216,5 +217,24 @@ describe('insert mode edits', () => {
     const r2 = changeLengths(s(), [{ m: 0, start: 0 }, { m: 0, start: 1 }], 0.5, true);
     expect(spliceBody(text, r2.song)).toBe('{4 5} 6 7 8 | 9 10 9 . |');
     expect(r2.selection).toEqual([{ m: 0, start: 0 }, { m: 0, start: 0.5 }]);
+  });
+});
+
+describe('transpose and make easier', () => {
+  const C = getHarmonica({ family: 'diatonic', tuning: 'richter', key: 'C' });
+  it('moves notes by semitones and octaves, re-tabbed for the harp', () => {
+    const text = doc('4 -4 5 6 |');
+    const s = fromDoc(parseHtab(text).doc);
+    expect(spliceBody(text, retabNotes(s, C, [], 12).song)).toBe('7 -8 8 9 |');
+    // D5 up a semitone is D#5: on a C harp only the 4 overblow plays it.
+    expect(spliceBody(text, retabNotes(s, C, [{ m: 0, start: 1 }], 1).song)).toBe('4 4o 5 6 |');
+  });
+  it('finds easier ways to play the same notes', () => {
+    const text = doc('3 -2 3 -2 |');
+    const r = retabNotes(fromDoc(parseHtab(text).doc), C, [], 0);
+    // G4 is both 3 blow and 2 draw: no more jumping between the two.
+    const holes = spliceBody(text, r.song).replace(' |', '').split(' ');
+    expect(new Set(holes).size).toBe(1);
+    expect(r.changed).toBe(2);
   });
 });

@@ -43,7 +43,8 @@ import { flatsFor } from '../../core/edit/splice';
 import type { Sound } from '../../core/types';
 import { onPlayed } from '../../live/livePlayer';
 import { useHarmonicaKeyboard } from '../../live/useHarmonicaKeyboard';
-import { commitSong, DURATIONS, describeDuration, stepPitch } from '../../state/editor';
+import { commitSong, DURATIONS, describeDuration, retabSelection, stepPitch } from '../../state/editor';
+import { Menu } from '../Menu';
 import { getParsed, useApp, useParsed, type VisualState } from '../../state/store';
 import { Harmonica } from '../Harmonica';
 import { Glyph } from '../TabView';
@@ -434,6 +435,17 @@ function Toolbar({ song }: { song: Song }) {
         <button className="btn small ghost" disabled={!sel.length} onClick={() => apply(deleteNotes(fromDoc(getParsed(useApp.getState().text).doc), sel, ve.insert), { selection: [] })} title="Delete selected notes (Del)">
           Delete
         </button>
+        <Menu
+          label="Transpose ▾"
+          title={sel.length ? 'Move or re-tab the selected notes' : 'Move or re-tab the whole song (select notes to change only those)'}
+          items={[
+            { label: 'Up a semitone', hint: sel.length ? `${sel.length} selected` : 'Whole song, with its key and chords', onClick: () => retabSelection(1) },
+            { label: 'Down a semitone', onClick: () => retabSelection(-1) },
+            { label: 'Up an octave', onClick: () => retabSelection(12) },
+            { label: 'Down an octave', onClick: () => retabSelection(-12) },
+            { label: 'Make easier', hint: 'Same notes, easier holes: fewer bends and overblows, less jumping', onClick: () => retabSelection(0) },
+          ]}
+        />
         <button className={`btn small ghost tie-btn ${selTied ? 'on' : ''}`} disabled={sel.length !== 1} onClick={toggleTie} title="Tie: the selected note continues the note before it, across bar lines too (L)">
           <span className="tie-arc-icon">⁀</span> Tie
         </button>
