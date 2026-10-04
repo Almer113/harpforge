@@ -944,3 +944,16 @@ button.ve-mnum:hover { color: var(--brass-2); background: var(--panel-2); }
 .owned-chip { cursor: pointer; }
 .owned-chip:hover { border-color: var(--brass); }
 .owned-star { color: var(--brass-2); font-weight: 700; }
+
+/* ---------- Narrow windows: top bar folds its actions into ⋯ ---------- */
+.wide-actions { display: flex; align-items: center; gap: 6px; }
+.narrow-actions { display: none; }
+@media (max-width: 900px) {
+  .wide-actions { display: none; }
+  .narrow-actions { display: block; }
+  .topbar { gap: 10px; padding-left: 12px; padding-right: 12px; }
+  .nav button { padding: 6px 10px; }
+}
+@media (max-width: 560px) {
+  .brand span { display: none; }
+}

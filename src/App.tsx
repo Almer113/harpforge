@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Toast } from './components/Controls';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ExportMenu } from './components/ExportMenu';
@@ -8,7 +8,8 @@ import { PlainTextDialog } from './components/PlainTextDialog';
 import { openShortcuts, Shortcuts } from './components/Shortcuts';
 import { LibraryPage } from './pages/LibraryPage';
 import { PlayPage } from './pages/PlayPage';
-import { importFile, importFromFile, newTab, openPasteImport, saveCurrent } from './state/actions';
+import { EXPORTS } from './core/formats';
+import { exportAs, importFile, importFromFile, newTab, openPasteImport, saveCurrent } from './state/actions';
 import { startRouter } from './state/router';
 import { copyShareLink } from './state/share';
 import { isDirty, useApp, useParsed, type Page } from './state/store';
@@ -34,18 +35,37 @@ function TabActions() {
   const docId = useApp((s) => s.docId);
   return (
     <div className="tab-actions">
-      <button className="btn small ghost kbd-btn" onClick={openShortcuts} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
-      <Menu
-        label="Import ▾"
-        title="Open a file, paste text, or start a new tab"
-        items={[
-          { label: 'Open a file…', hint: 'PDF, ABC, MusicXML, MIDI, ChordPro, chord sheet, tab', onClick: importFile },
-          { label: 'Paste or type…', hint: 'A chord sheet, ABC, ChordPro, MusicXML, a tab — or notes to turn into a tab', onClick: openPasteImport },
-          { label: 'New empty tab', onClick: newTab },
-        ]}
-      />
-      <ExportMenu small />
-      <button className="btn small ghost" onClick={() => void copyShareLink()} title="Copy a link that opens this tab">Share</button>
+      <div className="wide-actions">
+        <button className="btn small ghost kbd-btn" onClick={openShortcuts} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+        <Menu
+          label="Import ▾"
+          title="Open a file, paste text, or start a new tab"
+          items={[
+            { label: 'Open a file…', hint: 'PDF, ABC, MusicXML, MIDI, ChordPro, chord sheet, tab', onClick: importFile },
+            { label: 'Paste or type…', hint: 'A chord sheet, ABC, ChordPro, MusicXML, a tab — or notes to turn into a tab', onClick: openPasteImport },
+            { label: 'New empty tab', onClick: newTab },
+          ]}
+        />
+        <ExportMenu small />
+        <button className="btn small ghost" onClick={() => void copyShareLink()} title="Copy a link that opens this tab">Share</button>
+      </div>
+      {/* Narrow windows: the same actions folded into one menu. */}
+      <div className="narrow-actions">
+        <Menu
+          label="⋯"
+          title="Import, export, share"
+          items={[
+            { label: 'Open a file…', onClick: importFile },
+            { label: 'Paste or type…', onClick: openPasteImport },
+            { label: 'New empty tab', onClick: newTab },
+            { label: 'Print or save as PDF…', onClick: () => useApp.getState().setPage('print') },
+            { label: 'Plain text…', onClick: () => useApp.setState({ plainTextOpen: true }) },
+            ...EXPORTS.map((f) => ({ label: `Export ${f.name} (.${f.ext})`, onClick: () => exportAs(f.id) })),
+            { label: 'Copy a share link', onClick: () => void copyShareLink() },
+            { label: 'Keyboard shortcuts', onClick: openShortcuts },
+          ]}
+        />
+      </div>
       <div className="save-split">
         <button className="btn small primary" onClick={() => void saveCurrent()} title="Save to your library (Ctrl+S)">
           {dirty || !docId ? 'Save' : 'Saved ✓'}
@@ -61,6 +81,15 @@ export function App() {
   const setPage = useApp((s) => s.setPage);
   const dirty = useApp(isDirty);
   const { doc } = useParsed();
+  // The sticky headers sit just below the top bar, whatever its height.
+  const topbar = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = topbar.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => document.documentElement.style.setProperty('--topbar-h', `${el.offsetHeight}px`));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Drag & drop a file anywhere to import it.
   const [dragging, setDragging] = useState(false);
@@ -141,7 +170,7 @@ export function App() {
 
   return (
     <div className="app">
-      <nav className="topbar">
+      <nav className="topbar" ref={topbar}>
         <div className="brand">
           <svg viewBox="0 0 64 64" width="28" height="28" aria-hidden>
             <rect x="4" y="18" width="56" height="28" rx="6" fill="var(--brass)" />

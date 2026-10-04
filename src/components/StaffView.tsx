@@ -75,7 +75,23 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
     }
     const scoreIndex = abc.order.map(([l, e]) => parsed.indexByKey.get(eventKey(l, e)));
     map.current = { elems, scoreIndex, abcElems };
-  }, [abc, parsed, oneSvgPerLine]);
+    // The holes (the first line under each note) in the tab's blow/draw colours.
+    if (holes) {
+      const css = getComputedStyle(host.current);
+      const blow = css.getPropertyValue('--blow').trim();
+      const draw = css.getPropertyValue('--draw').trim();
+      for (const text of host.current.querySelectorAll('text.abcjs-lyric')) {
+        const first = text.querySelector('tspan');
+        const holesText = first?.textContent?.trim() ?? '';
+        if (!first || !/^<?-?\d/.test(holesText)) continue;
+        const parts = holesText.split(/\s+/);
+        const draws = parts.filter((p) => /^<?-/.test(p)).length;
+        if (draws === parts.length) first.setAttribute('fill', draw);
+        else if (draws === 0) first.setAttribute('fill', blow);
+        first.setAttribute('font-weight', 'bold');
+      }
+    }
+  }, [abc, parsed, oneSvgPerLine, holes]);
 
   // Highlight sounding + selected notes.
   useEffect(() => {
