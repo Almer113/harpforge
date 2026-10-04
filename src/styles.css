@@ -965,3 +965,13 @@ button.ve-mnum:hover { color: var(--brass-2); background: var(--panel-2); }
 .glyph.note .n-oct { font-size: 0.55em; margin-left: 1px; opacity: 0.85; font-family: var(--mono); }
 .glyph.note.pitch { color: var(--pitch); }
 .simpletab.as-notes .st-note { font-family: inherit; }
+
+/* ---------- Notes mode: inspector ---------- */
+.play-as { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.play-as .pa-note { min-width: 34px; font-family: var(--mono); }
+.play-as .seg.wrap { flex-wrap: wrap; }
+.play-as .seg button { font-family: var(--mono); min-width: 40px; }
+.play-as .seg button.blow { color: var(--blow); }
+.play-as .seg button.draw { color: var(--draw); }
+.play-as .seg button.on { color: inherit; }
+.insp-warn { color: var(--danger); margin: 0 0 8px; }

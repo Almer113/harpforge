@@ -6,7 +6,7 @@ import { midiToName, prefersFlats } from '../core/pitch';
 import { holeSoundText } from '../core/htab/serializer';
 import type { HoleSound } from '../core/types';
 import { getParsed, useApp } from '../state/store';
-import { press, release } from './livePlayer';
+import { press, pressPitch, release } from './livePlayer';
 
 /** The easiest way to play a (possibly fractional) pitch on the harmonica, if any. */
 export function soundForPitch(harp: Harmonica, midi: number): { sound: HoleSound; midi: number } | null {
@@ -165,7 +165,11 @@ function onMidiMessage(e: MIDIMessageEvent) {
   if (type === 0x90 && data[2] > 0) {
     const found = soundForPitch(harp(), note);
     if (found) press(id, found.sound);
-    else useApp.setState({ midi: { ...useApp.getState().midi, miss: `${midiToName(note)} isn’t on this harmonica` } });
+    else {
+      // It still sounds, and the editor can write it as a note name.
+      pressPitch(id, note);
+      useApp.setState({ midi: { ...useApp.getState().midi, miss: `${midiToName(note)} isn’t on this harmonica` } });
+    }
   } else if (type === 0x80 || (type === 0x90 && data[2] === 0)) {
     release(id);
   }

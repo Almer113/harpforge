@@ -41,7 +41,9 @@ import { soundPitch } from '../../core/instruments';
 import { midiToName } from '../../core/pitch';
 import { flatsFor } from '../../core/edit/splice';
 import type { Sound } from '../../core/types';
-import { onPlayed } from '../../live/livePlayer';
+import { onPitchPlayed, onPlayed } from '../../live/livePlayer';
+import { chooseSound, neighbours, offHarp, stepNotes, stepScale } from '../../core/edit/notes';
+import { MIC_ID } from '../../live/inputs';
 import { useHarmonicaKeyboard } from '../../live/useHarmonicaKeyboard';
 import { commitSong, DURATIONS, describeDuration, retabSelection, stepPitch } from '../../state/editor';
 import { Menu } from '../Menu';
@@ -119,37 +121,49 @@ export function VisualEditor() {
 
   // ---- Step entry & replacing notes from the harmonica ----
   const lastInsert = useRef<{ at: number; pos: Pos } | null>(null);
-  useEffect(
-    () =>
-      onPlayed((_midi, _id, sound) => {
-        const st = useApp.getState();
-        if (st.page !== 'editor' || st.editorMode !== 'visual') return;
-        const v = st.ve;
-        const s = fromDoc(getParsed(st.text).doc);
-        const now = performance.now();
-        if (v.step) {
-          // Keys pressed together become a chord.
-          const li = lastInsert.current;
-          if (li && now - li.at < 90) {
-            const it = s.measures[li.pos.m]?.items.find((x) => Math.abs(x.start - li.pos.start) < EPS);
-            if (it && !it.sounds.some((x) => JSON.stringify(x) === JSON.stringify(sound))) {
-              apply(updateItem(s, li.pos, { sounds: [...it.sounds, sound].sort((a, b) => (a.type === 'hole' && b.type === 'hole' ? a.hole - b.hole : 0)) }), { lastSounds: [sound] });
-            }
-            return;
+  useEffect(() => {
+    const enter = (midi: number, id: string, played: Sound) => {
+      const st = useApp.getState();
+      if (st.page !== 'editor' || st.editorMode !== 'visual') return;
+      const v = st.ve;
+      const s = fromDoc(getParsed(st.text).doc);
+      const now = performance.now();
+      // Notes mode: a note from MIDI or the microphone gets the hole that fits the notes around it
+      // (keys and the mouse play the hole you chose).
+      let sound = played;
+      if (st.readAs === 'notes' && played.type === 'hole' && (id.startsWith('midi:') || id === MIC_ID)) {
+        const at = v.step ? v.caret : v.selection[0];
+        if (at) sound = chooseSound(getHarp(), midi, neighbours(s, at));
+      }
+      if (v.step) {
+        // Keys pressed together become a chord.
+        const li = lastInsert.current;
+        if (li && now - li.at < 90) {
+          const it = s.measures[li.pos.m]?.items.find((x) => Math.abs(x.start - li.pos.start) < EPS);
+          if (it && !it.sounds.some((x) => JSON.stringify(x) === JSON.stringify(sound))) {
+            apply(updateItem(s, li.pos, { sounds: [...it.sounds, sound].sort((a, b) => (a.type === 'hole' && b.type === 'hole' ? a.hole - b.hole : 0)) }), { lastSounds: [sound] });
           }
-          const dur = toolDuration(v);
-          const pos = v.caret;
-          const next = placeItem(makeRoom(s, pos, dur, v.insert), pos.m, { start: pos.start, dur, sounds: [sound] });
-          lastInsert.current = { at: now, pos };
-          apply(next, { caret: advance(next, pos, dur), selection: [pos], measure: pos.m, lastSounds: [sound] });
           return;
         }
-        if (v.selection.length === 1) {
-          apply(updateItem(s, v.selection[0], { sounds: [sound] }), { lastSounds: [sound] });
-        } else setVe({ lastSounds: [sound] });
-      }),
-    [setVe],
-  );
+        const dur = toolDuration(v);
+        const pos = v.caret;
+        const next = placeItem(makeRoom(s, pos, dur, v.insert), pos.m, { start: pos.start, dur, sounds: [sound] });
+        lastInsert.current = { at: now, pos };
+        apply(next, { caret: advance(next, pos, dur), selection: [pos], measure: pos.m, lastSounds: [sound] });
+        return;
+      }
+      if (v.selection.length === 1) {
+        apply(updateItem(s, v.selection[0], { sounds: [sound] }), { lastSounds: [sound] });
+      } else if (sound.type === 'hole') setVe({ lastSounds: [sound] });
+    };
+    const offPlayed = onPlayed((midi, id, sound) => enter(midi, id, sound));
+    // A MIDI note the harp can't play is written as a note name.
+    const offPitch = onPitchPlayed((midi, id) => enter(midi, id, { type: 'pitch', midi }));
+    return () => {
+      offPlayed();
+      offPitch();
+    };
+  }, [setVe]);
 
   // ---- Copy, cut and paste: the system clipboard, as tab text ----
   useEffect(() => {
@@ -285,11 +299,15 @@ export function VisualEditor() {
           if (!sel.length) return;
           e.preventDefault();
           const harp = getHarp();
+          const st = useApp.getState();
+          const scale = stepScale(getParsed(st.text).doc.meta.key, harp);
           let next = s;
           for (const p of sel) {
             const it = next.measures[p.m]?.items.find((x) => Math.abs(x.start - p.start) < EPS);
             if (!it || !it.sounds.length) continue;
-            const stepped = stepPitch(harp, it.sounds, e.key === 'ArrowUp' ? 1 : -1, e.shiftKey);
+            // Notes mode steps through the notes (the hole follows); Holes mode through the holes.
+            const dir = e.key === 'ArrowUp' ? 1 : -1;
+            const stepped = st.readAs === 'notes' ? stepNotes(harp, it.sounds, dir, e.shiftKey, scale, neighbours(next, p)) : stepPitch(harp, it.sounds, dir, e.shiftKey);
             if (stepped) next = updateItem(next, p, { sounds: stepped });
           }
           apply(next);
@@ -749,14 +767,15 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
                   const playing = playingAt.has(+(starts[mi] + it.start).toFixed(4));
                   const dragging = ghost && drag.current && samePos(drag.current.pos, pos) && !ghost.copy;
                   const midis = it.sounds.map((s) => (s.type === 'pitch' ? s.midi : soundPitch(harp, s)));
+                  const offNote = it.sounds.some((s) => offHarp(harp, s));
                   const breath = it.sounds.length ? (it.sounds.every((s) => s.type === 'hole' && s.breath === 'draw') ? 'draw' : it.sounds.every((s) => s.type === 'hole' && s.breath === 'blow') ? 'blow' : 'mixed') : 'rest';
                   return (
                     <div
                       key={it.start}
-                      className={`ve-item ${breath} ${it.tied ? 'tied' : ''} ${selected ? 'selected' : ''} ${playing ? 'playing' : ''} ${dragging ? 'dragging' : ''} ${it.dur <= EPS ? 'marker' : ''} ${midis.some((x) => x === null) ? 'bad' : ''}`}
+                      className={`ve-item ${breath} ${it.tied ? 'tied' : ''} ${selected ? 'selected' : ''} ${playing ? 'playing' : ''} ${dragging ? 'dragging' : ''} ${it.dur <= EPS ? 'marker' : ''} ${offNote ? 'bad' : ''}`}
                       style={{ left: it.start * zoom, width: Math.max(it.dur * zoom, 22) - 3 }}
                       onPointerDown={(e) => onItemDown(e, pos, it)}
-                      title={midis.map((x) => (x === null ? 'not playable' : midiToName(x, flats))).join(' + ')}
+                      title={midis.map((x) => (x === null ? 'not playable' : midiToName(x, flats))).join(' + ') + (offNote ? ' — not on this harmonica' : '')}
                     >
                       {it.tied && <span className="ve-tie" aria-label="tied from the previous note" />}
                       <span className="ve-chord">{it.chord ?? ''}</span>

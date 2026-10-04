@@ -257,7 +257,12 @@ export function notesToTab(doc: TabDoc, harp: Harmonica, opts: NotesToTabOptions
 }
 
 /** Re-tabs a tab for a different harmonica, keeping the pitches. */
-export function retab(doc: TabDoc, from: Harmonica, to: Harmonica): ConvertResult {
+export function retab(doc: TabDoc, from: Harmonica, to: Harmonica, sameOctave = false): ConvertResult {
+  // Same octave (reading in notes): exactly these notes, unless some wouldn't fit the harp.
+  if (sameOctave) {
+    const exact = notesToTab(doc, to, { sourceHarp: from, shift: 0 });
+    if (!exact.stats.unplayable) return exact;
+  }
   const best = bestShift(doc, to, from);
   return notesToTab(doc, to, { sourceHarp: from, shift: best });
 }

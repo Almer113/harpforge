@@ -76,7 +76,28 @@ export function change(id: string, sound: HoleSound, pitch?: number) {
   if (note !== null) for (const fn of liveListeners) fn({ type: 'change', id, midi: note, sound });
 }
 
+// Notes off the harmonica (a MIDI keyboard): they sound, and the editor can write them as note names.
+const pitchIds = new Set<string>();
+const pitchListeners = new Set<(midi: number, id: string) => void>();
+
+/** Subscribe to notes played live that this harmonica can't play. */
+export function onPitchPlayed(fn: (midi: number, id: string) => void): () => void {
+  pitchListeners.add(fn);
+  return () => pitchListeners.delete(fn);
+}
+
+/** Plays a note that isn't on the harmonica (released with `release`). */
+export function pressPitch(id: string, midi: number) {
+  pitchIds.add(id);
+  void engine.ensureAudio().then(() => pitchIds.has(id) && engine.noteOn(id, midi));
+  for (const fn of pitchListeners) fn(midi, id);
+}
+
 export function release(id: string) {
+  if (pitchIds.delete(id)) {
+    engine.noteOff(id);
+    return;
+  }
   if (!useApp.getState().held[id]) return;
   if (!silentIds.delete(id)) engine.noteOff(id);
   setHeld(id, null);

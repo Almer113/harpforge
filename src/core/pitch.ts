@@ -74,6 +74,14 @@ const MODE_SUFFIX: Record<Mode, string> = { major: '', minor: 'm', dorian: ' dor
 
 const MODE_OFFSET: Record<Mode, number> = { major: 0, dorian: 2, phrygian: 4, lydian: 5, mixolydian: 7, minor: 9, locrian: 11 };
 
+/** The pitch classes of a key's scale (C major and A minor share theirs), or null. */
+export function keyScale(name: string | undefined): number[] | null {
+  const k = parseKey(name);
+  if (!k) return null;
+  const major = (((k.tonic - MODE_OFFSET[k.mode]) % 12) + 12) % 12;
+  return [0, 2, 4, 5, 7, 9, 11].map((i) => (major + i) % 12);
+}
+
 /** Whether a key is written with flats (F, Bb, Eb… majors, and modes/minors that share their notes). */
 export function keyUsesFlats(name: string | undefined): boolean {
   const k = parseKey(name);

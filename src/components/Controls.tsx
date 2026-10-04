@@ -20,7 +20,8 @@ export function HarmonicaPicker() {
   const position = tonic !== undefined && family !== 'chromatic' ? positionFor(key, tonic) : undefined;
 
   const change = (spec: HarmonicaSpec) => {
-    if (isKeyChange(spec)) setPending(spec);
+    // Reading in notes, the notes are what you keep: no need to ask.
+    if (isKeyChange(spec) && useApp.getState().readAs !== 'notes') setPending(spec);
     else setHarmonica(spec);
   };
   const setFamily = (f: Family) => {

@@ -29,8 +29,9 @@ import { midiToName } from '../../core/pitch';
 import { flatsFor } from '../../core/edit/splice';
 import type { HoleSound, Sound } from '../../core/types';
 import { commitSong, DURATIONS, describeDuration, durationLabel, mapHoles, parseSoundsInput, stepPitch } from '../../state/editor';
+import { chooseSounds, neighbours, offHarp, parseNotes, pitchOf, stepNotes, stepScale, waysToPlay } from '../../core/edit/notes';
 import { useApp, useParsed } from '../../state/store';
-import { Glyph } from '../TabView';
+import { Glyph, NoteGlyph } from '../TabView';
 import { apply, playSounds } from './VisualEditor';
 
 const soundsText = (sounds: Sound[]) =>
@@ -90,6 +91,7 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
   }, [item.sounds]);
 
   const set = (patch: Partial<Item>) => apply(updateItem(song, pos, patch));
+  const asNotes = useApp((s) => s.readAs === 'notes');
   const holes = item.sounds.filter((s): s is HoleSound => s.type === 'hole');
   const first = holes[0];
   const midis = item.sounds.map((s) => (s.type === 'pitch' ? s.midi : soundPitch(harp, s)));
@@ -128,10 +130,18 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
 
       <div className="insp-preview">
         <span className={`ve-glyphs big ${item.sounds.length > 1 ? 'stack' : ''}`}>
-          {item.sounds.length ? item.sounds.map((s, k) => <Glyph key={k} sound={s} flats={flats} />) : <span className="rest-glyph">𝄽</span>}
+          {item.sounds.length ? (
+            item.sounds.map((s, k) => (asNotes ? <NoteGlyph key={k} sound={s} midi={midis[k]} flats={flats} /> : <Glyph key={k} sound={s} flats={flats} />))
+          ) : (
+            <span className="rest-glyph">𝄽</span>
+          )}
         </span>
         <div className="insp-names">
-          <b>{midis.map((m) => (m === null ? 'not playable' : midiToName(m, flats))).join(' + ') || 'rest'}</b>
+          <b>
+            {asNotes
+              ? item.sounds.map((s) => (s.type === 'hole' ? holeSoundText(s) : 'no hole')).join(' + ') || 'rest'
+              : midis.map((m) => (m === null ? 'not playable' : midiToName(m, flats))).join(' + ') || 'rest'}
+          </b>
           <span className="muted small">
             {durationLabel(total)}
             {chain.length > 1 && ` · tied across ${measuresSpanned} measures`}
@@ -144,6 +154,9 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
         )}
       </div>
 
+      {asNotes && item.sounds.length > 0 && <NoteFields song={song} pos={pos} item={item} flats={flats} />}
+
+      {!asNotes && (
       <label className="field">
         <span>Holes</span>
         <div className="row">
@@ -160,8 +173,9 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
         </div>
         {bad && <span className="input-error">Use tab like -4' or (4 5 6), or a note like C5.</span>}
       </label>
+      )}
 
-      {first && (
+      {first && !asNotes && (
         <>
           <div className="field">
             <span>Breath</span>
@@ -273,14 +287,101 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
   );
 }
 
+/** Notes mode: type the note, step it, and choose how it's played. */
+function NoteFields({ song, pos, item, flats }: { song: Song; pos: Pos; item: Item; flats: boolean }) {
+  const { harp, doc } = useParsed();
+  const names = (sounds: Sound[]) => sounds.map((s) => pitchOf(harp, s)).map((m) => (m === null ? '?' : midiToName(m, flats))).join(' ');
+  const [input, setInput] = useState(names(item.sounds));
+  const [bad, setBad] = useState(false);
+  useEffect(() => {
+    setInput(names(item.sounds));
+    setBad(false);
+  }, [item.sounds, harp]);
+
+  const setSounds = (sounds: Sound[]) => {
+    apply(updateItem(song, pos, { sounds }));
+    playSounds(sounds);
+  };
+  const applyInput = () => {
+    const midis = parseNotes(input);
+    if (!midis) {
+      setBad(true);
+      return;
+    }
+    setBad(false);
+    setSounds(chooseSounds(harp, midis, neighbours(song, pos)));
+  };
+  const step = (dir: 1 | -1, chromatic: boolean) => {
+    const s = stepNotes(harp, item.sounds, dir, chromatic, stepScale(doc.meta.key, harp), neighbours(song, pos));
+    if (s) setSounds(s);
+  };
+  const off = item.sounds.filter((s) => offHarp(harp, s));
+
+  return (
+    <>
+      <label className="field">
+        <span>Note</span>
+        <div className="row">
+          <input
+            className={`meta-input mono ${bad ? 'bad' : ''}`}
+            value={input}
+            placeholder="D5  or  C5 E5 G5"
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && applyInput()}
+            onBlur={() => input !== names(item.sounds) && applyInput()}
+          />
+          <button className="icon-btn" title="Next note of the scale up (↑) — Shift-click: one semitone (Shift+↑)" onClick={(e) => step(1, e.shiftKey)}>▲</button>
+          <button className="icon-btn" title="Next note of the scale down (↓) — Shift-click: one semitone (Shift+↓)" onClick={(e) => step(-1, e.shiftKey)}>▼</button>
+        </div>
+        {bad && <span className="input-error">Type a note like D5, Bb4 or F#5 — or several for a chord: C5 E5 G5.</span>}
+      </label>
+      {off.length > 0 && (
+        <p className="insp-warn small">
+          {names(off)} {off.length === 1 ? 'isn’t' : 'aren’t'} on this harmonica, so the tab keeps the note name. Move it an octave, or pick a harmonica that has it.
+        </p>
+      )}
+      <div className="field">
+        <span>Play it as</span>
+        {item.sounds.map((s, k) => {
+          const m = pitchOf(harp, s);
+          const ways = m === null ? [] : waysToPlay(harp, m);
+          if (!ways.length) return null;
+          return (
+            <div key={k} className="play-as">
+              {item.sounds.length > 1 && <span className="muted small pa-note">{midiToName(m!, flats)}</span>}
+              <div className="seg wrap">
+                {ways.map((w) => {
+                  const on = s.type === 'hole' && holeSoundText(s) === holeSoundText(w.sound);
+                  return (
+                    <button
+                      key={holeSoundText(w.sound)}
+                      className={`${on ? 'on' : ''} ${w.sound.breath}`}
+                      onClick={() => setSounds(item.sounds.map((x, i) => (i === k ? w.sound : x)))}
+                      title={w.cost === 0 ? 'Plain hole' : w.sound.over ? (w.sound.breath === 'blow' ? 'Overblow' : 'Overdraw') : w.sound.bend ? `Bend (${w.sound.bend === 1 ? 'half' : w.sound.bend === 2 ? 'whole' : '1½'} step)` : 'Slide in'}
+                    >
+                      {holeSoundText(w.sound)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        <span className="muted small">Easiest first. Your choice stays until you change the note.</span>
+      </div>
+    </>
+  );
+}
+
 function MultiPanel({ song, sel }: { song: Song; sel: Pos[] }) {
-  const { harp } = useParsed();
+  const { harp, doc } = useParsed();
+  const asNotes = useApp((s) => s.readAs === 'notes');
   const step = (dir: 1 | -1) => {
     let next = song;
     for (const p of sel) {
       const it = findItem(next, p);
       if (!it || !it.sounds.length) continue;
-      const s = stepPitch(harp, it.sounds, dir);
+      const s = asNotes ? stepNotes(harp, it.sounds, dir, false, stepScale(doc.meta.key, harp), neighbours(next, p)) : stepPitch(harp, it.sounds, dir);
       if (s) next = updateItem(next, p, { sounds: s });
     }
     apply(next);

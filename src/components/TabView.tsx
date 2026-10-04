@@ -9,6 +9,7 @@ import type { Parsed, ReadAs } from '../state/store';
 import { doPitchClass, midiToDegree } from '../core/formats/jianpu';
 import { holeSoundText } from '../core/htab/serializer';
 import { followTo } from './follow';
+import { offHarp } from '../core/edit/notes';
 
 const BEAT_PX = 46;
 
@@ -97,7 +98,7 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, sh
                     }
                     const active = idx !== undefined && activeSet.has(idx);
                     const selected = idx !== undefined && idx === selectedEvent;
-                    const bad = sev?.midis.some((x) => x === null);
+                    const bad = sev?.midis.some((x) => x === null) || (ev.kind === 'note' && ev.sounds.some((s) => s.type === 'pitch' && offHarp(harp, s)));
                     const breath = ev.kind === 'note' ? breathOf(ev.sounds) : 'rest';
                     return (
                       <button

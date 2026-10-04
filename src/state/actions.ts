@@ -52,7 +52,8 @@ export function setHarmonica(spec: HarmonicaSpec, keep: 'holes' | 'notes' = 'not
       s.notify(`Same holes on ${to.name}${moved.meta.key ? ` — the song is now in ${moved.meta.key}` : ''}, chords moved too.`);
     return;
   }
-  const r = retab(p.doc, p.harp, to);
+  // Reading in notes, the notes stay in their octave if they fit.
+  const r = retab(p.doc, p.harp, to, s.readAs === 'notes');
   // The song stays in its key, so its position on the new harp changes.
   const tonic = guessTonic(p.doc, p.harp);
   if (p.doc.meta.position !== undefined) fields.position = tonic !== undefined && to.spec.family !== 'chromatic' ? positionName(positionFor(to.spec.key, tonic)!) : undefined;
