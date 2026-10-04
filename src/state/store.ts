@@ -6,6 +6,7 @@ import { harmonicaFromMeta, buildScore, eventKey, type Score } from '../core/sco
 import type { Harmonica } from '../core/instruments';
 import type { HoleSound } from '../core/types';
 import { TWINKLE } from '../demo/songs';
+import { newSessionId, readWorking, sessionId, setSessionId, watchForClash, writeWorking, type WorkingCopy } from './working';
 
 export type Page = 'play' | 'editor' | 'library' | 'print';
 export type PlayState = 'stopped' | 'playing' | 'paused';
@@ -39,19 +40,26 @@ export function getParsed(text: string): Parsed {
   return parsedCache;
 }
 
-const AUTOSAVE_KEY = 'harpforge:working';
-
-function loadWorking(): { text: string; docId: string | null; savedText: string | null } {
+const local = (): Storage | null => {
   try {
-    const raw = localStorage.getItem(AUTOSAVE_KEY);
-    if (raw) {
-      const v = JSON.parse(raw);
-      if (typeof v.text === 'string') return { text: v.text, docId: v.docId ?? null, savedText: v.savedText ?? null };
-    }
+    return typeof localStorage === 'undefined' ? null : localStorage;
   } catch {
-    /* storage unavailable */
+    return null;
   }
-  return { text: TWINKLE, docId: null, savedText: TWINKLE };
+};
+const session = (): Storage | null => {
+  try {
+    return typeof sessionStorage === 'undefined' ? null : sessionStorage;
+  } catch {
+    return null;
+  }
+};
+/** This browser tab's working-copy id (see working.ts). */
+let tabId = sessionId(session());
+
+function loadWorking(): WorkingCopy {
+  const store = local();
+  return (store && readWorking(store, tabId)) ?? { text: TWINKLE, docId: null, savedText: TWINKLE };
 }
 
 export type SheetView = 'simple' | 'tab' | 'staff' | 'numbers';
@@ -90,6 +98,8 @@ export interface ImportDraft {
   progress?: { message: string; fraction: number };
   /** Text recognised from a PDF, so it can be corrected by hand. */
   sourceText?: string;
+  /** Which PDF reading this dialog shows (a cancelled one's results are ignored). */
+  run?: number;
 }
 
 export interface MicState {
@@ -190,6 +200,8 @@ export interface AppState {
   redo(): void;
   history: { past: HistoryEntry[]; future: HistoryEntry[]; lastKind: string; lastAt: number; groupAt: number };
   loadText(t: string, docId?: string | null, saved?: boolean): void;
+  /** Counts tabs opened (loadText), so a save that finishes later knows if its tab is still open. */
+  loadSeq: number;
   /** Marks `text` (what was actually written to the library) as saved under `docId`. */
   markSaved(docId: string, text?: string): void;
   notify(message: string): void;
@@ -218,16 +230,49 @@ function loadPrefs(): {
   fitWidth?: boolean;
   showNoteNames?: boolean;
   readAs?: ReadAs;
-  sheetShow?: Partial<SheetShow>;
+  sheetShow?: { [K in keyof SheetShow]?: Partial<SheetShow[K]> };
   printPrefs?: Partial<import('../pages/PrintPage').PrintPrefs>;
   textPrefs?: Partial<import('../core/formats/plaintext').PlainTextOptions>;
   ownedHarps?: import('../core/instruments').HarmonicaSpec[];
 } {
+  let raw: unknown;
   try {
-    return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}');
+    raw = JSON.parse(local()?.getItem(PREFS_KEY) ?? '{}');
   } catch {
     return {};
   }
+  // Anything that isn't what we wrote (corrupted, or from another version) falls back to the default.
+  const p = isObject(raw) ? raw : {};
+  const bool = (v: unknown) => (typeof v === 'boolean' ? v : undefined);
+  const sheet = isObject(p.sheetShow) ? p.sheetShow : {};
+  const print = like(p.printPrefs, { view: 'tab', size: 'normal', title: true, details: true, chart: false });
+  if (print.view !== undefined && !['simple', 'tab', 'staff', 'numbers'].includes(print.view)) delete print.view;
+  if (print.size !== undefined && !['compact', 'normal', 'large'].includes(print.size)) delete print.size;
+  return {
+    soundMode: p.soundMode === 'synth' ? 'synth' : p.soundMode === 'samples' ? 'samples' : undefined,
+    harpHidden: bool(p.harpHidden),
+    fitWidth: bool(p.fitWidth),
+    showNoteNames: bool(p.showNoteNames),
+    readAs: p.readAs === 'notes' ? 'notes' : p.readAs === 'holes' ? 'holes' : undefined,
+    sheetShow: { tab: like(sheet.tab, SHOW_ALL.tab), numbers: like(sheet.numbers, SHOW_ALL.numbers), staff: like(sheet.staff, SHOW_ALL.staff) },
+    printPrefs: print as Partial<import('../pages/PrintPage').PrintPrefs>,
+    textPrefs: like(p.textPrefs, DEFAULT_PLAIN_TEXT),
+    ownedHarps: Array.isArray(p.ownedHarps)
+      ? p.ownedHarps.filter((h): h is import('../core/instruments').HarmonicaSpec => isObject(h) && typeof h.family === 'string' && typeof h.key === 'string')
+      : undefined,
+  };
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/** The fields of `v` that have the same type as in `defaults`. */
+function like<T extends object>(v: unknown, defaults: T): Partial<T> {
+  if (!isObject(v)) return {};
+  const out: Record<string, unknown> = {};
+  for (const [k, d] of Object.entries(defaults)) if (typeof v[k] === typeof d) out[k] = v[k];
+  return out as Partial<T>;
 }
 const prefs = loadPrefs();
 
@@ -316,8 +361,9 @@ export const useApp = create<AppState>((set) => ({
       return { text: next.text, ve: { ...s.ve, ...next.sel }, selectedEvent: null, history: { past: [...h.past, snapshot(s)], future: h.future.slice(1), lastKind: 'redo', lastAt: 0, groupAt: 0 } };
     }),
   history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 },
+  loadSeq: 0,
   loadText: (text, docId = null, saved = false) =>
-    set({ text, docId, savedText: saved ? text : null, selectedEvent: null, activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } }),
+    set((s) => ({ loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
   markSaved: (docId, text) => set((s) => ({ docId, savedText: text ?? s.text })),
   notify: (message) => set({ toast: { message, id: Date.now() } }),
 }));
@@ -335,12 +381,14 @@ useApp.subscribe((s, prev) => {
 // Autosave the working document.
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let autosaveFailed = false;
-function writeWorking() {
+function saveWorking() {
   clearTimeout(saveTimer);
   saveTimer = undefined;
   const s = useApp.getState();
   try {
-    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ text: s.text, docId: s.docId, savedText: s.savedText }));
+    const store = local();
+    if (!store) throw new Error('no storage');
+    writeWorking(store, tabId, { text: s.text, docId: s.docId, savedText: s.savedText });
     autosaveFailed = false;
   } catch {
     // Storage full or blocked: say so once, so unsaved work isn't silently at risk.
@@ -351,11 +399,23 @@ function writeWorking() {
 useApp.subscribe((s, prev) => {
   if (s.text === prev.text && s.docId === prev.docId && s.savedText === prev.savedText) return;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(writeWorking, 300);
+  saveTimer = setTimeout(saveWorking, 300);
 });
+// A duplicated browser tab starts with the same id: it moves to a new one (keeping its text).
+if (typeof window !== 'undefined') {
+  watchForClash(
+    () => tabId,
+    () => {
+      tabId = newSessionId();
+      setSessionId(session(), tabId);
+      saveWorking();
+    },
+  );
+}
+
 // Don't lose the last keystrokes when the tab is closed or hidden.
 if (typeof window !== 'undefined') {
-  const flush = () => saveTimer !== undefined && writeWorking();
+  const flush = () => saveTimer !== undefined && saveWorking();
   window.addEventListener('pagehide', flush);
   document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flush());
 }

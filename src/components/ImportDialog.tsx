@@ -50,13 +50,32 @@ function countContent(imp: Imported) {
   return { notes, chords };
 }
 
+/** Text typed or pasted into the paste box that hasn't been opened yet. */
+let unsavedPaste = false;
+
+/** Closes the dialog, asking first if that would throw away typed or pasted text. */
+function requestClose() {
+  if (unsavedPaste && !window.confirm('Close and discard the text you pasted?')) return;
+  unsavedPaste = false;
+  useApp.setState({ importDraft: null });
+}
+
 export function ImportDialog() {
   const draft = useApp((s) => s.importDraft);
-  const close = () => useApp.setState({ importDraft: null });
+  const close = requestClose;
 
   useEffect(() => {
     if (!draft) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // In the paste box, Escape only leaves the box (the text stays).
+      const el = e.target as HTMLElement;
+      if (el.classList?.contains('paste-box')) {
+        el.blur();
+        return;
+      }
+      close();
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [draft]);
@@ -97,7 +116,11 @@ function ImportBody() {
   const [pattern, setPattern] = useState<StrumPattern>('halves');
   const [family, setFamily] = useState<string>('all');
   const pasteMode = draft.pasteText !== undefined;
-  const close = () => useApp.setState({ importDraft: null });
+  const close = requestClose;
+  useEffect(() => {
+    unsavedPaste = pasteMode && paste.trim() !== '' && paste !== (draft.pasteText ?? '');
+  }, [paste, pasteMode, draft.pasteText]);
+  useEffect(() => () => void (unsavedPaste = false), []);
 
   const imported = useMemo<(Imported & { kind?: string }) | null>(() => {
     if (draft.imported) return draft.imported;
@@ -230,6 +253,8 @@ function ImportBody() {
     if (!result) return;
     stopPreview();
     if (!loadTabText(result.text, draft.name)) return;
+    // Opened: nothing is discarded, so no question.
+    unsavedPaste = false;
     close();
     useApp.getState().setPage(page);
   };

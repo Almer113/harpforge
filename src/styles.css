@@ -978,3 +978,7 @@ button.ve-mnum:hover { color: var(--brass-2); background: var(--panel-2); }
 
 /* A note in the problems list (not a problem). */
 .issue.info { border-color: var(--border-2); background: transparent; color: var(--muted); }
+
+/* Library: storage couldn't be read. */
+.lib-error { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 18px; margin-bottom: 16px; border: 1px solid var(--danger); border-radius: var(--radius); background: rgba(239, 106, 90, 0.08); }
+.lib-error p { margin: 0; flex: 1 1 320px; }

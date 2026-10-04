@@ -154,7 +154,11 @@ let seeding: Promise<void> | null = null;
 
 /** Adds demo songs on first launch, and any demos added since the last visit (once, even if called twice). */
 export function seedDemos(): Promise<void> {
-  seeding ??= seedOnce();
+  // A failure (storage blocked) is forgotten, so a later call can try again.
+  seeding ??= seedOnce().catch((e) => {
+    seeding = null;
+    throw e;
+  });
   return seeding;
 }
 

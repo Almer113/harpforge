@@ -13,6 +13,8 @@ import { copyText, deleteTab, exportLibrary, importLibrary, listTabs, persistSto
 
 export function LibraryPage() {
   const [tabs, setTabs] = useState<SavedTab[] | null>(null);
+  /** Why the library couldn't be read (storage blocked or broken), if it couldn't. */
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [family, setFamily] = useState('all');
   const [sort, setSort] = useState<'recent' | 'title'>(() => {
@@ -37,8 +39,11 @@ export function LibraryPage() {
     seedDemos()
       .catch(() => undefined)
       .then(listTabs)
-      .then(setTabs)
-      .catch(() => setTabs([]));
+      .then((list) => {
+        setTabs(list);
+        setLoadError(null);
+      })
+      .catch((e: Error) => setLoadError(e?.message || 'storage unavailable'));
   }, []);
   useEffect(refresh, [refresh, docId, savedText]);
 
@@ -146,8 +151,17 @@ export function LibraryPage() {
         </div>
       </header>
 
+      {loadError && (
+        <div className="lib-error" role="alert">
+          <p>
+            <b>Couldn’t read your library</b> ({loadError}). Your tabs aren’t deleted: this usually means the browser is blocking storage for this site
+            (private window, or site data settings).
+          </p>
+          <button className="btn small" onClick={refresh}>Retry</button>
+        </div>
+      )}
       {tabs === null ? (
-        <p className="muted">Loading…</p>
+        !loadError && <p className="muted">Loading…</p>
       ) : tabs.length === 0 ? (
         <div className="lib-empty">
           <h2>Start your library</h2>

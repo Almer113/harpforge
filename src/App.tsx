@@ -130,7 +130,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    void seedDemos();
+    seedDemos().catch(() => undefined);
     openSharedFromUrl();
     const onHash = () => openSharedFromUrl();
     window.addEventListener('hashchange', onHash);
@@ -144,7 +144,8 @@ export function App() {
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        void saveCurrent();
+        // Holding the keys down saves once.
+        if (!e.repeat) void saveCurrent();
         return;
       }
       // Undo / redo for every edit (visual and text). Plain inputs keep their own undo.

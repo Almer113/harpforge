@@ -103,13 +103,36 @@ export function newTab() {
   useApp.getState().loadText(BLANK);
 }
 
-export async function saveCurrent(asCopy = false): Promise<void> {
+// Saves run one after another, so two quick saves of a new tab make one library entry.
+let saveQueue: Promise<void> = Promise.resolve();
+/** Library id given to each opened tab (by loadSeq) by a save, for a save queued behind it. */
+const savedIds = new Map<number, string>();
+
+/** Saves the open tab to the library (as a new entry with `asCopy`). */
+export function saveCurrent(asCopy = false): Promise<void> {
   const s = useApp.getState();
-  const text = s.text;
+  // What to save is decided now; where it goes is decided when it's its turn.
+  const job = { text: s.text, seq: s.loadSeq, docId: s.docId, asCopy };
+  const run = saveQueue.then(() => saveNow(job));
+  saveQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function saveNow(job: { text: string; seq: number; docId: string | null; asCopy: boolean }) {
+  const s = useApp.getState();
+  const stillOpen = () => useApp.getState().loadSeq === job.seq;
+  const id0 = job.asCopy ? null : stillOpen() ? useApp.getState().docId : (savedIds.get(job.seq) ?? job.docId);
   try {
-    const id = await saveTab(text, asCopy ? null : s.docId);
-    s.markSaved(id, text);
-    s.notify(asCopy ? 'Saved a copy to your library ✓' : 'Saved to your library ✓');
+    const id = await saveTab(job.text, id0);
+    if (!job.asCopy) savedIds.set(job.seq, id);
+    if (stillOpen()) {
+      s.markSaved(id, job.text);
+      s.notify(job.asCopy ? 'Saved a copy to your library ✓' : 'Saved to your library ✓');
+    } else {
+      // Another tab was opened while saving: the save is done, but it isn't this tab's.
+      const title = getParsed(job.text).doc.meta.title || 'Untitled';
+      s.notify(`Saved “${title}” to your library ✓`);
+    }
     void persistStorage();
   } catch (e) {
     s.notify(`Couldn’t save to your library (${(e as Error).message || 'storage unavailable'}). Export the tab to keep it.`);
@@ -185,14 +208,19 @@ export function importFile() {
   input.click();
 }
 
+let pdfRuns = 0;
+
 async function importPdfFile(name: string, bytes: Uint8Array) {
-  const stillOpen = () => useApp.getState().importDraft?.name === name;
-  useApp.setState({ importDraft: { name, progress: { message: 'Opening PDF…', fraction: 0 } } });
+  // Each reading has its own number: after a cancel, a new import (even of a file with the
+  // same name) never shows the old reading's progress or result.
+  const run = ++pdfRuns;
+  const stillOpen = () => useApp.getState().importDraft?.run === run;
+  useApp.setState({ importDraft: { name, run, progress: { message: 'Opening PDF…', fraction: 0 } } });
   try {
     const { readPdf } = await import('../core/formats/pdf');
     const res = await readPdf(bytes, (message, fraction) => {
       const d = useApp.getState().importDraft;
-      if (d?.name === name && d.progress) useApp.setState({ importDraft: { ...d, progress: { message, fraction } } });
+      if (d?.run === run && d.progress) useApp.setState({ importDraft: { ...d, progress: { message, fraction } } });
     });
     if (!stillOpen()) return;
     if (!res.text.trim()) throw new Error('No text could be found in this PDF.');
@@ -207,9 +235,9 @@ async function importPdfFile(name: string, bytes: Uint8Array) {
         `${res.ocrPages === res.pages ? 'This PDF is made of images' : `${res.ocrPages} page(s) are images`}, so the text was recognised by OCR — check the chords and lyrics (or edit the recognised text).`,
       );
     }
-    useApp.setState({ importDraft: { name, imported: { ...imp, kind }, sourceText: res.text } });
+    useApp.setState({ importDraft: { name, run, imported: { ...imp, kind }, sourceText: res.text } });
   } catch (e) {
-    if (stillOpen()) useApp.setState({ importDraft: { name, error: (e as Error).message } });
+    if (stillOpen()) useApp.setState({ importDraft: { name, run, error: (e as Error).message } });
   }
 }
 

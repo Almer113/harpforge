@@ -1,7 +1,7 @@
 // Share links: the whole tab, compressed, in the URL's #fragment. Nothing is sent
 // to a server — the fragment never leaves the browser until someone opens the link.
 
-import { deflateSync, inflateSync, strFromU8, strToU8 } from 'fflate';
+import { deflateSync, Inflate, strFromU8, strToU8 } from 'fflate';
 import { loadTabText } from './actions';
 import { pageHash } from './router';
 import { useApp } from './store';
@@ -25,8 +25,32 @@ export function encodeTab(text: string): string {
   return toBase64Url(deflateSync(strToU8(text), { level: 9 }));
 }
 
+/** Longest tab a link may hold once unpacked (real tabs are a few KB). */
+export const MAX_SHARED_BYTES = 1_000_000;
+
+export class SharedTooLarge extends Error {}
+
+/** Unpacks a link's tab, giving up past MAX_SHARED_BYTES (a crafted link could unpack to gigabytes). */
 export function decodeTab(code: string): string {
-  return strFromU8(inflateSync(fromBase64Url(code)));
+  const input = fromBase64Url(code);
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  const inflate = new Inflate((chunk) => {
+    size += chunk.length;
+    if (size > MAX_SHARED_BYTES) throw new SharedTooLarge('too large');
+    parts.push(chunk);
+  });
+  // Fed in small pieces, so no single piece can unpack to more than about a megabyte.
+  const STEP = 512;
+  for (let i = 0; i < input.length; i += STEP) inflate.push(input.subarray(i, i + STEP), i + STEP >= input.length);
+  if (!input.length) inflate.push(new Uint8Array(0), true);
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.length;
+  }
+  return strFromU8(out);
 }
 
 export function shareLink(text: string): string {
@@ -52,9 +76,9 @@ export function openSharedFromUrl() {
   let text: string;
   try {
     text = decodeTab(m[1]);
-  } catch {
+  } catch (e) {
     history.replaceState(null, '', location.pathname + location.search + pageHash(useApp.getState().page));
-    useApp.getState().notify('That share link is damaged or incomplete.');
+    useApp.getState().notify(e instanceof SharedTooLarge ? 'That share link is too large to open.' : 'That share link is damaged or incomplete.');
     return;
   }
   // If the user keeps their unsaved tab instead, the link stays in the address bar for later.
