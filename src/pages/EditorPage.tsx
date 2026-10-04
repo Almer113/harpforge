@@ -3,12 +3,9 @@ import { CodeEditor, type CodeEditorHandle } from '../components/CodeEditor';
 import { Transport } from '../components/Controls';
 import { SongDetails } from '../components/editor/SongDetails';
 import { VisualEditor } from '../components/editor/VisualEditor';
-import { importFile, newTab, openPasteImport, saveCurrent } from '../state/actions';
-import { ExportMenu } from '../components/ExportMenu';
-import { copyShareLink } from '../state/share';
 import { Sheet } from '../components/Sheet';
 import { previewEvent } from '../state/playback';
-import { isDirty, useApp, useParsed, type EditorMode } from '../state/store';
+import { useApp, useParsed, type EditorMode } from '../state/store';
 
 const MODES: { id: EditorMode; label: string; hint: string }[] = [
   { id: 'visual', label: 'Visual', hint: 'Drag-and-drop editor: measures, slots and note cards' },
@@ -18,8 +15,6 @@ const MODES: { id: EditorMode; label: string; hint: string }[] = [
 
 export function EditorPage() {
   const mode = useApp((s) => s.editorMode);
-  const dirty = useApp(isDirty);
-  const docId = useApp((s) => s.docId);
   const [showHelp, setShowHelp] = useState(false);
 
   return (
@@ -33,15 +28,6 @@ export function EditorPage() {
               {m.label}
             </button>
           ))}
-        </div>
-        <div className="tb-group">
-          <button className="btn small ghost" onClick={newTab}>New</button>
-          <button className="btn small ghost" onClick={importFile}>Import…</button>
-          <button className="btn small ghost" onClick={openPasteImport}>Paste…</button>
-          <ExportMenu small />
-          <button className="btn small ghost" onClick={() => void copyShareLink()} title="Copy a link that opens this tab">Share</button>
-          <button className="btn small ghost" onClick={() => void saveCurrent(true)}>Save copy</button>
-          <button className="btn small primary" onClick={() => void saveCurrent()} title="Save to your library (Ctrl+S)">{dirty || !docId ? 'Save' : 'Saved ✓'}</button>
         </div>
       </div>
 

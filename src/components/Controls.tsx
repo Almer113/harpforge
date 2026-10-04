@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FAMILIES, getHarmonica, keysFor, tuningsFor, type Family, type HarmonicaSpec } from '../core/instruments';
-import { startRecording, stopRecording } from '../live/recorder';
+import { FAMILIES, getHarmonica, keysFor, rangeLabel, tuningsFor, type Family, type HarmonicaSpec } from '../core/instruments';
+import { stopRecording } from '../live/recorder';
 import { isKeyChange, keyDistance, setHarmonica, shiftOctave } from '../state/actions';
 import { guessTonic, harpForPosition, octaveOptions, positionFor, positionName } from '../core/convert';
 import { mod12, transposeKey } from '../core/pitch';
@@ -141,7 +141,7 @@ const Icon = {
   rec: <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="7" fill="currentColor" /></svg>,
 };
 
-export function Transport({ showRecord = false }: { showRecord?: boolean }) {
+export function Transport() {
   const play = useApp((s) => s.play);
   const loop = useApp((s) => s.loop);
   const metronome = useApp((s) => s.metronome);
@@ -149,8 +149,6 @@ export function Transport({ showRecord = false }: { showRecord?: boolean }) {
   const soundMode = useApp((s) => s.soundMode);
   const samplesStatus = useApp((s) => s.samplesStatus);
   const recording = useApp((s) => s.recording);
-  const recordAppend = useApp((s) => s.recordAppend);
-  const recordGrid = useApp((s) => s.recordGrid);
   const { doc } = useParsed();
   const bpm = Math.round(doc.meta.tempo * speed);
 
@@ -215,35 +213,43 @@ export function Transport({ showRecord = false }: { showRecord?: boolean }) {
         </select>
       </div>
 
-      {showRecord && (
-        <div className="t-group rec">
-          {recording ? (
-            <button className="t-btn rec-btn live" onClick={stopRecording} title="Stop recording (Esc)">
-              {Icon.stop} <span>{recording.phase === 'count-in' ? 'Count-in…' : 'Stop recording'}</span>
-            </button>
-          ) : (
-            <>
-              <button className="t-btn rec-btn" onClick={() => startRecording('timed')} title="Record in time with a metronome (1 bar count-in)">
-                {Icon.rec} <span>Record</span>
-              </button>
-              <button className="t-btn rec-btn ghost" onClick={() => startRecording('free')} title="Record notes in order, without timing">
-                {Icon.rec} <span>Free</span>
-              </button>
-              <select
-                value={recordGrid}
-                onChange={(e) => useApp.setState({ recordGrid: parseFloat(e.target.value) })}
-                title="Timing grid for Record: when you stop, each note is rounded to the nearest step so small timing wobbles disappear. (Free recording ignores this.)"
-              >
-                <option value={1}>Round to beats</option>
-                <option value={0.5}>Round to ½ beats</option>
-                <option value={0.25}>Round to ¼ beats</option>
-              </select>
-              <label className="check" title="Add the recording to the end of the current tab, or replace its contents">
-                <input type="checkbox" checked={recordAppend} onChange={(e) => useApp.setState({ recordAppend: e.target.checked })} />
-                Append
-              </label>
-            </>
-          )}
+      <div className="t-group t-harp">
+        <HarmonicaChip />
+      </div>
+
+    </div>
+  );
+}
+
+/** "C Diatonic · 1st position ▾": opens the harmonica picker. Lives in the transport. */
+export function HarmonicaChip() {
+  const { harp, doc } = useParsed();
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const tonic = useMemo(() => guessTonic(doc, harp), [doc, harp]);
+  const position = tonic !== undefined && harp.spec.family !== 'chromatic' ? positionFor(harp.spec.key, tonic) : undefined;
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('.key-choice') && setOpen(false);
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', esc);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  return (
+    <div className="harp-chip-wrap" ref={root}>
+      <button className={`harp-chip ${open ? 'on' : ''}`} onClick={() => setOpen(!open)} aria-expanded={open} title="Harmonica, key, position and octave">
+        <span>{harp.name}</span>
+        {position !== undefined && <span className="muted">· {positionName(position)} pos.</span>}
+        <span aria-hidden>▾</span>
+      </button>
+      {open && (
+        <div className="harp-pop" role="dialog" aria-label="Harmonica">
+          <HarmonicaPicker />
+          <p className="muted small">{rangeLabel(harp)} · Changing the key asks whether to keep the holes or the notes; type and tuning keep the notes.</p>
         </div>
       )}
     </div>

@@ -1,9 +1,11 @@
-// Microphone (with tuner), MIDI keyboard and practice-mode controls under the harmonica.
+// The tools under the harmonica: microphone (with tuner), MIDI keyboard, practice mode
+// and recording.
 
 import { useEffect, useState } from 'react';
 import { holeSoundText } from '../core/htab/serializer';
 import { midiToName, prefersFlats } from '../core/pitch';
 import { startMic, startMidi, stopMic, stopMidi } from '../live/inputs';
+import { startRecording, stopRecording } from '../live/recorder';
 import { hint, practiceTotal, startPractice, stopPractice } from '../state/practice';
 import { useApp, useParsed } from '../state/store';
 
@@ -19,6 +21,8 @@ const KeysIcon = (
     <path d="M8 5v9M12 5v9M16 5v9M6 14h4M14 14h4" />
   </svg>
 );
+const RecIcon = <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="7" fill="currentColor" /></svg>;
+const StopIcon = <svg viewBox="0 0 24 24" width="14" height="14"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" /></svg>;
 const TargetIcon = (
   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="12" cy="12" r="8" />
@@ -32,6 +36,54 @@ export function InputBar() {
       <MicControl />
       <MidiControl />
       <PracticeControl />
+      <RecordControl />
+    </div>
+  );
+}
+
+/** Record what you play into the tab. Its options only show when you open it. */
+function RecordControl() {
+  const recording = useApp((s) => s.recording);
+  const recordAppend = useApp((s) => s.recordAppend);
+  const recordGrid = useApp((s) => s.recordGrid);
+  const [open, setOpen] = useState(false);
+  if (recording) {
+    return (
+      <div className="input-card on rec">
+        <button className="t-btn rec-btn live" onClick={stopRecording} title="Stop recording (Esc)">
+          {StopIcon} <span>{recording.phase === 'count-in' ? 'Count-in…' : 'Stop recording'}</span>
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className={`input-card ${open ? 'on' : ''}`}>
+      <button className={`t-btn toggle ${open ? 'on' : ''}`} onClick={() => setOpen(!open)} title="Record what you play into the tab">
+        <span className="rec-dot-icon">{RecIcon}</span> <span>Record</span>
+      </button>
+      {open && (
+        <>
+          <button className="btn small" onClick={() => void startRecording('timed')} title="With a metronome and a one-bar count-in; notes keep their timing">
+            In time
+          </button>
+          <button className="btn small ghost" onClick={() => void startRecording('free')} title="Notes in order, without timing">
+            Free
+          </button>
+          <select
+            value={recordGrid}
+            onChange={(e) => useApp.setState({ recordGrid: parseFloat(e.target.value) })}
+            title="When you stop, each note is rounded to the nearest step so small timing wobbles disappear (in-time recording only)"
+          >
+            <option value={1}>Round to beats</option>
+            <option value={0.5}>Round to ½ beats</option>
+            <option value={0.25}>Round to ¼ beats</option>
+          </select>
+          <label className="check" title="Add the recording to the end of the tab, or replace what's there">
+            <input type="checkbox" checked={recordAppend} onChange={(e) => useApp.setState({ recordAppend: e.target.checked })} />
+            Append
+          </label>
+        </>
+      )}
     </div>
   );
 }

@@ -150,6 +150,10 @@ export interface AppState {
   practice: PracticeState | null;
   /** Recorded harmonica samples or the synthesized reed. */
   soundMode: 'samples' | 'synth';
+  /** Play page: the harmonica is folded away (the keyboard still plays). */
+  harpHidden: boolean;
+  /** Visual editor: measures fill each row (true) or follow the text's lines. */
+  fitWidth: boolean;
   editorMode: EditorMode;
   ve: VisualState;
   setVe(patch: Partial<VisualState>): void;
@@ -170,7 +174,7 @@ export interface AppState {
 const initial = loadWorking();
 
 const PREFS_KEY = 'harpforge:prefs';
-function loadPrefs(): { soundMode?: 'samples' | 'synth' } {
+function loadPrefs(): { soundMode?: 'samples' | 'synth'; harpHidden?: boolean; fitWidth?: boolean } {
   try {
     return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}');
   } catch {
@@ -205,6 +209,8 @@ export const useApp = create<AppState>((set) => ({
   midi: { status: 'off', devices: [] },
   practice: null,
   soundMode: prefs.soundMode === 'synth' ? 'synth' : 'samples',
+  harpHidden: !!prefs.harpHidden,
+  fitWidth: prefs.fitWidth !== false,
   editorMode: 'visual',
   ve: {
     selection: [],
@@ -256,9 +262,9 @@ export const useApp = create<AppState>((set) => ({
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode) return;
+  if (s.soundMode === prev.soundMode && s.harpHidden === prev.harpHidden && s.fitWidth === prev.fitWidth) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpHidden: s.harpHidden, fitWidth: s.fitWidth }));
   } catch {
     /* storage unavailable */
   }

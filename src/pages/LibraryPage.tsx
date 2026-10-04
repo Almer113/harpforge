@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { confirmDiscard, downloadData, importFile, openPasteImport, saveCurrent } from '../state/actions';
+import { confirmDiscard, downloadData } from '../state/actions';
 import { ExportMenu } from '../components/ExportMenu';
 import { stop } from '../state/playback';
 import { useApp } from '../state/store';
@@ -95,9 +95,6 @@ export function LibraryPage() {
         </div>
         <div className="tb-group">
           <input className="search" placeholder="Search…" value={query} onChange={(e) => setQuery(e.target.value)} />
-          <button className="btn" onClick={importFile}>Import file…</button>
-          <button className="btn" onClick={openPasteImport}>Paste…</button>
-          <button className="btn primary" onClick={() => saveCurrent().then(refresh)}>Save current tab</button>
         </div>
       </header>
       <div className="lib-backup muted small">

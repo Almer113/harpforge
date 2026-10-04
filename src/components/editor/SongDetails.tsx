@@ -5,7 +5,6 @@ import { setTimeSignature } from '../../core/edit/model';
 import { setMetaFields } from '../../core/htab/meta';
 import { commitSong, currentSong } from '../../state/editor';
 import { useApp, useParsed } from '../../state/store';
-import { HarmonicaPicker } from '../Controls';
 
 const TIMES = ['2/4', '3/4', '4/4', '5/4', '6/4', '2/2', '3/8', '6/8', '7/8', '9/8', '12/8'];
 const KEYS = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'Db', 'Ab', 'Eb', 'Bb', 'F', 'Am', 'Em', 'Bm', 'F#m', 'C#m', 'G#m', 'Ebm', 'Bbm', 'Fm', 'Cm', 'Gm', 'Dm'];
@@ -99,7 +98,6 @@ export function SongDetails() {
             onKeyDown={(e) => e.key === 'Enter' && setTempo(parseFloat((e.target as HTMLInputElement).value))}
           />
         </label>
-        <HarmonicaPicker />
       </div>
     </div>
   );

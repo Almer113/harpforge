@@ -1,21 +1,55 @@
 import { useEffect, useState } from 'react';
 import { Toast } from './components/Controls';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { ExportMenu } from './components/ExportMenu';
 import { ImportDialog } from './components/ImportDialog';
+import { Menu } from './components/Menu';
 import { ConvertPage } from './pages/ConvertPage';
 import { EditorPage } from './pages/EditorPage';
 import { LibraryPage } from './pages/LibraryPage';
 import { PlayPage } from './pages/PlayPage';
-import { importFromFile, saveCurrent } from './state/actions';
+import { importFile, importFromFile, newTab, openPasteImport, saveCurrent } from './state/actions';
+import { startRouter } from './state/router';
+import { copyShareLink } from './state/share';
 import { isDirty, useApp, useParsed, type Page } from './state/store';
 import { seedDemos } from './storage/library';
 import { openSharedFromUrl } from './state/share';
 
 const NAV: { id: Page; label: string }[] = [
-  { id: 'play', label: 'Play' },
-  { id: 'editor', label: 'Editor' },
-  { id: 'convert', label: 'Convert' },
   { id: 'library', label: 'Library' },
+  { id: 'play', label: 'Play' },
+  { id: 'editor', label: 'Edit' },
+  { id: 'convert', label: 'Convert' },
 ];
+
+startRouter();
+
+/** What you can do with the open tab, the same on every page. */
+function TabActions() {
+  const dirty = useApp(isDirty);
+  const docId = useApp((s) => s.docId);
+  return (
+    <div className="tab-actions">
+      <Menu
+        label="Import ▾"
+        title="Open a file, paste text, or start a new tab"
+        items={[
+          { label: 'Open a file…', hint: 'PDF, ABC, MusicXML, MIDI, ChordPro, chord sheet, tab', onClick: importFile },
+          { label: 'Paste text…', hint: 'A chord sheet, ABC, ChordPro, MusicXML or a tab', onClick: openPasteImport },
+          { label: 'New empty tab', onClick: newTab },
+        ]}
+      />
+      <ExportMenu small />
+      <button className="btn small ghost" onClick={() => void copyShareLink()} title="Copy a link that opens this tab">Share</button>
+      <div className="save-split">
+        <button className="btn small primary" onClick={() => void saveCurrent()} title="Save to your library (Ctrl+S)">
+          {dirty || !docId ? 'Save' : 'Saved ✓'}
+        </button>
+        <Menu label="▾" className="btn small primary" title="More ways to save" items={[{ label: 'Save as a copy', hint: 'A new tab in your library', onClick: () => void saveCurrent(true) }]} />
+      </div>
+    </div>
+  );
+}
 
 export function App() {
   const page = useApp((s) => s.page);
@@ -113,16 +147,19 @@ export function App() {
             </button>
           ))}
         </div>
-        <div className="doc-status" title={dirty ? 'Unsaved changes (Ctrl+S to save)' : 'Saved'}>
-          <span className="doc-title">{doc.meta.title || 'Untitled'}</span>
+        <div className="doc-status" title={dirty ? 'Unsaved changes (Ctrl+S to save)' : 'Saved in your library'}>
           <span className={`dot ${dirty ? 'dirty' : 'clean'}`} />
+          <span className="doc-title">{doc.meta.title || 'Untitled'}</span>
         </div>
+        <TabActions />
       </nav>
       <main>
-        {page === 'play' && <PlayPage />}
-        {page === 'editor' && <EditorPage />}
-        {page === 'convert' && <ConvertPage />}
-        {page === 'library' && <LibraryPage />}
+        <ErrorBoundary resetKey={page}>
+          {page === 'play' && <PlayPage />}
+          {page === 'editor' && <EditorPage />}
+          {page === 'convert' && <ConvertPage />}
+          {page === 'library' && <LibraryPage />}
+        </ErrorBoundary>
       </main>
       {dragging && (
         <div className="drop-overlay">
