@@ -79,7 +79,9 @@ export interface VisualState {
   dur: number;
   dotted: boolean;
   triplet: boolean;
+  /** Grid in beats; 0: auto (follows the length of the note being placed or dragged). */
   snap: number;
+  /** Pixels per beat. */
   zoom: number;
   /** Insert mode: new notes and longer notes push the music after them along; deleting closes the gap. */
   insert: boolean;
@@ -356,7 +358,7 @@ export const useApp = create<AppState>((set) => ({
     dur: 1,
     dotted: false,
     triplet: false,
-    snap: 0.5,
+    snap: 0,
     zoom: 64,
     step: false,
     insert: false,

@@ -813,3 +813,25 @@ export function samePos(a: Pos | null | undefined, b: Pos | null | undefined): b
 export function snapTo(x: number, grid: number): number {
   return Math.round(x / grid + EPS) * grid;
 }
+
+/**
+ * The grid a length moves on: ½ beat for eighths and longer, finer for what needs it
+ * (a sixteenth or a dotted eighth: ¼ beat; triplets: ⅓ beat; triplet sixteenths: ⅙).
+ */
+export function gridFor(len: number): number {
+  if (len <= EPS) return 0.5;
+  for (const g of [0.5, 0.25, 1 / 3, 0.125, 1 / 6, 1 / 12]) if (Math.abs(len / g - Math.round(len / g)) < 1e-4) return g;
+  return 0.25;
+}
+
+/** The grid for a note: its length's, or finer when it starts off that grid (a syncopated quarter). */
+export function gridForNote(len: number, start: number): number {
+  const frac = start - Math.floor(start + EPS);
+  return frac > EPS ? Math.min(gridFor(len), gridFor(frac)) : gridFor(len);
+}
+
+/** The finer grid Shift gives while dragging: sixteenths, or triplet sixteenths on a triplet grid. */
+export function fineGrid(grid: number): number {
+  const triplet = Math.abs(grid * 3 - Math.round(grid * 3)) < 1e-6 && Math.abs(grid * 4 - Math.round(grid * 4)) > 1e-6;
+  return Math.min(grid, triplet ? 1 / 6 : 0.25);
+}

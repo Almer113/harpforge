@@ -152,3 +152,27 @@ describe('edit model: ties', () => {
     expect(body(placeItem(t, 0, { start: 2, dur: 2, sounds: [holeSound(3, 'draw')] }))).toBe('4 5 -3~ | 6 7 .~ |');
   });
 });
+
+describe('auto snap grid', () => {
+  it('follows the note length', async () => {
+    const { gridFor } = await import('./model');
+    expect(gridFor(1)).toBe(0.5); // quarter
+    expect(gridFor(0.5)).toBe(0.5); // eighth
+    expect(gridFor(1.5)).toBe(0.5); // dotted quarter
+    expect(gridFor(0.25)).toBe(0.25); // sixteenth
+    expect(gridFor(0.75)).toBe(0.25); // dotted eighth
+    expect(gridFor(1 / 3)).toBeCloseTo(1 / 3); // triplet eighth
+    expect(gridFor(2 / 3)).toBeCloseTo(1 / 3); // triplet quarter
+    expect(gridFor(1 / 6)).toBeCloseTo(1 / 6); // triplet sixteenth
+    expect(gridFor(0.125)).toBe(0.125); // 32nd
+  });
+  it('goes finer for a note that starts off its grid, and with Shift', async () => {
+    const { gridForNote, fineGrid } = await import('./model');
+    expect(gridForNote(1, 2)).toBe(0.5);
+    expect(gridForNote(1, 2.25)).toBe(0.25); // a syncopated quarter
+    expect(gridForNote(0.5, 1.5)).toBe(0.5);
+    expect(fineGrid(0.5)).toBe(0.25);
+    expect(fineGrid(1 / 3)).toBeCloseTo(1 / 6);
+    expect(fineGrid(0.125)).toBe(0.125);
+  });
+});

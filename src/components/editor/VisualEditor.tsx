@@ -33,6 +33,9 @@ import {
   ripple,
   setTie,
   snapTo,
+  fineGrid,
+  gridFor,
+  gridForNote,
   updateItem,
   type Item,
   type Pos,
@@ -64,6 +67,31 @@ import { openShortcuts } from '../Shortcuts';
 
 export function toolDuration(ve: VisualState): number {
   return ve.dur * (ve.dotted ? 1.5 : 1) * (ve.triplet ? 2 / 3 : 1);
+}
+
+/** The grid for a click in an empty slot: the snap setting, or (auto) the length about to be written. */
+function clickGrid(ve: VisualState): number {
+  return ve.snap || gridFor(toolDuration(ve));
+}
+
+// Zoom: pixels per beat.
+export const ZOOM_DEFAULT = 64;
+const ZOOM_MIN = 32;
+const ZOOM_MAX = 160;
+const ZOOM_STEPS = [32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
+const clampZoom = (z: number) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+function stepZoom(dir: 1 | -1) {
+  const z = useApp.getState().ve.zoom;
+  const next = dir > 0 ? (ZOOM_STEPS.find((s) => s > z) ?? ZOOM_MAX) : ([...ZOOM_STEPS].reverse().find((s) => s < z) ?? ZOOM_MIN);
+  useApp.getState().setVe({ zoom: next });
+}
+
+/**
+ * How much of a note card fits its width (cards are exactly as wide as their length):
+ * full; the glyph a size smaller; just a small hole number; or only the blow/draw colour.
+ */
+function detailLevel(width: number): '' | 'lod-mid' | 'lod-small' | 'lod-bar' {
+  return width >= 40 ? '' : width >= 24 ? 'lod-mid' : width >= 12 ? 'lod-small' : 'lod-bar';
 }
 
 /** Absolute start beat of each measure as played (short bars and overfull bars take their real length). */
@@ -548,16 +576,17 @@ function Toolbar({ song }: { song: Song }) {
               <div className="mi-label">Grid</div>
               <label className="pb-row">
                 <span>Snap</span>
-                <select value={ve.snap} onChange={(e) => setVe({ snap: parseFloat(e.target.value) })} title="Grid for placing and dragging notes">
-                  <option value={1}>Beat</option>
-                  <option value={0.5}>½ beat</option>
-                  <option value={0.25}>¼ beat</option>
+                <select value={ve.snap} onChange={(e) => setVe({ snap: parseFloat(e.target.value) })} title="Grid for placing and dragging notes. Auto: eighths on a ½-beat grid, sixteenths on ¼, triplets on ⅓ (hold Shift while dragging for a finer grid)">
+                  <option value={0}>Auto (follows the note)</option>
+                  <option value={1}>1/4</option>
+                  <option value={0.5}>1/8</option>
+                  <option value={0.25}>1/16</option>
                   <option value={1 / 3}>Triplet</option>
                 </select>
               </label>
               <label className="pb-row">
                 <span>Zoom</span>
-                <input type="range" min={36} max={120} step={4} value={ve.zoom} aria-label="Zoom" onChange={(e) => setVe({ zoom: parseInt(e.target.value, 10) })} />
+                <input type="range" min={ZOOM_MIN} max={ZOOM_MAX} step={4} value={ve.zoom} aria-label="Zoom" onChange={(e) => setVe({ zoom: parseInt(e.target.value, 10) })} title="Also Ctrl + mouse wheel over the music" />
               </label>
             </>
           );
@@ -608,6 +637,7 @@ function Dock() {
 /** Where the caret is, what mode the editor is in, and a hint for what to do next. */
 function StatusLine() {
   const ve = useApp((s) => s.ve);
+  const setVe = useApp((s) => s.setVe);
   const sel = ve.selection;
   const at = sel[0] ?? ve.caret;
   const hint = ve.step
@@ -634,6 +664,13 @@ function StatusLine() {
           all shortcuts (?)
         </button>
       </span>
+      <span className="ve-zoom" role="group" aria-label="Zoom">
+        <button onClick={() => stepZoom(-1)} disabled={ve.zoom <= ZOOM_MIN} aria-label="Zoom out" title="Zoom out (Ctrl + mouse wheel over the music)">−</button>
+        <button className="ve-zoom-val" onClick={() => setVe({ zoom: ZOOM_DEFAULT })} title="Zoom (Ctrl + mouse wheel over the music). Click to reset to 100%">
+          {Math.round((ve.zoom / ZOOM_DEFAULT) * 100)}%
+        </button>
+        <button onClick={() => stepZoom(1)} disabled={ve.zoom >= ZOOM_MAX} aria-label="Zoom in" title="Zoom in (Ctrl + mouse wheel over the music)">+</button>
+      </span>
     </div>
   );
 }
@@ -655,6 +692,16 @@ interface Drag {
   group: { pos: Pos; abs: number; len: number }[];
   /** A click (no drag) on a note inside a selection selects just that note. */
   collapse: boolean;
+  /** The grid it moves on (Shift: finer). */
+  grid: number;
+}
+
+/** A narrow card's label: holes, notes, chord and lyric ("−4  D5 · G7 · “tle”"). */
+function peekText(it: Item, midis: (number | null)[], flats: boolean): string {
+  if (!it.sounds.length) return ['Rest', it.chord, it.lyric && `“${it.lyric}”`].filter(Boolean).join(' · ');
+  const holes = it.sounds.map((s) => (s.type === 'hole' ? holeSoundText(s) : '')).filter(Boolean).join(' ');
+  const notes = midis.map((x) => (x === null ? '?' : midiToName(x, flats))).join(' ');
+  return [holes ? `${holes}  ${notes}` : notes, it.chord, it.lyric && `“${it.lyric}”`].filter(Boolean).join(' · ');
 }
 
 /**
@@ -688,6 +735,8 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
   // Move preview: where the grabbed piece lands (m/start) and the whole note's span (abs/dur).
   const [ghost, setGhost] = useState<{ m: number; start: number; abs: number; dur: number; copy: boolean; others: { abs: number; dur: number }[] } | null>(null);
   const [resizeDur, setResizeDur] = useState<{ pos: Pos; dur: number } | null>(null);
+  // The grid shown while dragging (auto snap follows the dragged note).
+  const [dragGrid, setDragGrid] = useState<number | null>(null);
   // Latest previews, read when the drag ends.
   const ghostRef = useRef(ghost);
   const resizeRef = useRef(resizeDur);
@@ -706,7 +755,8 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
       if (!d) return;
       if (!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 4) return;
       d.moved = true;
-      const snap = useApp.getState().ve.snap;
+      const snap = e.shiftKey ? fineGrid(d.grid) : d.grid;
+      setDragGrid(snap);
       if (d.mode === 'resize') {
         // Past the bar line the note carries on into the next measure as a tie.
         const dur = Math.max(snap, snapTo(d.item.dur + (e.clientX - d.x0) / zoom, snap));
@@ -733,6 +783,7 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
       const d = drag.current;
       drag.current = null;
       if (!d) return;
+      setDragGrid(null);
       const s = fromDoc(getParsed(useApp.getState().text).doc);
       // Edits happen here, not inside state updaters (React may run those twice).
       if (d.mode === 'resize') {
@@ -814,6 +865,8 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
       total: chainLength(song, chain),
       group,
       collapse: !e.ctrlKey && !e.metaKey && !e.shiftKey && inSelection && sel.length > 1,
+      // Auto: the note's own grid (several notes: the finest of theirs).
+      grid: v.snap || (group.length ? Math.min(...group.map((g) => gridForNote(g.len, g.abs))) : gridForNote(item.dur, pos.start)),
     };
     if (item.sounds.length && !resize) playSounds(item.sounds, chainLength(song, chainAt(song, pos)));
   };
@@ -821,25 +874,60 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
   const onLaneDown = (e: React.PointerEvent, m: number) => {
     if (e.button !== 0 || (e.target as HTMLElement).closest('.ve-item')) return;
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const start = Math.max(0, Math.min(song.cap - ve.snap, Math.floor((e.clientX - r.left) / zoom / ve.snap + EPS) * ve.snap));
+    const g = clickGrid(ve);
+    const start = Math.max(0, Math.min(song.cap - g, Math.floor((e.clientX - r.left) / zoom / g + EPS) * g));
     setVe({ caret: { m, start }, selection: [], measure: m });
   };
 
   const onLaneDouble = (e: React.MouseEvent, m: number) => {
     if ((e.target as HTMLElement).closest('.ve-item')) return;
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const start = Math.max(0, Math.min(song.cap - ve.snap, Math.floor((e.clientX - r.left) / zoom / ve.snap + EPS) * ve.snap));
+    const g = clickGrid(ve);
+    const start = Math.max(0, Math.min(song.cap - g, Math.floor((e.clientX - r.left) / zoom / g + EPS) * g));
     const dur = toolDuration(ve);
     const next = placeItem(makeRoom(song, { m, start }, dur, ve.insert), m, { start, dur, sounds: ve.lastSounds });
     apply(next, { selection: [{ m, start }], caret: advance(next, { m, start }, dur), measure: m });
     playSounds(ve.lastSounds, dur);
   };
 
-  // Grid background: faint lines at the snap, stronger on beats.
+  // Grid background: faint lines at the snap (auto: the grid a click or the dragged note uses), stronger on beats.
+  const grid = dragGrid ?? clickGrid(ve);
   const gridStyle = (cap: number) => ({
     width: cap * zoom,
-    backgroundSize: `${zoom}px 100%, ${zoom * ve.snap}px 100%`,
+    backgroundSize: `${zoom}px 100%, ${zoom * grid}px 100%`,
   });
+  // Cards are exactly as long as their notes (no minimum, so they never overlap).
+  const cardW = (len: number) => {
+    const px = len * zoom;
+    return Math.max(px - (px < 27 ? 2 : 3), 3);
+  };
+
+  // Ctrl + wheel zooms, keeping the measure under the pointer where it is on screen.
+  const zoomAcc = useRef(zoom);
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const cur = useApp.getState().ve.zoom;
+      if (Math.abs(zoomAcc.current - cur) >= 1) zoomAcc.current = cur;
+      zoomAcc.current = clampZoom(zoomAcc.current * Math.exp(-e.deltaY * 0.0015));
+      const next = Math.round(zoomAcc.current);
+      if (next === cur) return;
+      const lane = (e.target as HTMLElement).closest<HTMLElement>('.ve-measure')?.querySelector<HTMLElement>('.ve-lane');
+      const top = lane?.getBoundingClientRect().top;
+      useApp.getState().setVe({ zoom: next });
+      if (lane && top !== undefined) {
+        requestAnimationFrame(() => {
+          const now = root.current?.querySelector<HTMLElement>(`.ve-lane[data-m="${lane.dataset.m}"]`);
+          if (now) window.scrollBy(0, now.getBoundingClientRect().top - top);
+        });
+      }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
   return (
     <div className="ve-score" ref={root}>
@@ -888,6 +976,11 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
                 )}
                 {meas.items.map((it) => {
                   const pos = { m: mi, start: it.start };
+                  // Chords and lyrics run on past a narrow card, up to the next chord or lyric.
+                  const laneEnd = Math.max(song.cap, len);
+                  const nextWith = (key: 'chord' | 'lyric') => meas.items.reduce((best, o) => (o.start > it.start + EPS && o[key] !== undefined && o.start < best ? o.start : best), laneEnd);
+                  const w = cardW(it.dur);
+                  const lod = it.dur <= EPS ? '' : detailLevel(w);
                   const selected = ve.selection.some((p) => samePos(p, pos));
                   const just = !selected && samePos(ve.justEntered, pos);
                   const playing = playingAt.has(+(starts[mi] + it.start).toFixed(4));
@@ -898,13 +991,15 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
                   return (
                     <div
                       key={it.start}
-                      className={`ve-item ${breath} ${it.tied ? 'tied' : ''} ${selected ? 'selected' : ''} ${just ? 'just' : ''} ${playing ? 'playing' : ''} ${dragging ? 'dragging' : ''} ${it.dur <= EPS ? 'marker' : ''} ${offNote ? 'bad' : ''}`}
-                      style={{ left: it.start * zoom, width: Math.max(it.dur * zoom, 22) - 3 }}
+                      className={`ve-item ${breath} ${lod} ${it.tied ? 'tied' : ''} ${selected ? 'selected' : ''} ${selected && ve.selection.length === 1 ? 'solo' : ''} ${just ? 'just' : ''} ${playing ? 'playing' : ''} ${dragging ? 'dragging' : ''} ${it.dur <= EPS ? 'marker' : ''} ${offNote ? 'bad' : ''}`}
+                      style={{ left: it.start * zoom, width: it.dur <= EPS ? undefined : w }}
                       onPointerDown={(e) => onItemDown(e, pos, it)}
-                      title={midis.map((x) => (x === null ? 'not playable' : midiToName(x, flats))).join(' + ') + (offNote ? ' — not on this harmonica' : '')}
+                      // Narrow cards: everything in an instant label on hover (and on the selected note).
+                      data-peek={lod ? peekText(it, midis, flats) : undefined}
+                      title={lod ? undefined : midis.map((x) => (x === null ? 'not playable' : midiToName(x, flats))).join(' + ') + (offNote ? ' — not on this harmonica' : '')}
                     >
                       {it.tied && <span className="ve-tie" aria-label="tied from the previous note" />}
-                      <span className="ve-chord">{it.chord ?? ''}</span>
+                      <span className="ve-chord" style={{ maxWidth: (nextWith('chord') - it.start) * zoom - 6 }}>{it.chord ?? ''}</span>
                       <span className={`ve-glyphs ${it.sounds.length > 1 ? 'stack' : ''}`}>
                         {it.sounds.length ? (
                           it.sounds.map((s, k) => (asNotes ? <NoteGlyph key={k} sound={s} midi={midis[k]} flats={flats} /> : <Glyph key={k} sound={s} flats={flats} />))
@@ -919,7 +1014,7 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
                             : midis.map((x) => (x === null ? '?' : midiToName(x, flats))).join(' ')}
                         </span>
                       )}
-                      <span className="ve-lyric">{it.lyric ?? ''}</span>
+                      <span className="ve-lyric" style={{ maxWidth: (nextWith('lyric') - it.start) * zoom - 6 }}>{it.lyric ?? ''}</span>
                       {it.dur > EPS && <span className="ve-resize" title="Drag to change the length" />}
 
                     </div>
@@ -930,18 +1025,18 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
                   ghost.others.flatMap((o) => segments(song.cap, o.abs, o.dur))
                     .filter((g) => g.m === mi)
                     .map((g) => (
-                      <span key={`o${g.start}`} className={`ve-ghost ${ghost.copy ? 'copy' : ''}`} style={{ left: g.start * zoom, width: Math.max(g.len * zoom, 22) - 3 }} />
+                      <span key={`o${g.start}`} className={`ve-ghost ${ghost.copy ? 'copy' : ''}`} style={{ left: g.start * zoom, width: cardW(g.len) }} />
                     ))}
                 {ghost &&
                   segments(song.cap, ghost.abs, ghost.dur)
                     .filter((g) => g.m === mi)
                     .map((g) => (
-                      <span key={`g${g.start}`} className={`ve-ghost ${ghost.copy ? 'copy' : ''}`} style={{ left: g.start * zoom, width: Math.max(g.len * zoom, 22) - 3 }} />
+                      <span key={`g${g.start}`} className={`ve-ghost ${ghost.copy ? 'copy' : ''}`} style={{ left: g.start * zoom, width: cardW(g.len) }} />
                     ))}
                 {resizeDur &&
                   segments(song.cap, absBeat(song, resizeDur.pos), resizeDur.dur)
                     .filter((g) => g.m === mi)
-                    .map((g) => <span key={`r${g.start}`} className="ve-resize-ghost" style={{ left: g.start * zoom, width: g.len * zoom - 3 }} />)}
+                    .map((g) => <span key={`r${g.start}`} className="ve-resize-ghost" style={{ left: g.start * zoom, width: cardW(g.len) }} />)}
               </div>
             </div>,
           ];
