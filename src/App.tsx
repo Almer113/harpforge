@@ -5,7 +5,6 @@ import { ExportMenu } from './components/ExportMenu';
 import { ImportDialog } from './components/ImportDialog';
 import { Menu } from './components/Menu';
 import { openShortcuts, Shortcuts } from './components/Shortcuts';
-import { ConvertPage } from './pages/ConvertPage';
 import { EditorPage } from './pages/EditorPage';
 import { LibraryPage } from './pages/LibraryPage';
 import { PlayPage } from './pages/PlayPage';
@@ -20,7 +19,6 @@ const NAV: { id: Page; label: string }[] = [
   { id: 'library', label: 'Library' },
   { id: 'play', label: 'Play' },
   { id: 'editor', label: 'Edit' },
-  { id: 'convert', label: 'Convert' },
 ];
 
 startRouter();
@@ -37,7 +35,7 @@ function TabActions() {
         title="Open a file, paste text, or start a new tab"
         items={[
           { label: 'Open a file…', hint: 'PDF, ABC, MusicXML, MIDI, ChordPro, chord sheet, tab', onClick: importFile },
-          { label: 'Paste text…', hint: 'A chord sheet, ABC, ChordPro, MusicXML or a tab', onClick: openPasteImport },
+          { label: 'Paste or type…', hint: 'A chord sheet, ABC, ChordPro, MusicXML, a tab — or notes to turn into a tab', onClick: openPasteImport },
           { label: 'New empty tab', onClick: newTab },
         ]}
       />
@@ -159,7 +157,6 @@ export function App() {
         <ErrorBoundary resetKey={page}>
           {page === 'play' && <PlayPage />}
           {page === 'editor' && <EditorPage />}
-          {page === 'convert' && <ConvertPage />}
           {page === 'library' && <LibraryPage />}
         </ErrorBoundary>
       </main>

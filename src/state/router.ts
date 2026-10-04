@@ -3,7 +3,7 @@
 
 import { useApp, type Page } from './store';
 
-const SLUGS: Record<Page, string> = { play: 'play', editor: 'edit', convert: 'convert', library: 'library' };
+const SLUGS: Record<Page, string> = { play: 'play', editor: 'edit', library: 'library' };
 
 function pageFromHash(hash: string): Page | null {
   const m = /^#\/([a-z]+)/.exec(hash);
@@ -16,6 +16,11 @@ const hashFor = (p: Page) => `#/${SLUGS[p]}`;
 
 /** Reads the page from the URL and keeps the two in step. Call once at start-up. */
 export function startRouter() {
+  // The old Convert page is now the import dialog.
+  if (location.hash.startsWith('#/convert')) {
+    history.replaceState(null, '', location.pathname + location.search + hashFor(useApp.getState().page));
+    useApp.setState({ importDraft: { name: 'Pasted text', pasteText: '' } });
+  }
   const initial = pageFromHash(location.hash);
   if (initial) useApp.getState().setPage(initial);
   else if (!/[#&]tab=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search + hashFor(useApp.getState().page));

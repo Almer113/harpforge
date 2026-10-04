@@ -6,7 +6,7 @@ import type { Harmonica } from '../core/instruments';
 import type { HoleSound } from '../core/types';
 import { TWINKLE } from '../demo/songs';
 
-export type Page = 'play' | 'editor' | 'convert' | 'library';
+export type Page = 'play' | 'editor' | 'library';
 export type PlayState = 'stopped' | 'playing' | 'paused';
 
 export interface Parsed {

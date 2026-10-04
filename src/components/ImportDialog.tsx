@@ -1,26 +1,42 @@
-// Import dialog: shows what was found in a file (or pasted text), ranks harmonicas,
-// previews the resulting tab, and loads it.
+// Import & convert: one place for everything that becomes a tab — a file, pasted text
+// (chord sheets, ABC, ChordPro, MusicXML, a tab) or notes typed in. It shows what was
+// found, suggests harmonicas (or keeps yours), previews the tab with sound, and opens it.
 
 import { useEffect, useMemo, useState } from 'react';
+import * as engine from '../audio/engine';
 import {
   chordSheetToTab,
   isChordSheet,
   notesToTab,
+  positionName,
   STRUM_PATTERNS,
-  suggestForChordSheet,
-  suggestHarmonicas,
   type StrumPattern,
   type Suggestion,
 } from '../core/convert';
 import { FORMAT_NAMES, importText, sniffText, type Imported } from '../core/formats';
 import { serializeHtab } from '../core/htab/serializer';
-import { getHarmonica, harmonicaName, specId, type HarmonicaSpec } from '../core/instruments';
+import { FAMILIES, getHarmonica, harmonicaName, specId, type HarmonicaSpec } from '../core/instruments';
 import { harmonicaFromMeta } from '../core/score';
 import { loadTabText } from '../state/actions';
-import { makeParsed, useApp, useParsed } from '../state/store';
+import { stop } from '../state/playback';
+import { getParsed, makeParsed, useApp, useParsed } from '../state/store';
+import { useSuggestions } from '../state/useSuggestions';
 import { TabView } from './TabView';
 
-const CURRENT = 'current';
+const MINE = 'mine';
+
+const EXAMPLE = `---
+title: Amazing Grace
+artist: Traditional
+key: G
+tempo: 80
+time: 3/4
+---
+D4 | G4~ {B4 G4} | B4~ A4 | G4~ E4 | D4~ D4 |
+w: A-maz-ing _ grace how sweet the sound that
+G4~ {B4 G4} | B4~ A4 | D5~~ | D5~ |]
+w: saved a _ wretch like me
+`;
 
 function countContent(imp: Imported) {
   let notes = 0;
@@ -48,11 +64,23 @@ export function ImportDialog() {
   if (!draft) return null;
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label="Import">
-        <ImportBody key={`${draft.name}:${draft.pasteText !== undefined ? "paste" : "file"}`} />
+      <div className="modal import-modal" role="dialog" aria-modal="true" aria-label="Import">
+        <ImportBody key={`${draft.name}:${draft.pasteText !== undefined ? 'paste' : 'file'}`} />
       </div>
     </div>
   );
+}
+
+function techniqueTags(s: Pick<Suggestion, 'stats'>) {
+  const t = s.stats;
+  const tags: { text: string; cls?: string }[] = [];
+  if (t.unplayable > 0) tags.push({ text: `${t.unplayable} missing`, cls: 'bad' });
+  if (t.reducedChords > 0) tags.push({ text: `${t.reducedChords} partial chords` });
+  if (t.bends > 0) tags.push({ text: `${t.bends} bends` });
+  if (t.overblows > 0) tags.push({ text: `${t.overblows} overblows` });
+  if (t.slides > 0) tags.push({ text: `${t.slides} slide notes` });
+  if (!tags.length) tags.push({ text: 'no techniques needed', cls: 'good' });
+  return tags;
 }
 
 function ImportBody() {
@@ -61,6 +89,9 @@ function ImportBody() {
   const [paste, setPaste] = useState(draft.pasteText ?? '');
   const [picked, setPicked] = useState<string | null>(null);
   const [pattern, setPattern] = useState<StrumPattern>('halves');
+  const [family, setFamily] = useState<string>('all');
+  // Octave for "my harmonica": null = the best fit.
+  const [myShift, setMyShift] = useState<number | null>(null);
   const pasteMode = draft.pasteText !== undefined;
   const close = () => useApp.setState({ importDraft: null });
 
@@ -78,53 +109,90 @@ function ImportBody() {
   const analysis = useMemo(() => {
     if (!imported) return null;
     const doc = imported.doc;
+    const counts = countContent(imported);
+    if (!counts.notes && !counts.chords) return null;
     const chordSheet = isChordSheet(doc);
     const hasHoles = doc.lines.some((l) => l.events.some((e) => e.kind === 'note' && e.sounds.some((s) => s.type === 'hole')));
     const sourceHarp = hasHoles ? harmonicaFromMeta(doc.meta) : undefined;
-    const suggestions: Suggestion[] = chordSheet
-      ? suggestForChordSheet(doc, { limit: 5 })
-      : suggestHarmonicas(doc, { limit: 5, sourceHarp });
-    return { doc, chordSheet, sourceHarp, suggestions, counts: countContent(imported) };
+    return { doc, chordSheet, sourceHarp, counts };
   }, [imported]);
 
-  const choice = useMemo(() => {
+  const { suggestions, pending } = useSuggestions(analysis?.doc ?? null, {
+    chordSheet: !!analysis?.chordSheet,
+    sourceSpec: analysis?.sourceHarp?.spec,
+    families: family === 'all' ? undefined : [family],
+  });
+
+  // Your own harmonica, at the octave that fits best unless you move it.
+  const mine = useMemo(() => {
     if (!analysis) return null;
-    const id = picked ?? (analysis.suggestions[0] ? specId(analysis.suggestions[0].spec) : CURRENT);
-    if (id === CURRENT) return { id, spec: current.harp.spec as HarmonicaSpec, shift: null as number | null };
-    const s = analysis.suggestions.find((x) => specId(x.spec) === id) ?? analysis.suggestions[0];
-    return { id, spec: s.spec, shift: s.shift as number | null, position: s.position };
-  }, [analysis, picked, current.harp]);
+    const harp = current.harp;
+    if (analysis.chordSheet) return { spec: harp.spec as HarmonicaSpec, shift: 0, best: 0, stats: chordSheetToTab(analysis.doc, harp, 'hold').stats };
+    let best = 0;
+    let bestCost = Infinity;
+    for (const s of [0, -12, 12, -24, 24]) {
+      const c = notesToTab(analysis.doc, harp, { shift: s, sourceHarp: analysis.sourceHarp }).stats.cost + Math.abs(s) / 48;
+      if (c < bestCost) {
+        bestCost = c;
+        best = s;
+      }
+    }
+    const shift = myShift ?? best;
+    return { spec: harp.spec as HarmonicaSpec, shift, best, stats: notesToTab(analysis.doc, harp, { shift, sourceHarp: analysis.sourceHarp }).stats };
+  }, [analysis, current.harp, myShift]);
+
+  const choice = useMemo(() => {
+    const id = picked ?? (suggestions[0] ? specId(suggestions[0].spec) : MINE);
+    if (id === MINE || !suggestions.length) return mine ? { id: MINE, spec: mine.spec, shift: mine.shift, position: undefined as number | undefined } : null;
+    const s = suggestions.find((x) => specId(x.spec) === id) ?? suggestions[0];
+    return { id: specId(s.spec), spec: s.spec, shift: s.shift, position: s.position };
+  }, [suggestions, picked, mine]);
 
   const result = useMemo(() => {
     if (!analysis || !choice) return null;
     const harp = getHarmonica(choice.spec);
-    let r;
-    if (analysis.chordSheet) r = chordSheetToTab(analysis.doc, harp, pattern);
-    else {
-      let shift = choice.shift;
-      if (shift === null) {
-        // Current harmonica: pick the octave that fits best.
-        let best = Infinity;
-        for (const s of [0, -12, 12]) {
-          const c = notesToTab(analysis.doc, harp, { shift: s, sourceHarp: analysis.sourceHarp }).stats.cost + Math.abs(s) / 24;
-          if (c < best) {
-            best = c;
-            shift = s;
-          }
-        }
-      }
-      r = notesToTab(analysis.doc, harp, { shift: shift ?? 0, sourceHarp: analysis.sourceHarp });
-    }
-    if ('position' in choice && choice.position) r.doc.meta.position = String(choice.position);
+    const r = analysis.chordSheet ? chordSheetToTab(analysis.doc, harp, pattern) : notesToTab(analysis.doc, harp, { shift: choice.shift, sourceHarp: analysis.sourceHarp });
+    if (choice.position) r.doc.meta.position = positionName(choice.position);
     const text = serializeHtab(r.doc);
     return { ...r, text, parsed: makeParsed(text) };
   }, [analysis, choice, pattern]);
 
-  const doImport = () => {
+  // Hear the result before importing it.
+  const [playing, setPlaying] = useState(false);
+  const [active, setActive] = useState<number[]>([]);
+  // The engine's sound follows the open tab's harmonica again afterwards.
+  const restoreVoicing = () => engine.setVoicing(getParsed(useApp.getState().text).harp.voicing);
+  const stopPreview = () => {
+    engine.stopPlayback();
+    restoreVoicing();
+    setPlaying(false);
+    setActive([]);
+  };
+  useEffect(() => () => engine.stopPlayback(), []);
+  useEffect(() => stopPreview(), [result]);
+  const togglePreview = async () => {
+    if (playing || !result) return stopPreview();
+    stop();
+    await engine.ensureAudio();
+    engine.setVoicing(result.parsed.harp.voicing);
+    engine.playScore(result.parsed.score, {
+      tempo: result.parsed.doc.meta.tempo,
+      onEvent: (i, on) => setActive((a) => (on ? [...a.filter((x) => x !== i), i] : a.filter((x) => x !== i))),
+      onEnd: () => {
+        setPlaying(false);
+        setActive([]);
+        restoreVoicing();
+      },
+    });
+    setPlaying(true);
+  };
+
+  const open = (page: 'play' | 'editor') => {
     if (!result) return;
+    stopPreview();
+    if (!loadTabText(result.text, draft.name)) return;
     close();
-    loadTabText(result.text, draft.name);
-    useApp.getState().setPage('play');
+    useApp.getState().setPage(page);
   };
 
   if (draft.progress && !draft.imported) {
@@ -165,16 +233,20 @@ function ImportBody() {
 
   const meta = imported?.doc.meta;
   const formatName = imported
-    ? imported.format.includes('→') || !(imported.kind && imported.kind in FORMAT_NAMES)
-      ? imported.format
-      : FORMAT_NAMES[imported.kind as keyof typeof FORMAT_NAMES]
+    ? analysis?.chordSheet && imported.kind === 'htab'
+      ? 'Chord sheet'
+      : imported.kind === 'htab' && !analysis?.sourceHarp
+        ? 'Notes'
+      : imported.format.includes('→') || !(imported.kind && imported.kind in FORMAT_NAMES)
+        ? imported.format
+        : FORMAT_NAMES[imported.kind as keyof typeof FORMAT_NAMES]
     : null;
 
   return (
     <>
       <div className="modal-head">
-        <h2>{pasteMode ? 'Paste & import' : `Import “${draft.name}”`}</h2>
-        {formatName && <span className="chip">{formatName}</span>}
+        <h2>{pasteMode ? 'Import or convert' : `Import “${draft.name}”`}</h2>
+        {formatName && analysis && <span className="chip">{formatName}</span>}
         {draft.sourceText && (
           <button className="btn small ghost" onClick={() => useApp.setState({ importDraft: { name: draft.name, pasteText: draft.sourceText } })} title="Fix any recognition mistakes, then import">
             Edit recognised text
@@ -184,17 +256,24 @@ function ImportBody() {
       </div>
 
       {pasteMode && (
-        <textarea
-          className="plain-editor paste-box"
-          autoFocus
-          placeholder={'Paste a chord sheet (chords over lyrics), ChordPro, ABC notation, MusicXML or a harmonica tab…'}
-          value={paste}
-          onChange={(e) => {
-            setPaste(e.target.value);
-            setPicked(null);
-          }}
-          spellCheck={false}
-        />
+        <div className="paste-area">
+          <textarea
+            className="plain-editor paste-box"
+            autoFocus
+            placeholder={'Paste a chord sheet, ChordPro, ABC, MusicXML or a tab — or type notes like  C4 D4 E4~ | G4 …'}
+            value={paste}
+            onChange={(e) => {
+              setPaste(e.target.value);
+              setPicked(null);
+            }}
+            spellCheck={false}
+          />
+          <p className="hint">
+            Notes: <code>C4 D#4 Bb3</code>, chords <code>(C4 E4 G4)</code>, held <code>~</code>, beats <code>{'{ }'}</code>, bars <code>|</code>, chord
+            symbols <code>[G]</code>, lyrics <code>w:</code> — the same as tabs. Other formats are recognised automatically.{' '}
+            <button className="link-btn" onClick={() => setPaste(EXAMPLE)}>Try an example</button>
+          </p>
+        </div>
       )}
 
       {imported && analysis && (
@@ -211,11 +290,7 @@ function ImportBody() {
                 <span className="chip plain">{analysis.counts.notes} notes{analysis.counts.chords ? ` · ${analysis.counts.chords} chord symbols` : ''}</span>
               )}
             </div>
-            {analysis.chordSheet && (
-              <p className="hint">
-                This is a chord sheet, so HarpForge will play the chords as harmonica chords. Record or type the melody afterwards if you like.
-              </p>
-            )}
+            {analysis.chordSheet && <p className="hint">A chord sheet: the chords are played as harmonica chords. Record or type the melody afterwards if you like.</p>}
             {imported.warnings.length > 0 && (
               <div className="issues">
                 {imported.warnings.slice(0, 5).map((w, i) => (
@@ -224,9 +299,37 @@ function ImportBody() {
               </div>
             )}
 
-            <h4>Harmonica</h4>
+            <h4>Your harmonica</h4>
             <div className="suggestions compact">
-              {analysis.suggestions.map((s, i) => {
+              <button className={`suggestion ${choice?.id === MINE ? 'active' : ''}`} onClick={() => setPicked(MINE)}>
+                <span className="rank">✓</span>
+                <span className="s-main">
+                  <b>{harmonicaName(current.harp.spec)}</b>
+                  <span className="s-tags">
+                    {mine && mine.shift !== 0 && <span>{mine.shift > 0 ? '+' : '−'}{Math.abs(mine.shift / 12)} oct</span>}
+                    {mine && techniqueTags(mine).map((t) => <span key={t.text} className={t.cls}>{t.text}</span>)}
+                  </span>
+                </span>
+                {!analysis.chordSheet && mine && (
+                  <span className="oct-btns" onClick={(e) => e.stopPropagation()}>
+                    <button className="icon-btn" title="An octave lower" disabled={mine.shift <= -24} onClick={() => { setPicked(MINE); setMyShift(mine.shift - 12); }}>▼</button>
+                    <button className="icon-btn" title="An octave higher" disabled={mine.shift >= 24} onClick={() => { setPicked(MINE); setMyShift(mine.shift + 12); }}>▲</button>
+                  </span>
+                )}
+              </button>
+            </div>
+
+            <div className="sugg-head">
+              <h4>Best fits {pending && <span className="muted small">· working…</span>}</h4>
+              <select value={family} onChange={(e) => { setFamily(e.target.value); setPicked(null); }} title="Which kinds of harmonica to suggest">
+                <option value="all">All types</option>
+                {FAMILIES.map((f) => (
+                  <option key={f.id} value={f.id}>{f.name} only</option>
+                ))}
+              </select>
+            </div>
+            <div className={`suggestions compact ${pending ? 'stale' : ''}`}>
+              {suggestions.map((s, i) => {
                 const id = specId(s.spec);
                 return (
                   <button key={id} className={`suggestion ${choice?.id === id ? 'active' : ''}`} onClick={() => setPicked(id)}>
@@ -234,24 +337,15 @@ function ImportBody() {
                     <span className="s-main">
                       <b>{s.name}</b>
                       <span className="s-tags">
-                        {s.position && <span>{s.position}{['th', 'st', 'nd', 'rd'][s.position] ?? 'th'} pos.</span>}
-                        {s.stats.unplayable > 0 && <span className="bad">{s.stats.unplayable} missing</span>}
-                        {s.stats.reducedChords > 0 && <span>{s.stats.reducedChords} partial</span>}
-                        {s.stats.bends > 0 && <span>{s.stats.bends} bends</span>}
-                        {s.stats.overblows > 0 && <span>{s.stats.overblows} overblows</span>}
-                        {s.stats.unplayable + s.stats.bends + s.stats.overblows + s.stats.reducedChords === 0 && <span className="good">easy fit</span>}
+                        {s.position && <span>{positionName(s.position)} pos.</span>}
+                        {s.shift !== 0 && <span>{s.shift > 0 ? '+' : '−'}{Math.abs(s.shift / 12)} oct</span>}
+                        {techniqueTags(s).map((t) => <span key={t.text} className={t.cls}>{t.text}</span>)}
                       </span>
                     </span>
                   </button>
                 );
               })}
-              <button className={`suggestion ${choice?.id === CURRENT ? 'active' : ''}`} onClick={() => setPicked(CURRENT)}>
-                <span className="rank">✓</span>
-                <span className="s-main">
-                  <b>Keep my current harmonica</b>
-                  <span className="s-tags"><span>{harmonicaName(current.harp.spec)}</span></span>
-                </span>
-              </button>
+              {!suggestions.length && !pending && <p className="muted small">No harmonica of this kind fits.</p>}
             </div>
 
             {analysis.chordSheet && (
@@ -267,6 +361,15 @@ function ImportBody() {
           </div>
 
           <div className="import-preview sheet">
+            <div className="preview-head">
+              <button className={`t-btn primary ${playing ? 'on' : ''}`} onClick={() => void togglePreview()} disabled={!result} title={playing ? 'Stop' : 'Hear it'}>
+                {playing ? '■' : '▶'}
+              </button>
+              <span className="muted small">{choice ? harmonicaName(choice.spec) : ''}</span>
+              <button className="btn small ghost" disabled={!result} onClick={() => result && navigator.clipboard?.writeText(result.text).then(() => useApp.getState().notify('Copied ✓'))}>
+                Copy text
+              </button>
+            </div>
             {result && result.warnings.length > 0 && (
               <div className="issues">
                 {result.warnings.slice(0, 3).map((w, i) => (
@@ -274,16 +377,17 @@ function ImportBody() {
                 ))}
               </div>
             )}
-            {result && <TabView parsed={result.parsed} activeEvents={[]} selectedEvent={null} showNoteNames={false} follow={false} />}
+            {result && <TabView parsed={result.parsed} activeEvents={active} selectedEvent={null} showNoteNames={false} follow={playing} />}
           </div>
         </div>
       )}
 
-      {pasteMode && paste.trim() && !analysis && <p className="muted">Couldn’t recognise this text yet.</p>}
+      {pasteMode && paste.trim() && !analysis && <p className="muted">No notes or chords recognised yet.</p>}
 
       <div className="modal-actions">
         <button className="btn" onClick={close}>Cancel</button>
-        <button className="btn primary" disabled={!result} onClick={doImport}>Import</button>
+        <button className="btn" disabled={!result} onClick={() => open('editor')}>Open in Edit</button>
+        <button className="btn primary" disabled={!result} onClick={() => open('play')}>Open in Play</button>
       </div>
     </>
   );

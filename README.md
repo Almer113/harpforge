@@ -30,14 +30,15 @@ npm run build
   edge past the bar line); a tied note acts as one note for moving, deleting and changing length.
   Shortcuts: Z X C V B note lengths, N dotted, M triplet, L tie, / rest, ←/→ select, ↑/↓ next note (Shift = semitone),
   Del delete, Ctrl+C/V copy/paste, Ctrl+Z/Y undo/redo.
-- **Convert** — paste notes (or a tab), get a ranked list of the best harmonicas/positions,
-  and the tab for the one you pick. Switching a song's harmonica re-tabs it automatically.
-- **Import** — HarpTab, ABC, MusicXML (`.musicxml`/`.xml`/`.mxl`), MIDI, ChordPro, plain
+- **Import & convert** (top bar → Import, or drag & drop) — HarpTab, ABC, MusicXML (`.musicxml`/`.xml`/`.mxl`), MIDI, ChordPro, plain
   "chords over lyrics" sheets (Ultimate Guitar style, with capo and `x4` repeats), ASCII guitar tab,
   and **PDF** — from a file, drag & drop, or pasted text. Image-only PDFs (like Ultimate Guitar's
   downloads) are read with OCR (Tesseract, loaded on demand), with chord-aware corrections and an
   "Edit recognised text" step.
-  Imports pick the best-fitting harmonica (or keep yours); chord sheets become harmonica chords.
+  Typed or pasted notes (`C4 D4 E4~ |`) become a tab too. The dialog ranks every harmonica and position
+  (worked out in the background), or keeps yours at the octave you choose, and previews the tab with sound.
+  Chord sheets become harmonica chords. Changing a song's harmonica later asks whether to keep the holes
+  (transpose) or the notes (re-tab).
 - **Export** — HarpTab, ABC (with the tab as a lyric line), MusicXML (tab as lyric line 2), MIDI, ChordPro.
 - **Staff view** — standard notation with the tab and lyrics under each note, synced to playback.
 - **Numbered notation (jianpu)** — a third sheet view (1 = do of the key, octave dots, underlines,

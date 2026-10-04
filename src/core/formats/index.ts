@@ -1,5 +1,6 @@
 // Format registry: detects what a file is, imports it, and exports documents.
 
+import { tabToNotes } from '../convert';
 import { parseHtab } from '../htab/parser';
 import { serializeHtab } from '../htab/serializer';
 import type { TabDoc } from '../htab/types';
@@ -104,11 +105,12 @@ export function importBytes(filename: string, bytes: Uint8Array): Imported & { k
 
 // ---- Export ---------------------------------------------------------------------
 
-export type ExportKind = 'htab' | 'abc' | 'musicxml' | 'midi' | 'chordpro' | 'jianpu';
+export type ExportKind = 'htab' | 'notes' | 'abc' | 'musicxml' | 'midi' | 'chordpro' | 'jianpu';
 
 /** Export formats. `loses` says what the format can't carry, shown before exporting. */
 export const EXPORTS: { id: ExportKind; name: string; ext: string; mime: string; hint: string; loses?: string }[] = [
   { id: 'htab', name: 'HarpTab', ext: 'htab', mime: 'text/plain', hint: 'Full tab, re-importable' },
+  { id: 'notes', name: 'Notes (no holes)', ext: 'htab', mime: 'text/plain', hint: 'Pitch names instead of holes — re-import for any harmonica', loses: 'Which holes and bends were used' },
   { id: 'abc', name: 'ABC notation', ext: 'abc', mime: 'text/vnd.abc', hint: 'Notes + tab line + lyrics', loses: 'Bends show as pitches; a tie at the end of a line becomes a repeated note' },
   { id: 'musicxml', name: 'MusicXML', ext: 'musicxml', mime: 'application/vnd.recordare.musicxml+xml', hint: 'For MuseScore, Finale, Sibelius…', loses: 'The tab is a second lyric line; comments are left out' },
   { id: 'midi', name: 'MIDI', ext: 'mid', mime: 'audio/midi', hint: 'Plays in any MIDI app', loses: 'Notes only: no tab, lyrics, chord symbols or sections' },
@@ -118,7 +120,7 @@ export const EXPORTS: { id: ExportKind; name: string; ext: string; mime: string;
 
 export function exportDoc(kind: ExportKind, doc: TabDoc, harp: Harmonica, htabText?: string): { filename: string; data: string | Uint8Array; mime: string } {
   const info = EXPORTS.find((e) => e.id === kind)!;
-  const filename = `${slugify(doc.meta.title ?? 'tab')}.${info.ext}`;
+  const filename = `${slugify(doc.meta.title ?? 'tab')}${kind === 'notes' ? '-notes' : ''}.${info.ext}`;
   let data: string | Uint8Array;
   switch (kind) {
     case 'htab':
@@ -138,6 +140,9 @@ export function exportDoc(kind: ExportKind, doc: TabDoc, harp: Harmonica, htabTe
       break;
     case 'jianpu':
       data = writeJianpu(doc, harp);
+      break;
+    case 'notes':
+      data = serializeHtab(tabToNotes(doc, harp).doc);
       break;
   }
   return { filename, data, mime: info.mime };
