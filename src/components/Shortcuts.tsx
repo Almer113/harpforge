@@ -3,47 +3,73 @@
 import { useEffect, useState } from 'react';
 import { isTyping, overlayOpen } from '../live/focus';
 
-const GROUPS: { title: string; rows: [string, string][] }[] = [
-  {
-    title: 'Anywhere',
-    rows: [
-      ['Enter', 'Play / pause'],
-      ['Esc', 'Stop (or stop recording)'],
-      ['Ctrl+S', 'Save to your library'],
-      ['Ctrl+Z  Ctrl+Y', 'Undo / redo'],
-      ['?', 'This list'],
-    ],
-  },
-  {
-    title: 'Harmonica (Play and Edit)',
-    rows: [
-      ['1 … 0  - =', 'Blow holes'],
-      ['Q … P  [ ]', 'Draw holes'],
-      ['Shift (hold)', 'Bend — hold longer to bend deeper'],
-      ['Alt', 'Overblow / overdraw'],
-      ['Space', 'Slide button (chromatic)'],
-      ['← →', 'Move the keys along a long harmonica'],
-    ],
-  },
-  {
-    title: 'Visual editor',
-    rows: [
-      ['B V C X Z', 'Whole, half, quarter, eighth, sixteenth'],
-      ['N or .', 'Dotted'],
-      ['M', 'Triplet'],
-      ['L', 'Tie to the previous note'],
-      ['/', 'Rest at the caret'],
-      ['← →', 'Previous / next note'],
-      ['↑ ↓', 'Next note up / down (Shift: by semitone)'],
-      ['Del', 'Delete the selection'],
-      ['Ins', 'Insert / overwrite: whether new notes push the rest along'],
-      ['Ctrl+C  Ctrl+X  Ctrl+V', 'Copy, cut, paste notes (as tab text, also to and from other apps)'],
-      ['Ctrl+A', 'Select everything'],
-      ['Shift+click', 'Select from the last note clicked to this one'],
-      ['Ctrl+click', 'Add or remove a note from the selection'],
-    ],
-  },
+// Keys are written "Ctrl+Z / Ctrl+Y": each word is a key, and "/", "…" and "or" between them are plain text.
+type Group = { title: string; rows: [string, string][] };
+
+/** Two columns of about the same length: the app and the harmonica, then the editor. */
+const COLUMNS: Group[][] = [
+  [
+    {
+      title: 'Anywhere',
+      rows: [
+        ['Enter', 'Play / pause'],
+        ['Esc', 'Stop, or stop recording'],
+        ['Ctrl+S', 'Save to your library'],
+        ['Ctrl+P', 'Print or save as PDF'],
+        ['Ctrl+Z / Ctrl+Y', 'Undo / redo'],
+        ['?', 'This list'],
+      ],
+    },
+    {
+      title: 'Harmonica',
+      rows: [
+        ['1 … 0 - =', 'Blow holes'],
+        ['Q … P [ ]', 'Draw holes'],
+        ['Shift', 'Bend: hold longer to bend deeper'],
+        ['Alt', 'Overblow / overdraw'],
+        ['Space', 'Slide button (chromatic)'],
+        ['← →', 'Move the keys along a long harmonica (Play)'],
+      ],
+    },
+  ],
+  [
+    {
+      title: 'Editor: writing notes',
+      rows: [
+        ['B V C X Z', 'Whole, half, quarter, eighth, sixteenth'],
+        ['N or .', 'Dotted'],
+        ['M', 'Triplet'],
+        ['L', 'Tie to the previous note'],
+        ['/', 'Rest at the caret'],
+        ['↑ ↓', 'Note up / down (Shift: a semitone)'],
+        ['Del', 'Delete the selection'],
+        ['Ins', 'Insert or overwrite'],
+      ],
+    },
+    {
+      title: 'Editor: selecting and copying',
+      rows: [
+        ['← →', 'Previous / next note'],
+        ['Shift+click', 'Select a range'],
+        ['Ctrl+click', 'Add or remove a note'],
+        ['Ctrl+A', 'Select everything'],
+        ['Ctrl+C / X / V', 'Copy, cut, paste (as tab text)'],
+      ],
+    },
+  ],
 ];
+
+const JOINERS = new Set(['/', '…', 'or']);
+
+function Keys({ spec }: { spec: string }) {
+  const parts = spec.split(' ');
+  return (
+    <span className="sc-keys">
+      {/* A lone "/" is the key itself (Rest), not a separator. */}
+      {parts.map((k, i) => (JOINERS.has(k) && parts.length > 1 ? <span key={i} className="sc-join">{k}</span> : <kbd key={i}>{k}</kbd>))}
+    </span>
+  );
+}
 
 export function Shortcuts() {
   const [open, setOpen] = useState(false);
@@ -72,21 +98,21 @@ export function Shortcuts() {
           <h2>Keyboard shortcuts</h2>
           <button className="icon-btn" onClick={() => setOpen(false)} aria-label="Close">✕</button>
         </div>
-        <div className="sc-groups">
-          {GROUPS.map((g) => (
-            <section key={g.title}>
-              <h3>{g.title}</h3>
-              {g.rows.map(([k, d]) => (
-                <div key={k} className="sc-row">
-                  <span className="sc-keys">
-                    {k.split('  ').map((x) => (
-                      <kbd key={x}>{x}</kbd>
-                    ))}
-                  </span>
-                  <span>{d}</span>
-                </div>
+        <div className="sc-columns">
+          {COLUMNS.map((groups, c) => (
+            <div key={c} className="sc-column">
+              {groups.map((g) => (
+                <section key={g.title}>
+                  <h3>{g.title}</h3>
+                  {g.rows.map(([k, d]) => (
+                    <div key={k} className="sc-row">
+                      <Keys spec={k} />
+                      <span className="sc-what">{d}</span>
+                    </div>
+                  ))}
+                </section>
               ))}
-            </section>
+            </div>
           ))}
         </div>
       </div>
