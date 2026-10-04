@@ -499,7 +499,10 @@ export function setTie(song: Song, pos: Pos, on: boolean): Song {
 
 export function insertMeasure(song: Song, at: number): Song {
   const s = cloneSong(song);
-  s.measures.splice(Math.max(0, Math.min(at, s.measures.length)), 0, emptyMeasure(false));
+  const i = Math.max(0, Math.min(at, s.measures.length));
+  // The bar before it may run on without a bar line: it needs one now.
+  if (s.measures[i - 1]?.endBar === 'none') s.measures[i - 1].endBar = 'single';
+  s.measures.splice(i, 0, emptyMeasure(false));
   return keepFinalBarLast(s);
 }
 
@@ -523,6 +526,7 @@ export function duplicateMeasure(song: Song, m: number): Song {
   const s = cloneSong(song);
   const src = s.measures[m];
   if (!src) return song;
+  if (src.endBar === 'none') src.endBar = 'single';
   if (m === s.measures.length - 1 && src.endBar === 'final') {
     s.measures.splice(m + 1, 0, { ...src, items: src.items.map((it) => ({ ...it })), lineBreak: false, section: undefined, startBar: undefined, src: undefined });
     s.measures[m].endBar = 'single';
@@ -578,7 +582,8 @@ export function setTimeSignature(song: Song, time: string, reflow: boolean): Son
   }
   // A pickup (short first bar) keeps its length; the new bars start after it.
   const first = song.measures[0];
-  const pickup = first?.len !== undefined && first.len < song.cap - EPS ? marks[0].end : 0;
+  // (A first bar that only runs on to the next line of text isn't a pickup.)
+  const pickup = first?.len !== undefined && first.len < song.cap - EPS && first.endBar !== 'none' ? marks[0].end : 0;
   const pickupNew = pickup > EPS && pickup < cap - EPS ? pickup : 0;
   const indexAt = (at: number) => (pickupNew && at < pickupNew - EPS ? 0 : (pickupNew ? 1 : 0) + Math.floor((at - pickupNew) / cap + EPS));
   const startOf = (mi: number) => (pickupNew ? (mi === 0 ? 0 : pickupNew + (mi - 1) * cap) : mi * cap);
@@ -595,7 +600,8 @@ export function setTimeSignature(song: Song, time: string, reflow: boolean): Son
     let left = it.dur;
     let firstPiece = true;
     do {
-      const mi = Math.min(count - 1, indexAt(at));
+      // A chord mark at the end of a bar stays there (not on the next bar's downbeat).
+      const mi = Math.max(0, Math.min(count - 1, indexAt(it.dur <= EPS && firstPiece ? at - 1e-3 : at)));
       const start = at - startOf(mi);
       const take = left <= EPS ? 0 : mi === count - 1 ? left : Math.min(left, spanOf(mi) - start);
       const piece: Item = { ...it, start, dur: take };

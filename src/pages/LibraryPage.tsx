@@ -3,7 +3,7 @@ import { confirmDiscard, downloadData, importFile, openPasteImport, saveCurrent 
 import { ExportMenu } from '../components/ExportMenu';
 import { stop } from '../state/playback';
 import { useApp } from '../state/store';
-import { copyText, deleteTab, exportLibrary, importLibrary, listTabs, persistStorage, saveTab, type SavedTab } from '../storage/library';
+import { copyText, deleteTab, exportLibrary, importLibrary, listTabs, persistStorage, readBackup, saveTab, type SavedTab } from '../storage/library';
 
 export function LibraryPage() {
   const [tabs, setTabs] = useState<SavedTab[] | null>(null);
@@ -34,6 +34,7 @@ export function LibraryPage() {
       await deleteTab(t.id);
     } catch (e) {
       useApp.getState().notify(`Couldn’t delete: ${(e as Error).message}`);
+      return;
     }
     if (useApp.getState().docId === t.id) useApp.setState({ docId: null, savedText: null });
     refresh();
@@ -64,12 +65,19 @@ export function LibraryPage() {
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
+      let files: Record<string, Uint8Array>;
       try {
-        const { added, skipped } = await importLibrary(new Uint8Array(await file.arrayBuffer()));
+        files = readBackup(new Uint8Array(await file.arrayBuffer()));
+      } catch (e) {
+        useApp.getState().notify(`That isn’t a library backup (${(e as Error).message}).`);
+        return;
+      }
+      try {
+        const { added, skipped } = await importLibrary(files);
         useApp.getState().notify(`Restored ${added} tab${added === 1 ? '' : 's'}${skipped ? ` (${skipped} already in your library)` : ''} ✓`);
         void persistStorage();
       } catch (e) {
-        useApp.getState().notify(`That isn’t a library backup (${(e as Error).message}).`);
+        useApp.getState().notify(`Couldn’t save the restored tabs: ${(e as Error).message}. Nothing was added.`);
       }
       refresh();
     };

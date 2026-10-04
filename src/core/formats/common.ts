@@ -112,6 +112,7 @@ export function toFraction(x: number, dens = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 
 }
 
 export function slugify(title: string): string {
-  // Keep letters and digits of any script (a Chinese title stays Chinese); drop accents and punctuation.
-  return title.toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '').normalize('NFC').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'tab';
+  // Keep letters and digits of any script (a Chinese title stays Chinese); drop accents from
+  // Latin letters only (Japanese dakuten are part of the letter) and punctuation.
+  return title.toLowerCase().normalize('NFKD').replace(/(\p{Script=Latin})\p{M}+/gu, '$1').normalize('NFC').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'tab';
 }

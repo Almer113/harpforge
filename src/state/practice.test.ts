@@ -47,6 +47,22 @@ describe('practice mode', () => {
     expect(practice().mistakes).toBe(0);
   });
 
+  it('a held chord plays one chord, even when its keys change', () => {
+    useApp.getState().loadText('---\nharmonica: diatonic\nharp-key: C\n---\n(4 5) (4 5) 6 |\n');
+    startPractice();
+    play('a', 4, 'blow');
+    play('b', 5, 'blow');
+    expect(practice().index).toBe(1);
+    change('a', holeSound(4, 'blow')); // e.g. Shift pressed while holding: keys refresh
+    change('b', holeSound(5, 'blow'));
+    expect(practice().index).toBe(1);
+    release('a');
+    release('b');
+    play('a', 4, 'blow');
+    play('b', 5, 'blow');
+    expect(practice().index).toBe(2);
+  });
+
   it('counts a wrong note as a mistake when it is let go', () => {
     play('x', 7, 'blow');
     expect(practice().mistakes).toBe(0);

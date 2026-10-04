@@ -18,11 +18,24 @@ interface Chunk {
   to: number;
   /** Raw lines before the chunk that aren't part of another chunk (comments, blanks, headings). */
   glue: string[];
+  /** Blank lines and comments between the tab line and its lyrics. */
+  between: string[];
 }
 
 const isHeading = (raw: string) => raw.trim().startsWith('@');
 const isLyrics = (raw: string) => /^\s*w:/i.test(raw);
 const isComment = (raw: string) => raw.trim().startsWith('#');
+
+/**
+ * Last raw line belonging to the tab line at `from`: its lyrics lines, which (as the
+ * parser reads them) may come after blank lines or comments. Those in-between lines are
+ * returned too, so they can be kept when the line is rewritten.
+ */
+function chunkEnd(raw: string[], from: number): { to: number; between: string[] } {
+  let to = from;
+  for (let k = from + 1; k < raw.length && (isLyrics(raw[k]) || isComment(raw[k]) || raw[k].trim() === ''); k++) if (isLyrics(raw[k])) to = k;
+  return { to, between: raw.slice(from + 1, to + 1).filter((l) => !isLyrics(l)) };
+}
 
 /** Whether to spell pitches with flats: from the key, or because the text already does. */
 export function flatsFor(text: string, key: string | undefined): boolean {
@@ -49,10 +62,12 @@ function canonicalLines(song: Song, opts: SerializeOptions) {
  * for another harmonica, moving an octave): `lines` must be `oldText`'s lines, in order.
  * Lines whose music is unchanged, comments, blank lines and headings stay as written.
  */
-export function replaceLines(oldText: string, lines: TabLine[]): string {
+export function replaceLines(oldText: string, lines: TabLine[], flats?: boolean): string {
   const { bodyStart } = splitHeader(oldText);
   const oldDoc = parseHtab(oldText).doc;
   const opts: SerializeOptions = { flats: flatsFor(oldText, oldDoc.meta.key) };
+  // Rewritten lines may be spelled for a new key (a transposed tab).
+  const newOpts: SerializeOptions = { flats: flats ?? opts.flats };
   const raw = oldText.slice(bodyStart).split('\n');
   if (raw.length && raw[raw.length - 1] === '') raw.pop();
   const starts: number[] = [];
@@ -68,11 +83,10 @@ export function replaceLines(oldText: string, lines: TabLine[]): string {
     const from = starts.indexOf(l.src.start - bodyStart);
     if (from < 0) return;
     const before = lineText(l, opts).join('\n');
-    const after = lineText(next, opts);
+    const after = lineText(next, newOpts);
     if (after.join('\n') === before) return;
-    let to = from;
-    while (to + 1 < raw.length && isLyrics(raw[to + 1])) to++;
-    replace.set(from, { to, text: after });
+    const { to, between } = chunkEnd(raw, from);
+    replace.set(from, { to, text: [...after, ...between] });
   });
   const out: string[] = [];
   for (let i = 0; i < raw.length; i++) {
@@ -107,9 +121,8 @@ export function spliceBody(oldText: string, song: Song): string {
     if (!l.src) return;
     const from = lineAt.get(l.src.start - bodyStart);
     if (from === undefined) return;
-    let to = from;
-    while (to + 1 < raw.length && isLyrics(raw[to + 1])) to++;
-    chunks.set(li, { from, to, glue: raw.slice(prevEnd + 1, from) });
+    const { to, between } = chunkEnd(raw, from);
+    chunks.set(li, { from, to, glue: raw.slice(prevEnd + 1, from), between });
     prevEnd = to;
   });
   const trailing = raw.slice(prevEnd + 1);
@@ -119,6 +132,7 @@ export function spliceBody(oldText: string, song: Song): string {
 
   const out: string[] = [];
   const used = new Set<number>();
+  const emitted = new Set<number>(); // lines whose in-between comments were written
   const order = [...chunks.keys()];
   // Comments from lines that are gone move along to the next line written.
   const flushBefore = (li: number) => {
@@ -150,7 +164,8 @@ export function spliceBody(oldText: string, song: Song): string {
       if (out.length) out.push('');
       out.push(`@ ${section}`);
     }
-    out.push(...(verbatim ? raw.slice(chunk!.from, chunk!.to + 1) : c.text));
+    out.push(...(verbatim ? raw.slice(chunk!.from, chunk!.to + 1) : [...c.text, ...(chunk && L !== undefined && !emitted.has(L) ? chunk.between : [])]));
+    if (L !== undefined) emitted.add(L);
   }
   flushBefore(Infinity);
   out.push(...trailing);

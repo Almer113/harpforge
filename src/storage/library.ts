@@ -104,12 +104,19 @@ export async function exportLibrary(): Promise<Uint8Array> {
   return zipSync(files, { level: 6 });
 }
 
+/** The .htab files (and index) in a backup zip; throws if it isn't one. macOS "__MACOSX" extras are left out. */
+export function readBackup(zip: Uint8Array): Record<string, Uint8Array> {
+  const files = unzipSync(zip, { filter: (f) => !f.name.startsWith('__MACOSX/') && !/(^|\/)\._/.test(f.name) });
+  if (!Object.keys(files).some((n) => /\.htab$/i.test(n))) throw new Error('no .htab files in it');
+  return files;
+}
+
 /**
- * Restores a library backup (or any zip of .htab files). Tabs already in the library
- * (same id or same text) are skipped. Returns how many were added.
+ * Restores a library backup (the files from `readBackup`). Tabs whose text is already
+ * in the library are skipped; one with a known id but other text is added as a new
+ * tab. All or nothing: a storage error adds none. Returns how many were added.
  */
-export async function importLibrary(zip: Uint8Array): Promise<{ added: number; skipped: number }> {
-  const files = unzipSync(zip);
+export async function importLibrary(files: Record<string, Uint8Array>): Promise<{ added: number; skipped: number }> {
   const byFile = new Map<string, BackupInfo>();
   try {
     if (files['library.json']) for (const t of JSON.parse(strFromU8(files['library.json'])).tabs ?? []) byFile.set(t.file, t);
@@ -117,31 +124,41 @@ export async function importLibrary(zip: Uint8Array): Promise<{ added: number; s
     /* a plain zip of tabs */
   }
   const names = Object.keys(files).filter((n) => /\.htab$/i.test(n));
-  if (!names.length) throw new Error('no .htab files in it');
-  const existing = await listTabs();
-  const texts = new Set(existing.map((t) => t.text));
-  const ids = new Set(existing.map((t) => t.id));
   let added = 0;
   let skipped = 0;
-  for (const name of names) {
-    const text = strFromU8(files[name]);
-    const info = byFile.get(name);
-    if (texts.has(text) || (info && ids.has(info.id))) {
-      skipped++;
-      continue;
+  await db.transaction('rw', db.tabs, async () => {
+    const existing = await db.tabs.toArray();
+    const texts = new Set(existing.map((t) => t.text));
+    const ids = new Set(existing.map((t) => t.id));
+    for (const name of names) {
+      const text = strFromU8(files[name]);
+      if (texts.has(text)) {
+        skipped++;
+        continue;
+      }
+      const info = byFile.get(name);
+      const now = Date.now();
+      const id = info && !ids.has(info.id) ? info.id : newId();
+      await db.tabs.add({ id, ...describe(text), text, createdAt: info?.createdAt ?? now, updatedAt: info?.updatedAt ?? now });
+      texts.add(text);
+      ids.add(id);
+      added++;
     }
-    const now = Date.now();
-    await db.tabs.add({ id: info?.id ?? newId(), ...describe(text), text, createdAt: info?.createdAt ?? now, updatedAt: info?.updatedAt ?? now });
-    texts.add(text);
-    added++;
-  }
+  });
   return { added, skipped };
 }
 
 const SEEDED_KEY = 'harpforge:seeded';
 
-/** Adds demo songs on first launch, and any demos added since the last visit. */
-export async function seedDemos(): Promise<void> {
+let seeding: Promise<void> | null = null;
+
+/** Adds demo songs on first launch, and any demos added since the last visit (once, even if called twice). */
+export function seedDemos(): Promise<void> {
+  seeding ??= seedOnce();
+  return seeding;
+}
+
+async function seedOnce(): Promise<void> {
   let seen = 0;
   try {
     seen = parseInt(localStorage.getItem(SEEDED_KEY) ?? '0', 10) || 0;
@@ -150,8 +167,10 @@ export async function seedDemos(): Promise<void> {
     return;
   }
   const fresh = DEMOS.filter((d) => d.since > seen);
-  const have = new Set((await listTabs()).map((t) => t.text));
-  for (const d of [...fresh].reverse()) if (!have.has(d.text)) await saveTab(d.text);
+  await db.transaction('rw', db.tabs, async () => {
+    const have = new Set((await db.tabs.toArray()).map((t) => t.text));
+    for (const d of [...fresh].reverse()) if (!have.has(d.text)) await saveTab(d.text);
+  });
   // Only remember the demos once they're really in the library.
   try {
     localStorage.setItem(SEEDED_KEY, String(DEMO_VERSION));

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FAMILIES, getHarmonica, keysFor, tuningsFor, type Family, type HarmonicaSpec } from '../core/instruments';
 import { startRecording, stopRecording } from '../live/recorder';
 import { isKeyChange, keyDistance, setHarmonica, shiftOctave } from '../state/actions';
@@ -95,10 +95,17 @@ export function HarmonicaPicker() {
 function KeyChoice({ from, to, songKey, onClose }: { from: HarmonicaSpec; to: HarmonicaSpec; songKey?: string; onClose: () => void }) {
   const semis = keyDistance(from, to);
   const movedKey = songKey ? transposeKey(songKey, semis) : undefined;
+  const root = useRef<HTMLDivElement>(null);
+  // Escape or a click elsewhere cancels.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onDown = (e: MouseEvent) => !root.current?.contains(e.target as Node) && onClose();
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onDown);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onDown);
+    };
   }, [onClose]);
   // "an A harp", "an F harp", "a G harp"
   const harpName = `${/^[AEF]/.test(to.key) ? 'an' : 'a'} ${to.key} harp`;
@@ -107,7 +114,7 @@ function KeyChoice({ from, to, songKey, onClose }: { from: HarmonicaSpec; to: Ha
     setHarmonica(to, keep);
   };
   return (
-    <div className="key-choice" role="dialog" aria-label={`Switch to ${harpName}`}>
+    <div className="key-choice" role="dialog" aria-label={`Switch to ${harpName}`} ref={root}>
       <b>Switch to {harpName}</b>
       <button className="kc-option" onClick={() => pick('holes')} autoFocus>
         <span className="kc-title">Keep the holes</span>

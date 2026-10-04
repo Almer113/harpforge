@@ -178,7 +178,7 @@ export function findHarmonicaChord(harp: Harmonica, chord: ChordInfo): Harmonica
 
 /** A chord symbol moved by `semis` semitones: "G7" + 2 → "A7", "C/E" + 1 → "Db/F" (with flats). Unknown symbols are kept. */
 export function transposeChord(symbol: string, semis: number, flats = false): string {
-  if (!semis || !parseChord(symbol)) return symbol;
+  if (mod12(semis) === 0 || !parseChord(symbol)) return symbol;
   const move = (name: string) => pitchClassName(mod12(parsePitchClass(name.replace('♯', '#').replace('♭', 'b'))! + semis), flats);
   return symbol.trim().replace(/^([A-G][#b♯♭]?)(.*?)(?:\/([A-G][#b♯♭]?))?$/, (_, root: string, rest: string, bass?: string) => move(root) + rest + (bass ? '/' + move(bass) : ''));
 }

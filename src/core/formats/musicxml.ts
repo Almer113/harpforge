@@ -235,7 +235,8 @@ export function parseMusicXml(xml: string): Imported {
 
 // ---- Export ---------------------------------------------------------------------
 
-const DIVISIONS = 48;
+// Divisible by 3, 5, 7 and 16, so triplets, quintuplets and septuplets come out exact.
+const DIVISIONS = 1680;
 const TYPES: [number, string][] = [
   [4, 'whole'], [2, 'half'], [1, 'quarter'], [0.5, 'eighth'], [0.25, '16th'], [0.125, '32nd'],
 ];
@@ -266,7 +267,12 @@ function splitLength(beats: number): number[] {
   let left = beats;
   const sizes = [4, 3, 2, 1.5, 1, 0.75, 0.5, 0.375, 0.25, 0.125];
   for (let guard = 0; left > 1e-6 && guard < 32; guard++) {
-    const size = sizes.find((s) => s <= left + 1e-6) ?? left;
+    // What's left may be a tuplet value (⅔ of a beat…): write it as one note.
+    if (notation(left)) {
+      out.push(left);
+      break;
+    }
+    const size = sizes.find((s) => s <= left + 1e-6 && (notation(left - s) || left - s > 0.125 - 1e-6)) ?? sizes.find((s) => s <= left + 1e-6) ?? left;
     out.push(Math.min(size, left));
     left -= Math.min(size, left);
   }
@@ -309,8 +315,9 @@ function measuresOf(doc: TabDoc, bpb: number): XmlMeasure[] {
           else if (measures.length > 1) measures[measures.length - 2].endBar = e.style;
           continue;
         }
-        cur().endBar = e.style;
-        measures.push({ pieces: [] });
+        // "|:" after a bar: the bar ends normally and the next one starts the repeat.
+        cur().endBar = e.style === 'repeat-start' ? 'single' : e.style;
+        measures.push({ pieces: [], startBar: e.style === 'repeat-start' ? e.style : undefined });
         room = bpb;
         continue;
       }

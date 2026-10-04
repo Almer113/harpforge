@@ -4,6 +4,7 @@ import { guessTonic, positionFor, positionName, retab, transposeDoc } from '../c
 import { setMetaFields } from '../core/htab/meta';
 import { splitHeader } from '../core/htab/parser';
 import { replaceLines } from '../core/edit/splice';
+import { keyUsesFlats } from '../core/pitch';
 import { getHarmonica, specId, type HarmonicaSpec } from '../core/instruments';
 import { BLANK } from '../demo/songs';
 import { isChordSheet, octaveOptions } from '../core/convert';
@@ -45,7 +46,7 @@ export function setHarmonica(spec: HarmonicaSpec, keep: 'holes' | 'notes' = 'not
     const semis = keyDistance(p.harp.spec, to.spec);
     const moved = transposeDoc(p.doc, semis);
     if (moved.meta.key) fields.key = moved.meta.key;
-    const body = replaceLines(s.text, moved.lines);
+    const body = replaceLines(s.text, moved.lines, keyUsesFlats(moved.meta.key ?? to.spec.key));
     s.setText(setMetaFields(header, fields) + body + (body ? '\n' : ''));
     if (p.doc.lines.some((l) => l.events.some((e) => e.kind === 'note')))
       s.notify(`Same holes on ${to.name}${moved.meta.key ? ` — the song is now in ${moved.meta.key}` : ''}, chords moved too.`);

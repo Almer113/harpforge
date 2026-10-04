@@ -17,6 +17,8 @@ interface PendingNote {
   ev: NoteEvent;
   /** The note's pitches, to match the note a tie leads to. */
   key: string;
+  /** Letter and octave marks as written ("F", "c'"), for a tie over a bar line. */
+  letter?: string;
 }
 
 export function parseAbc(text: string): Imported {
@@ -381,10 +383,11 @@ export function parseAbc(text: string): Imported {
         // A note tied over a bar line keeps its accidental ("^F-|F" is F# both times).
         const ln = lastNote as PendingNote | null; // set inside pushNote
         const prev = ln?.ev.sounds[0];
-        if (tieOpen && !nm[1] && prev?.type === 'pitch' && ln!.ev.sounds.length === 1 && Math.abs(prev.midi - midi) <= 2 && sameLetter(prev.midi, midi)) midi = prev.midi;
+        if (tieOpen && !nm[1] && prev?.type === 'pitch' && ln!.ev.sounds.length === 1 && ln!.letter === nm[2].toUpperCase() + nm[3]) midi = prev.midi;
         const beats = unit * 4 * durationOf(nm[4]);
         i += nm[0].length;
         pushNote({ kind: 'note', sounds: [{ type: 'pitch', midi }], beats }, midi);
+        if (lastNote) (lastNote as PendingNote).letter = nm[2].toUpperCase() + nm[3];
         continue;
       }
       // Rests
@@ -417,13 +420,6 @@ export function parseAbc(text: string): Imported {
 
   if (!inBody) warnings.push('No "K:" line found — is this an ABC file?');
   return { doc: { meta, lines }, warnings, format: 'ABC' };
-}
-
-/** Whether two pitches within a whole step are spellings of the same note letter (F / F#, B / Bb). */
-function sameLetter(a: number, b: number): boolean {
-  const letterOf = (m: number) => 'CCDDEFFGGAAB'[((m % 12) + 12) % 12];
-  const flatOf = (m: number) => 'CDDEEFGGAABB'[((m % 12) + 12) % 12];
-  return letterOf(a) === letterOf(b) || flatOf(a) === flatOf(b) || letterOf(a) === flatOf(b) || flatOf(a) === letterOf(b);
 }
 
 // ---- Export ---------------------------------------------------------------------

@@ -85,7 +85,8 @@ export function keyUsesFlats(name: string | undefined): boolean {
 /** A key moved by `semis` semitones, written the usual way ("G" + 2 → "A", "Em" + 1 → "Fm"). */
 export function transposeKey(name: string, semis: number): string {
   const k = parseKey(name);
-  if (!k) return name;
+  // Whole octaves don't change the key's name (Gb stays Gb).
+  if (!k || mod12(semis) === 0) return name;
   const pc = mod12(k.tonic + semis);
   const flats = [5, 10, 3, 8, 1].includes(mod12(pc - MODE_OFFSET[k.mode]));
   return pitchClassName(pc, flats) + MODE_SUFFIX[k.mode];

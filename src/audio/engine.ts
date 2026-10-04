@@ -83,9 +83,14 @@ let endTimer: ReturnType<typeof setTimeout> | undefined;
  * drops callbacks that come more than 0.25 s late (a hidden browser tab): then the song
  * would never end and the app would stay "playing".
  */
+let endFn: (() => void) | null = null;
 function atTime(time: number, fn: () => void) {
   clearTimeout(endTimer);
-  endTimer = setTimeout(fn, Math.max(0, (time - Tone.immediate()) * 1000));
+  endFn = fn;
+  endTimer = setTimeout(() => {
+    endFn = null;
+    fn();
+  }, Math.max(0, (time - Tone.immediate()) * 1000));
 }
 
 function scheduleEnd() {
@@ -182,7 +187,13 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
   t.start('+0.05');
 }
 
+// Paused in the moment between reaching the end and acting on it: finish on resume.
+let endOnResume: (() => void) | null = null;
+
 export function pausePlayback() {
+  clearTimeout(endTimer);
+  endOnResume = endFn;
+  endFn = null;
   transport().pause();
   Tone.getDraw().cancel(0);
   for (const v of scheduledVoices) v.stop(Tone.immediate());
@@ -191,12 +202,16 @@ export function pausePlayback() {
 
 export function resumePlayback() {
   transport().start('+0.02');
+  if (endOnResume) atTime(Tone.immediate() + 0.02, endOnResume);
+  endOnResume = null;
 }
 
 export function stopPlayback() {
   const t = transport();
   current = null;
   clearTimeout(endTimer);
+  endFn = null;
+  endOnResume = null;
   t.stop();
   t.cancel(0);
   Tone.getDraw().cancel(0);

@@ -76,7 +76,9 @@ function heldPitches(): Set<number> {
 function advance(id: string) {
   const s = useApp.getState();
   const p = s.practice!;
+  // Every hole held right now played this note (a chord): bends on them don't play the next one.
   used.add(id);
+  for (const held of Object.keys(s.held)) used.add(held);
   missed.clear();
   const next = nextPlayable(p.index + 1);
   if (next === null) {
