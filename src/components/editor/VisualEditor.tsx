@@ -489,8 +489,8 @@ function Toolbar({ song }: { song: Song }) {
         </button>
       </div>
       <span className="tb-sep" />
-      <button className={`btn small step-btn ${ve.step ? 'on' : ''}`} aria-pressed={ve.step} onClick={() => setVe({ step: !ve.step, justEntered: undefined })} title="Step entry: every hole you play (keyboard, mouse, MIDI, mic) is written at the caret">
-        <span className="rec-dot" /> Step entry
+      <button className={`btn small step-btn ${ve.step ? 'on' : ''}`} aria-pressed={ve.step} aria-label="Step entry" onClick={() => setVe({ step: !ve.step, justEntered: undefined })} title="Step entry: every hole you play (keyboard, mouse, MIDI, mic) is written at the caret">
+        <span className="rec-dot" /> Step
       </button>
       <div className="seg icons" role="radiogroup" aria-label="Writing over or in between">
         <button role="radio" aria-checked={!ve.insert} aria-label="Overwrite" className={ve.insert ? '' : 'on'} onClick={() => setVe({ insert: false })} title="Overwrite: new notes replace what’s there (Ins switches)">
@@ -572,6 +572,8 @@ function Toolbar({ song }: { song: Song }) {
 /** The slim harmonica docked at the bottom of the window (Visual mode), with Mic and MIDI. */
 function Dock() {
   const open = useApp((s) => s.dockOpen);
+  // Step entry on: a red outline says playing here writes notes.
+  const step = useApp((s) => s.ve.step);
   const name = useParsed().harp.name;
   // Its height, so the inspector ends above it.
   const root = useRef<HTMLDivElement>(null);
@@ -586,7 +588,7 @@ function Dock() {
     };
   }, []);
   return (
-    <div className="ve-dock" ref={root}>
+    <div className={`ve-dock ${step ? 'stepping' : ''}`} ref={root}>
       <div className="dock-head">
         <b>Harmonica</b>
         <span className="muted small">{name} · the top half of a hole blows, the bottom half draws</span>

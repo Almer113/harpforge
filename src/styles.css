@@ -1209,3 +1209,5 @@ html { scrollbar-gutter: stable; }
 .song-line .sl-title { line-height: 32px; }
 .song-line h1.sl-title { padding: 3px 0; border: 1px solid transparent; }
 .song-line.editable input.sl-title { line-height: 32px; }
+/* Step entry on: the dock is outlined in the record red. */
+.ve-dock.stepping { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger), 0 -8px 18px rgba(0, 0, 0, 0.35); }
