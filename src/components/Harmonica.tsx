@@ -6,7 +6,7 @@
 
 import { useMemo, useRef } from 'react';
 import { canOver, maxBend, soundPitch, type Harmonica as Harp } from '../core/instruments';
-import { midiToName, prefersFlats } from '../core/pitch';
+import { midiToName, keyUsesFlats } from '../core/pitch';
 import type { Breath, HoleSound } from '../core/types';
 import { change, press, release } from '../live/livePlayer';
 import { BLOW_LABELS, DRAW_LABELS } from '../live/useHarmonicaKeyboard';
@@ -22,7 +22,7 @@ interface HoleState {
 }
 
 export function Harmonica() {
-  const { harp, score } = useParsed();
+  const { harp, score, doc } = useParsed();
   const held = useApp((s) => s.held);
   const activeEvents = useApp((s) => s.activeEvents);
   const keyOffset = useApp((s) => s.keyOffset);
@@ -31,7 +31,8 @@ export function Harmonica() {
   const showNames = useApp((s) => s.showNoteNames) || asNotes;
   const slideLatch = useApp((s) => s.slideLatch);
   const practice = useApp((s) => s.practice);
-  const flats = prefersFlats(harp.spec.key);
+  // Spelled for the song's key (D minor: B♭), else the harp's.
+  const flats = keyUsesFlats(doc.meta.key ?? harp.spec.key);
 
   // Practice mode: the holes to play next.
   const targets = useMemo(() => {

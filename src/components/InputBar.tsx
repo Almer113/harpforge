@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { holeSoundText } from '../core/htab/serializer';
-import { midiToName, prefersFlats } from '../core/pitch';
+import { midiToName, keyUsesFlats } from '../core/pitch';
 import { startMic, startMidi, stopMic, stopMidi } from '../live/inputs';
 import { startRecording, stopRecording } from '../live/recorder';
 import { hint, practiceTotal, startPractice, stopPractice } from '../state/practice';
@@ -160,7 +160,8 @@ function MidiControl() {
 
 function PracticeControl() {
   const practice = useApp((s) => s.practice);
-  const { score, harp } = useParsed();
+  const asNotes = useApp((s) => s.readAs === 'notes');
+  const { score, harp, doc } = useParsed();
   const [shake, setShake] = useState(false);
   useEffect(() => {
     if (!practice?.wrongAt) return;
@@ -180,8 +181,7 @@ function PracticeControl() {
   }
   const ev = score.events[practice.index];
   const total = practiceTotal();
-  const asNotes = useApp.getState().readAs === 'notes';
-  const flats = prefersFlats(harp.spec.key);
+  const flats = keyUsesFlats(doc.meta.key ?? harp.spec.key);
   const target = ev
     ? ev.sounds.map((s, k) => (s.type === 'hole' ? holeSoundText(s) : midiToName(ev.midis[k] ?? 0, flats))).join(' ')
     : '';

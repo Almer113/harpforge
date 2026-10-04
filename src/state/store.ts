@@ -363,7 +363,8 @@ export const useApp = create<AppState>((set) => ({
   history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 },
   loadSeq: 0,
   loadText: (text, docId = null, saved = false) =>
-    set((s) => ({ loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
+    // A different tab: the editor's caret and selection start over (they belonged to the old one).
+    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, caret: { m: 0, start: 0 }, measure: 0 }, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
   markSaved: (docId, text) => set((s) => ({ docId, savedText: text ?? s.text })),
   notify: (message) => set({ toast: { message, id: Date.now() } }),
 }));

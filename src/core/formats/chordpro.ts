@@ -3,7 +3,7 @@
 // chord (one bar long) carrying the chord symbol and the lyrics sung over it.
 
 import { isChordSymbol, isNoChord, parseChord, transposeChord } from '../chords';
-import { prefersFlats } from '../pitch';
+import { keyUsesFlats } from '../pitch';
 import { beatsPerBar, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine } from '../htab/types';
 import { notesMeta, type Imported } from './common';
 
@@ -110,7 +110,7 @@ export function parseChordPro(text: string): Imported {
     segs.forEach((sg, k) => {
       const ev: RestEvent = { kind: 'rest', beats: beats[k] };
       if (sg.sym) {
-        const flats = prefersFlats(meta.key) || /b/.test(sg.sym.slice(1, 2));
+        const flats = keyUsesFlats(meta.key) || /b/.test(sg.sym.slice(1, 2));
         ev.chord = isNoChord(sg.sym) ? 'N.C.' : transposeChord(sg.sym, capo, flats);
       }
       if (sg.text) ev.lyric = sg.text;

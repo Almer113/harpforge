@@ -4,7 +4,7 @@
 import { guessTonic, positionFor, positionName } from '../convert';
 import { soundPitch, type Harmonica } from '../instruments';
 import type { NoteEvent, TabDoc, TabEvent } from '../htab/types';
-import { midiToName, prefersFlats } from '../pitch';
+import { midiToName, keyUsesFlats } from '../pitch';
 import type { HoleSound, Sound } from '../types';
 
 export interface PlainTextOptions {
@@ -135,7 +135,7 @@ function layout(cells: Cell[], o: PlainTextOptions): string[] {
 /** The whole tab as plain text. */
 export function writePlainText(doc: TabDoc, harp: Harmonica, o: PlainTextOptions = DEFAULT_PLAIN_TEXT): string {
   const { meta } = doc;
-  const flats = prefersFlats(meta.key ?? harp.spec.key);
+  const flats = keyUsesFlats(meta.key ?? harp.spec.key);
   const out: string[] = [];
   if (o.title) {
     out.push(`${meta.title || 'Untitled'}${meta.artist ? ` — ${meta.artist}` : ''}`);

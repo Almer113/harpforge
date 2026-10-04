@@ -11,7 +11,7 @@
 import { parseHtab, splitHeader } from '../htab/parser';
 import { lineText, type SerializeOptions } from '../htab/serializer';
 import type { ParseIssue, TabLine } from '../htab/types';
-import { prefersFlats } from '../pitch';
+import { keyUsesFlats } from '../pitch';
 import { EPS, fromDoc, lineGroups, toDoc, type Song } from './model';
 
 /** What a rewrite had to keep in a comment: tokens that couldn't be read. */
@@ -100,7 +100,7 @@ function rewritten(text: string[], tail: string, verses: string[], between: stri
 
 /** Whether to spell pitches with flats: from the key, or because the text already does. */
 export function flatsFor(text: string, key: string | undefined): boolean {
-  return prefersFlats(key) || /(^|[\s([{|])[A-G]b-?\d/.test(text.slice(splitHeader(text).bodyStart));
+  return keyUsesFlats(key) || /(^|[\s([{|])[A-G]b-?\d/.test(text.slice(splitHeader(text).bodyStart));
 }
 
 /** Each measure-set of a song as lines: the text of each line plus the source line its measures came from. */

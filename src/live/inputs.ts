@@ -2,7 +2,7 @@
 
 import { detectPitch, freqToMidi, NoteTracker, rms } from '../audio/pitch';
 import { allOptions, type Harmonica } from '../core/instruments';
-import { midiToName, prefersFlats } from '../core/pitch';
+import { midiToName, keyUsesFlats } from '../core/pitch';
 import { holeSoundText } from '../core/htab/serializer';
 import type { HoleSound } from '../core/types';
 import { getParsed, useApp } from '../state/store';
@@ -90,7 +90,7 @@ function analyse(buf: Float32Array, sampleRate: number) {
         const found = soundForPitch(h, midi);
         reading = {
           midi,
-          note: midiToName(Math.round(midi), prefersFlats(h.spec.key)),
+          note: midiToName(Math.round(midi), keyUsesFlats(getParsed(useApp.getState().text).doc.meta.key ?? h.spec.key)),
           hole: found ? holeSoundText(found.sound) : null,
           cents: Math.round((found ? midi - found.midi : midi - Math.round(midi)) * 100),
         };

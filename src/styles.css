@@ -431,7 +431,8 @@ select:focus, .search:focus { border-color: var(--brass); }
 
 /* ---------- Toast ---------- */
 .toast {
-  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50;
+  /* Above dialogs too ("Copied ✓" from a dialog must be seen). */
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 90;
   background: #2f2821; border: 1px solid var(--border-2); padding: 10px 18px; border-radius: 10px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); animation: toast-in 0.18s ease-out;
 }
@@ -982,3 +983,7 @@ button.ve-mnum:hover { color: var(--brass-2); background: var(--panel-2); }
 /* Library: storage couldn't be read. */
 .lib-error { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 18px; margin-bottom: 16px; border: 1px solid var(--danger); border-radius: var(--radius); background: rgba(239, 106, 90, 0.08); }
 .lib-error p { margin: 0; flex: 1 1 320px; }
+
+/* The editor header stacks the transport above the toolbar, so the harmonica popover (inside the
+   transport) opens over the toolbar: as flex items, both take part in z-index. */
+.edit-sticky > .transport { z-index: 16; }

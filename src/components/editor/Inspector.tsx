@@ -1,6 +1,6 @@
 // Inspector for the visual editor: edits the selected note(s) and the current measure.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   advance,
   chainAt,
@@ -10,6 +10,7 @@ import {
   duplicateMeasure,
   EPS,
   findItem,
+  fromDoc,
   insertMeasure,
   placeItem,
   changeLengths,
@@ -30,7 +31,7 @@ import { flatsFor } from '../../core/edit/splice';
 import type { HoleSound, Sound } from '../../core/types';
 import { commitSong, DURATIONS, describeDuration, durationLabel, mapHoles, parseSoundsInput, stepPitch } from '../../state/editor';
 import { chooseSounds, neighbours, offHarp, parseNotes, pitchOf, stepNotes, stepScale, waysToPlay } from '../../core/edit/notes';
-import { useApp, useParsed } from '../../state/store';
+import { getParsed, useApp, useParsed } from '../../state/store';
 import { Glyph, NoteGlyph } from '../TabView';
 import { apply, playSounds } from './VisualEditor';
 
@@ -60,7 +61,8 @@ export function Inspector({ song }: { song: Song }) {
   const items = sel.map((p) => ({ p, it: findItem(song, p) })).filter((x): x is { p: Pos; it: Item } => !!x.it);
   return (
     <aside className="ve-inspector">
-      {items.length === 1 ? <NotePanel song={song} pos={items[0].p} item={items[0].it} /> : items.length > 1 ? <MultiPanel song={song} sel={items.map((x) => x.p)} /> : <CaretPanel song={song} />}
+      {/* One panel per note (keyed), so what's typed in it can only ever go to that note. */}
+      {items.length === 1 ? <NotePanel key={`${items[0].p.m}:${items[0].p.start}`} song={song} pos={items[0].p} item={items[0].it} /> : items.length > 1 ? <MultiPanel song={song} sel={items.map((x) => x.p)} /> : <CaretPanel song={song} />}
       <MeasurePanel song={song} m={Math.min(ve.measure, song.measures.length - 1)} />
     </aside>
   );
@@ -80,15 +82,46 @@ function CaretPanel({ song }: { song: Song }) {
   );
 }
 
+/**
+ * Applies `text` to the note at `pos` in the current tab, after the click that moved
+ * away from it has been handled. `toSounds` reads the text (null if it can't).
+ */
+function applyLater(pos: Pos, text: string, toSounds: (song: Song, text: string) => Sound[] | null) {
+  queueMicrotask(() => {
+    const song = fromDoc(getParsed(useApp.getState().text).doc);
+    if (!findItem(song, pos)) return;
+    const sounds = toSounds(song, text);
+    if (sounds) commitSong(updateItem(song, pos, { sounds }));
+    else useApp.getState().notify(`Couldn’t use “${text}” for that note, so it was left as it was.`);
+  });
+}
+
+/**
+ * A field's typed-but-not-applied text goes to the note it was typed for when the panel
+ * closes (you clicked another note): never to the next note, and never just dropped.
+ */
+function useApplyOnLeave(pending: string | null, apply: (text: string) => void) {
+  const latest = useRef({ pending, apply });
+  latest.current = { pending, apply };
+  useEffect(
+    () => () => {
+      const { pending: text, apply: go } = latest.current;
+      if (text !== null) go(text);
+    },
+    [],
+  );
+}
+
 function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
-  const { harp, doc } = useParsed();
-  const flats = flatsFor(useApp.getState().text, doc.meta.key ?? harp.spec.key);
+  const { harp, doc, text } = useParsed();
+  const flats = flatsFor(text, doc.meta.key ?? harp.spec.key);
   const [input, setInput] = useState(soundsText(item.sounds));
   const [bad, setBad] = useState(false);
   useEffect(() => {
     setInput(soundsText(item.sounds));
     setBad(false);
   }, [item.sounds]);
+  useApplyOnLeave(input !== soundsText(item.sounds) ? input : null, (t) => applyLater(pos, t, (_, x) => parseSoundsInput(x)));
 
   const set = (patch: Partial<Item>) => apply(updateItem(song, pos, patch));
   const asNotes = useApp((s) => s.readAs === 'notes');
@@ -297,6 +330,12 @@ function NoteFields({ song, pos, item, flats }: { song: Song; pos: Pos; item: It
     setInput(names(item.sounds));
     setBad(false);
   }, [item.sounds, harp]);
+  useApplyOnLeave(input !== names(item.sounds) ? input : null, (t) =>
+    applyLater(pos, t, (s, x) => {
+      const midis = parseNotes(x);
+      return midis ? chooseSounds(harp, midis, neighbours(s, pos)) : null;
+    }),
+  );
 
   const setSounds = (sounds: Sound[]) => {
     apply(updateItem(song, pos, { sounds }));

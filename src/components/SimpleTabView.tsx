@@ -6,7 +6,7 @@ import { holeSoundText, soundText } from '../core/htab/serializer';
 import type { NoteEvent, TabDoc, TabEvent } from '../core/htab/types';
 import { eventKey } from '../core/score';
 import type { Parsed, ReadAs } from '../state/store';
-import { midiToName, prefersFlats } from '../core/pitch';
+import { midiToName, keyUsesFlats } from '../core/pitch';
 import { followTo } from './follow';
 
 interface Props {
@@ -95,7 +95,7 @@ export function SimpleTabPreview({ doc, lines = 2 }: { doc: TabDoc; lines?: numb
 
 export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect, readAs = 'holes' }: Props) {
   const { doc, indexByKey, score, harp } = parsed;
-  const flats = prefersFlats(doc.meta.key ?? harp.spec.key);
+  const flats = keyUsesFlats(doc.meta.key ?? harp.spec.key);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

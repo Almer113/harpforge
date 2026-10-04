@@ -104,6 +104,7 @@ function techniqueTags(s: Pick<Suggestion, 'stats'>) {
 
 function ImportBody() {
   const draft = useApp((s) => s.importDraft)!;
+  const readAs = useApp((s) => s.readAs);
   const current = useParsed();
   const [paste, setPaste] = useState(draft.pasteText ?? '');
   // Parsing and ranking wait for a pause in typing.
@@ -460,7 +461,7 @@ function ImportBody() {
                 ))}
               </div>
             )}
-            {result && <TabView parsed={result.parsed} activeEvents={active} selectedEvent={null} showNoteNames={false} follow={playing} readAs={useApp.getState().readAs} />}
+            {result && <TabView parsed={result.parsed} activeEvents={active} selectedEvent={null} showNoteNames={readAs === 'notes'} follow={playing} readAs={readAs} />}
           </div>
         </div>
       )}

@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { NoteEvent, RestEvent } from '../core/htab/types';
 import { useApp, type Parsed, type ReadAs, type SheetShow } from '../state/store';
 import { doPitchClass } from '../core/formats/jianpu';
-import { pitchClassName, prefersFlats } from '../core/pitch';
+import { pitchClassName, keyUsesFlats } from '../core/pitch';
 import { SimpleTabView } from './SimpleTabView';
 import { TabView } from './TabView';
 
@@ -27,7 +27,7 @@ export function Sheet({
   const readAs = useApp((s) => s.readAs);
   const notes = readAs === 'notes';
   // "Do" of the key: the song key's relative major, else the harmonica's key.
-  const doName = pitchClassName(doPitchClass(parsed.doc.meta.key ?? parsed.harp.spec.key.replace(/^(Low|High)\s+/i, '')), prefersFlats(parsed.doc.meta.key ?? parsed.harp.spec.key));
+  const doName = pitchClassName(doPitchClass(parsed.doc.meta.key ?? parsed.harp.spec.key.replace(/^(Low|High)\s+/i, '')), keyUsesFlats(parsed.doc.meta.key ?? parsed.harp.spec.key));
 
   const eventAt = (i: number) => {
     const sev = parsed.score.events[i];

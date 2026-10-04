@@ -227,6 +227,7 @@ export function Transport() {
 /** "C Diatonic · 1st position ▾": opens the harmonica picker. Lives in the transport. */
 export function HarmonicaChip() {
   const { harp, doc } = useParsed();
+  const readAs = useApp((s) => s.readAs);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const tonic = useMemo(() => guessTonic(doc, harp), [doc, harp]);
@@ -253,7 +254,12 @@ export function HarmonicaChip() {
         <div className="harp-pop" role="dialog" aria-label="Harmonica">
           <HarmonicaPicker />
           <OwnedHarps />
-          <p className="muted small">{rangeLabel(harp)} · Changing the key asks whether to keep the holes or the notes; type and tuning keep the notes.</p>
+          <p className="muted small">
+            {rangeLabel(harp)} ·{' '}
+            {readAs === 'notes'
+              ? 'Reading in notes: changing the key, type or tuning keeps the notes and finds the holes.'
+              : 'Changing the key asks whether to keep the holes or the notes; type and tuning keep the notes.'}
+          </p>
         </div>
       )}
     </div>

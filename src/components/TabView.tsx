@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { BarStyle, NoteEvent, RestEvent, TabEvent } from '../core/htab/types';
-import { midiToName, prefersFlats } from '../core/pitch';
+import { midiToName, keyUsesFlats } from '../core/pitch';
 import { eventKey } from '../core/score';
 import type { HoleSound, Sound } from '../core/types';
 import type { Parsed, ReadAs } from '../state/store';
@@ -52,7 +52,7 @@ function toMeasures(events: TabEvent[]): Measure[] {
 export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, showLyrics = true, showChords = true, onCardClick, follow = true, notation = 'holes', readAs = 'holes' }: Props) {
   const activeSet = new Set(activeEvents);
   const { doc, score, indexByKey, harp } = parsed;
-  const flats = prefersFlats(doc.meta.key ?? harp.spec.key);
+  const flats = keyUsesFlats(doc.meta.key ?? harp.spec.key);
   const numbers = notation === 'numbers';
   const asNotes = !numbers && readAs === 'notes';
   const doPc = doPitchClass(doc.meta.key ?? harp.spec.key.replace(/^(Low|High)\s+/i, ''));
