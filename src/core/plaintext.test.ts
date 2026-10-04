@@ -16,6 +16,10 @@ describe('plain-text tab', () => {
     expect(holeToken(holeSound(6, 'blow', { over: true }), { ...DEFAULT_PLAIN_TEXT, over: 'ob' })).toBe('6ob');
   });
 
+  it('writes notes instead of holes when asked', () => {
+    expect(body("4 -4 (4 5) -3' |", { spelling: 'notes' })).toBe("C5 D5 (C5 E5) A#4 |\n");
+  });
+
   it('lines chords up above and lyrics below the notes', () => {
     expect(body('[C] 4 -4 [G] 5~ |\nw: hel-lo there')).toBe(['C       G', '4    -4 5 |', 'hel- lo there'].join('\n') + '\n');
   });

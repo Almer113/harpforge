@@ -2,7 +2,7 @@
 // print. "Print" opens the browser's print dialog, where "Save as PDF" makes a PDF.
 
 import { lazy, Suspense, useEffect } from 'react';
-import { ShowMenu } from '../components/Sheet';
+import { ReadAsSwitch, ShowMenu } from '../components/Sheet';
 import { SimpleTabView } from '../components/SimpleTabView';
 import { TabView } from '../components/TabView';
 import { guessTonic, positionFor, positionName } from '../core/convert';
@@ -34,6 +34,7 @@ export function PrintPage() {
   const prefs = useApp((s) => s.printPrefs);
   const show = useApp((s) => s.sheetShow);
   const names = useApp((s) => s.showNoteNames);
+  const readAs = useApp((s) => s.readAs);
   const set = (patch: Partial<PrintPrefs>) => useApp.setState((s) => ({ printPrefs: { ...s.printPrefs, ...patch } }));
   const { meta } = parsed.doc;
   const harp = parsed.harp;
@@ -68,6 +69,7 @@ export function PrintPage() {
               </button>
             ))}
           </div>
+          {(prefs.view === 'tab' || prefs.view === 'simple') && <ReadAsSwitch />}
           {prefs.view !== 'simple' && <ShowMenu view={prefs.view} />}
           <select value={prefs.size} onChange={(e) => set({ size: e.target.value as PrintPrefs['size'] })} title="Size on the page">
             <option value="compact">Compact</option>
@@ -123,7 +125,7 @@ export function PrintPage() {
         )}
         <div className="paper-body">
           {prefs.view === 'simple' ? (
-            <SimpleTabView parsed={parsed} activeEvents={[]} selectedEvent={null} />
+            <SimpleTabView parsed={parsed} activeEvents={[]} selectedEvent={null} readAs={readAs} />
           ) : prefs.view === 'staff' ? (
             <Suspense fallback={<p>Loading the staff…</p>}>
               <StaffView parsed={parsed} activeEvents={[]} selectedEvent={null} show={show.staff} oneSvgPerLine />
@@ -133,10 +135,11 @@ export function PrintPage() {
               parsed={parsed}
               activeEvents={[]}
               selectedEvent={null}
-              showNoteNames={prefs.view === 'numbers' ? show.numbers.holes : names}
+              showNoteNames={prefs.view === 'numbers' ? show.numbers.holes : readAs === 'notes' ? show.tab.holes : names}
               showLyrics={prefs.view === 'numbers' ? show.numbers.lyrics : show.tab.lyrics}
               showChords={prefs.view === 'numbers' ? show.numbers.chords : show.tab.chords}
               notation={prefs.view === 'numbers' ? 'numbers' : 'holes'}
+              readAs={readAs}
               follow={false}
             />
           )}

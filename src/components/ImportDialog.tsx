@@ -342,7 +342,21 @@ function ImportBody() {
             <h4>{mine.length > 1 ? 'Your harmonicas' : 'Your harmonica'}</h4>
             <div className="suggestions compact">
               {mine.map((m) => (
-                <button key={m.id} className={`suggestion ${choice?.id === m.id ? 'active' : ''}`} onClick={() => setPicked(m.id)}>
+                // A div, not a button: it holds the octave buttons (buttons can't nest).
+                <div
+                  key={m.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={choice?.id === m.id}
+                  className={`suggestion ${choice?.id === m.id ? 'active' : ''}`}
+                  onClick={() => setPicked(m.id)}
+                  onKeyDown={(e) => {
+                    if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault();
+                      setPicked(m.id);
+                    }
+                  }}
+                >
                   <span className="rank">{m.current ? '✓' : '★'}</span>
                   <span className="s-main">
                     <b>{harmonicaName(m.spec)}</b>
@@ -358,7 +372,7 @@ function ImportBody() {
                       <button className="icon-btn" title="An octave higher" disabled={m.shift >= 24} onClick={() => { setPicked(m.id); setShifts((x) => ({ ...x, [m.id]: m.shift + 12 })); }}>▲</button>
                     </span>
                   )}
-                </button>
+                </div>
               ))}
             </div>
             {!owned.length && <p className="muted small">Tip: mark the harps you own (harmonica menu → ☆) and they'll be listed here first.</p>}
@@ -421,7 +435,7 @@ function ImportBody() {
                 ))}
               </div>
             )}
-            {result && <TabView parsed={result.parsed} activeEvents={active} selectedEvent={null} showNoteNames={false} follow={playing} />}
+            {result && <TabView parsed={result.parsed} activeEvents={active} selectedEvent={null} showNoteNames={false} follow={playing} readAs={useApp.getState().readAs} />}
           </div>
         </div>
       )}

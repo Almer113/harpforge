@@ -47,7 +47,9 @@ import { commitSong, DURATIONS, describeDuration, retabSelection, stepPitch } fr
 import { Menu } from '../Menu';
 import { getParsed, useApp, useParsed, type VisualState } from '../../state/store';
 import { Harmonica } from '../Harmonica';
-import { Glyph } from '../TabView';
+import { Glyph, NoteGlyph } from '../TabView';
+import { ReadAsSwitch } from '../Sheet';
+import { holeSoundText } from '../../core/htab/serializer';
 import { Inspector } from './Inspector';
 import { isTyping, keysTaken, overlayOpen } from '../../live/focus';
 import { copyText, pasteText } from '../../core/edit/clipboard';
@@ -92,7 +94,9 @@ export function VisualEditor() {
   const ve = useApp((s) => s.ve);
   const setVe = useApp((s) => s.setVe);
   const activeEvents = useApp((s) => s.activeEvents);
-  const showNames = useApp((s) => s.showNoteNames);
+  const asNotes = useApp((s) => s.readAs === 'notes');
+  // The small line under each note: note names in Holes mode, holes in Notes mode.
+  const showSecond = useApp((s) => (asNotes ? s.sheetShow.tab.holes : s.showNoteNames));
   const song = useMemo(() => fromDoc(parsed.doc), [parsed]);
   const starts = useMemo(() => measureStarts(song), [song]);
   const text = useApp((s) => s.text);
@@ -307,7 +311,7 @@ export function VisualEditor() {
         </div>
       )}
       <div className="ve-main">
-        <Score song={song} starts={starts} playingAt={playingAt} flats={flats} showNames={showNames} />
+        <Score song={song} starts={starts} playingAt={playingAt} flats={flats} showSecond={showSecond} asNotes={asNotes} />
         <Inspector song={song} />
       </div>
       <div className="ve-harp">
@@ -451,6 +455,7 @@ function Toolbar({ song }: { song: Song }) {
         </button>
       </div>
       <div className="tb-group">
+        <ReadAsSwitch />
         <button
           className={`btn small ghost ${ve.insert ? 'on' : ''}`}
           onClick={() => setVe({ insert: !ve.insert })}
@@ -528,7 +533,7 @@ function segments(cap: number, abs: number, dur: number): { m: number; start: nu
   return out;
 }
 
-function Score({ song, starts, playingAt, flats, showNames }: { song: Song; starts: number[]; playingAt: Set<number>; flats: boolean; showNames: boolean }) {
+function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: Song; starts: number[]; playingAt: Set<number>; flats: boolean; showSecond: boolean; asNotes: boolean }) {
   const ve = useApp((s) => s.ve);
   // Fit to width: measures fill each row and only sections start a new one; the
   // text's own line breaks show as a small mark.
@@ -756,9 +761,19 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
                       {it.tied && <span className="ve-tie" aria-label="tied from the previous note" />}
                       <span className="ve-chord">{it.chord ?? ''}</span>
                       <span className={`ve-glyphs ${it.sounds.length > 1 ? 'stack' : ''}`}>
-                        {it.sounds.length ? it.sounds.map((s, k) => <Glyph key={k} sound={s} flats={flats} />) : <span className="rest-glyph">𝄽</span>}
+                        {it.sounds.length ? (
+                          it.sounds.map((s, k) => (asNotes ? <NoteGlyph key={k} sound={s} midi={midis[k]} flats={flats} /> : <Glyph key={k} sound={s} flats={flats} />))
+                        ) : (
+                          <span className="rest-glyph">𝄽</span>
+                        )}
                       </span>
-                      {showNames && it.sounds.length > 0 && <span className="ve-name">{midis.map((x) => (x === null ? '?' : midiToName(x, flats))).join(' ')}</span>}
+                      {showSecond && it.sounds.length > 0 && (
+                        <span className="ve-name">
+                          {asNotes
+                            ? it.sounds.map((s) => (s.type === 'hole' ? holeSoundText(s) : '–')).join(' ')
+                            : midis.map((x) => (x === null ? '?' : midiToName(x, flats))).join(' ')}
+                        </span>
+                      )}
                       <span className="ve-lyric">{it.lyric ?? ''}</span>
                       {it.dur > EPS && <span className="ve-resize" title="Drag to change the length" />}
 

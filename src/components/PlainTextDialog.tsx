@@ -31,6 +31,9 @@ function PlainTextBody({ close }: { close: () => void }) {
   const o = useApp((s) => s.textPrefs);
   const set = (patch: Partial<PlainTextOptions>) => useApp.setState((s) => ({ textPrefs: { ...s.textPrefs, ...patch } }));
   const text = useMemo(() => writePlainText(doc, harp, o), [doc, harp, o]);
+  const asNotes = o.spelling === 'notes';
+  // Opens in the spelling you're reading in (Holes or Notes).
+  useEffect(() => set({ spelling: useApp.getState().readAs }), []);
 
   const copy = () =>
     navigator.clipboard
@@ -54,8 +57,15 @@ function PlainTextBody({ close }: { close: () => void }) {
       <div className="text-grid">
         <div className="text-options">
           <label className="field">
+            <span>Write</span>
+            <select value={o.spelling} onChange={(e) => set({ spelling: e.target.value as PlainTextOptions['spelling'] })}>
+              <option value="holes">Holes (4 -4 5)</option>
+              <option value="notes">Notes (C5 D5 E5)</option>
+            </select>
+          </label>
+          <label className="field">
             <span>Blow and draw</span>
-            <select value={o.style} onChange={(e) => set({ style: e.target.value as PlainTextOptions['style'] })}>
+            <select disabled={asNotes} value={o.style} onChange={(e) => set({ style: e.target.value as PlainTextOptions['style'] })}>
               <option value="htab">4 and -4</option>
               <option value="plusminus">+4 and -4</option>
               <option value="letters">4B and 4D</option>
@@ -63,14 +73,14 @@ function PlainTextBody({ close }: { close: () => void }) {
           </label>
           <label className="field">
             <span>Bends</span>
-            <select value={o.bend} onChange={(e) => set({ bend: e.target.value as PlainTextOptions['bend'] })}>
+            <select disabled={asNotes} value={o.bend} onChange={(e) => set({ bend: e.target.value as PlainTextOptions['bend'] })}>
               <option value="apostrophe">-3' and -3''</option>
               <option value="b">-3b and -3bb</option>
             </select>
           </label>
           <label className="field">
             <span>Overblows</span>
-            <select value={o.over} onChange={(e) => set({ over: e.target.value as PlainTextOptions['over'] })}>
+            <select disabled={asNotes} value={o.over} onChange={(e) => set({ over: e.target.value as PlainTextOptions['over'] })}>
               <option value="o">6o</option>
               <option value="ob">6ob (overdraw: 7od)</option>
             </select>

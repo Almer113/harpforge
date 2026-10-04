@@ -180,6 +180,7 @@ function PracticeControl() {
   }
   const ev = score.events[practice.index];
   const total = practiceTotal();
+  const asNotes = useApp.getState().readAs === 'notes';
   const flats = prefersFlats(harp.spec.key);
   const target = ev
     ? ev.sounds.map((s, k) => (s.type === 'hole' ? holeSoundText(s) : midiToName(ev.midis[k] ?? 0, flats))).join(' ')
@@ -188,8 +189,8 @@ function PracticeControl() {
   return (
     <div className={`input-card on practice ${shake ? 'shake' : ''}`}>
       <span className="practice-label">Play</span>
-      <b className="practice-target">{target}</b>
-      <span className="practice-note">{notes}</span>
+      <b className="practice-target">{asNotes ? notes || target : target}</b>
+      <span className="practice-note">{asNotes ? target : notes}</span>
       <span className="input-status">
         {practice.played + 1} / {total} · {practice.mistakes} mistake{practice.mistakes === 1 ? '' : 's'}
       </span>

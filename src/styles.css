@@ -957,3 +957,11 @@ button.ve-mnum:hover { color: var(--brass-2); background: var(--panel-2); }
 @media (max-width: 560px) {
   .brand span { display: none; }
 }
+
+/* ---------- Notes mode: note names as the main text ---------- */
+.read-as button { min-width: 0; }
+.glyph.note { font-family: var(--sans, inherit); letter-spacing: -0.01em; }
+.glyph.note .n-acc { font-size: 0.72em; margin-left: 1px; align-self: flex-start; }
+.glyph.note .n-oct { font-size: 0.55em; margin-left: 1px; opacity: 0.85; font-family: var(--mono); }
+.glyph.note.pitch { color: var(--pitch); }
+.simpletab.as-notes .st-note { font-family: inherit; }

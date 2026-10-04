@@ -5,7 +5,8 @@ import { useEffect, useRef } from 'react';
 import { holeSoundText, soundText } from '../core/htab/serializer';
 import type { NoteEvent, TabDoc, TabEvent } from '../core/htab/types';
 import { eventKey } from '../core/score';
-import type { Parsed } from '../state/store';
+import type { Parsed, ReadAs } from '../state/store';
+import { midiToName, prefersFlats } from '../core/pitch';
 import { followTo } from './follow';
 
 interface Props {
@@ -13,6 +14,8 @@ interface Props {
   activeEvents: number[];
   selectedEvent: number | null;
   onSelect?: (scoreIndex: number, ev: NoteEvent) => void;
+  /** Notes mode: note names (C5) instead of holes. */
+  readAs?: ReadAs;
 }
 
 /** One hole, with two-digit hole numbers underlined so "8910" reads as 8 · 9 · 10. */
@@ -43,6 +46,11 @@ function Token({ ev }: { ev: NoteEvent }) {
       ))}
     </>
   );
+}
+
+/** A note's pitches as names (Notes mode); a chord's notes sit side by side. */
+function NoteNames({ midis, flats }: { midis: (number | null)[]; flats: boolean }) {
+  return <>{midis.map((m) => (m === null ? '?' : midiToName(m, flats).replace('#', '♯').replace(/b(?=-?\d)/, '♭'))).join(' ')}</>;
 }
 
 function breathClass(ev: NoteEvent): string {
@@ -85,8 +93,9 @@ export function SimpleTabPreview({ doc, lines = 2 }: { doc: TabDoc; lines?: numb
   );
 }
 
-export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect }: Props) {
-  const { doc, indexByKey } = parsed;
+export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect, readAs = 'holes' }: Props) {
+  const { doc, indexByKey, score, harp } = parsed;
+  const flats = prefersFlats(doc.meta.key ?? harp.spec.key);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -99,7 +108,7 @@ export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect }:
   if (!lines.length) return <div className="tab-empty"><p>This tab is empty.</p></div>;
 
   return (
-    <div className="simpletab" ref={root}>
+    <div className={`simpletab ${readAs === 'notes' ? 'as-notes' : ''}`} ref={root}>
       {lines.map(({ li, measures }) => (
         <div className="st-line" key={li}>
           {measures.map((m, mi) => (
@@ -115,7 +124,7 @@ export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect }:
                     className={`st-note ${breathClass(ev)} ${active ? 'active' : ''} ${selected ? 'selected' : ''}`}
                     onClick={() => idx !== undefined && onSelect?.(idx, ev)}
                   >
-                    <Token ev={ev} />
+                    {readAs === 'notes' && idx !== undefined ? <NoteNames midis={score.events[idx]?.midis ?? []} flats={flats} /> : <Token ev={ev} />}
                   </button>
                 );
               })}

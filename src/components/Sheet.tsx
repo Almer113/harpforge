@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { NoteEvent, RestEvent } from '../core/htab/types';
-import { useApp, type Parsed, type SheetShow } from '../state/store';
+import { useApp, type Parsed, type ReadAs, type SheetShow } from '../state/store';
 import { doPitchClass } from '../core/formats/jianpu';
 import { pitchClassName, prefersFlats } from '../core/pitch';
 import { SimpleTabView } from './SimpleTabView';
@@ -24,6 +24,8 @@ export function Sheet({
   const showNoteNames = useApp((s) => s.showNoteNames);
   const view = useApp((s) => s.sheetView);
   const show = useApp((s) => s.sheetShow);
+  const readAs = useApp((s) => s.readAs);
+  const notes = readAs === 'notes';
   // "Do" of the key: the song key's relative major, else the harmonica's key.
   const doName = pitchClassName(doPitchClass(parsed.doc.meta.key ?? parsed.harp.spec.key.replace(/^(Low|High)\s+/i, '')), prefersFlats(parsed.doc.meta.key ?? parsed.harp.spec.key));
 
@@ -37,11 +39,12 @@ export function Sheet({
     <div className="sheet">
       <div className="sheet-head">
         <h2>
-          {view === 'numbers' ? 'Numbered notation' : view === 'staff' ? 'Staff notation' : view === 'simple' ? 'Simple tab' : title}
+          {view === 'numbers' ? 'Numbered notation' : view === 'staff' ? 'Staff notation' : notes ? (view === 'simple' ? 'Simple notes' : 'Notes') : view === 'simple' ? 'Simple tab' : title}
           {view === 'numbers' && <span className="chip plain jp-key">1={doName}</span>}
         </h2>
         <div className="tb-group">
           {view !== 'simple' && <ShowMenu view={view} />}
+          {(view === 'tab' || view === 'simple') && <ReadAsSwitch />}
           <div className="seg" role="tablist" aria-label="Sheet view">
             <button
               role="tab"
@@ -77,17 +80,18 @@ export function Sheet({
         </div>
       </div>
       {view === 'simple' ? (
-        <SimpleTabView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} />
+        <SimpleTabView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} readAs={readAs} />
       ) : view !== 'staff' ? (
         <TabView
           parsed={parsed}
           activeEvents={activeEvents}
           selectedEvent={selectedEvent}
-          showNoteNames={view === 'numbers' ? show.numbers.holes : showNoteNames}
+          showNoteNames={view === 'numbers' ? show.numbers.holes : notes ? show.tab.holes : showNoteNames}
           showLyrics={view === 'numbers' ? show.numbers.lyrics : show.tab.lyrics}
           showChords={view === 'numbers' ? show.numbers.chords : show.tab.chords}
           onCardClick={onSelect}
           notation={view === 'numbers' ? 'numbers' : 'holes'}
+          readAs={readAs}
         />
       ) : (
         <Suspense fallback={<p className="muted">Loading sheet music…</p>}>
@@ -98,10 +102,27 @@ export function Sheet({
   );
 }
 
+/** Holes | Notes: whether the tab reads as holes (4 -4) or as notes (C5 D5). Remembered. */
+export function ReadAsSwitch({ className = '' }: { className?: string }) {
+  const readAs = useApp((s) => s.readAs);
+  const opt = (id: ReadAs, label: string, title: string) => (
+    <button role="radio" aria-checked={readAs === id} className={readAs === id ? 'on' : ''} onClick={() => useApp.setState({ readAs: id })} title={title}>
+      {label}
+    </button>
+  );
+  return (
+    <div className={`seg read-as ${className}`} role="radiogroup" aria-label="Read as">
+      {opt('holes', 'Holes', 'Read the tab as holes: 4 -4 5')}
+      {opt('notes', 'Notes', 'Read the tab as notes: C5 D5 E5, with the holes small underneath')}
+    </div>
+  );
+}
+
 /** "Show ▾": what the Tab or Numbers view shows besides the notes. */
 export function ShowMenu({ view }: { view: 'tab' | 'numbers' | 'staff' }) {
   const show = useApp((s) => s.sheetShow);
   const names = useApp((s) => s.showNoteNames);
+  const notes = useApp((s) => s.readAs === 'notes');
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -121,7 +142,9 @@ export function ShowMenu({ view }: { view: 'tab' | 'numbers' | 'staff' }) {
   const items: { label: string; on: boolean; toggle: (v: boolean) => void; hint: string }[] =
     view === 'tab'
       ? [
-          { label: 'Note names', on: names, toggle: (v) => useApp.setState({ showNoteNames: v }), hint: 'C5, E5… under each hole' },
+          notes
+            ? { label: 'Holes', on: show.tab.holes, toggle: (v) => set({ holes: v }), hint: '4, -4… under each note' }
+            : { label: 'Note names', on: names, toggle: (v) => useApp.setState({ showNoteNames: v }), hint: 'C5, E5… under each hole' },
           { label: 'Lyrics', on: show.tab.lyrics, toggle: (v) => set({ lyrics: v }), hint: 'The words under the notes' },
           { label: 'Chords', on: show.tab.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the notes' },
         ]

@@ -5,7 +5,7 @@ import type { BarStyle, NoteEvent, RestEvent, TabEvent } from '../core/htab/type
 import { midiToName, prefersFlats } from '../core/pitch';
 import { eventKey } from '../core/score';
 import type { HoleSound, Sound } from '../core/types';
-import type { Parsed } from '../state/store';
+import type { Parsed, ReadAs } from '../state/store';
 import { doPitchClass, midiToDegree } from '../core/formats/jianpu';
 import { holeSoundText } from '../core/htab/serializer';
 import { followTo } from './follow';
@@ -25,6 +25,8 @@ interface Props {
   follow?: boolean;
   /** Show holes (tab) or scale-degree numbers (jianpu). */
   notation?: 'holes' | 'numbers';
+  /** In Notes mode the note names are the big text and the holes go underneath. */
+  readAs?: ReadAs;
 }
 
 interface Measure {
@@ -46,11 +48,12 @@ function toMeasures(events: TabEvent[]): Measure[] {
   return out;
 }
 
-export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, showLyrics = true, showChords = true, onCardClick, follow = true, notation = 'holes' }: Props) {
+export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, showLyrics = true, showChords = true, onCardClick, follow = true, notation = 'holes', readAs = 'holes' }: Props) {
   const activeSet = new Set(activeEvents);
   const { doc, score, indexByKey, harp } = parsed;
   const flats = prefersFlats(doc.meta.key ?? harp.spec.key);
   const numbers = notation === 'numbers';
+  const asNotes = !numbers && readAs === 'notes';
   const doPc = doPitchClass(doc.meta.key ?? harp.spec.key.replace(/^(Low|High)\s+/i, ''));
   const root = useRef<HTMLDivElement>(null);
 
@@ -113,6 +116,12 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, sh
                             <NumberGlyphs midis={ev.kind === 'rest' ? [] : (sev?.midis ?? []).filter((m): m is number => m !== null)} beats={ev.beats} doPc={doPc} />
                           ) : ev.kind === 'rest' ? (
                             <span className="rest-glyph">𝄽</span>
+                          ) : asNotes ? (
+                            <span className={`glyphs ${ev.sounds.length > 1 ? 'stack' : ''}`}>
+                              {ev.sounds.map((s, k) => (
+                                <NoteGlyph key={k} sound={s} midi={sev?.midis[k] ?? null} flats={flats} />
+                              ))}
+                            </span>
                           ) : (
                             <span className={`glyphs ${ev.sounds.length > 1 ? 'stack' : ''}`}>
                               {ev.sounds.map((s, k) => (
@@ -123,7 +132,7 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, sh
                         </span>
                         {showNoteNames && sev && !sev.rest && (
                           <span className="card-note">
-                            {numbers
+                            {numbers || asNotes
                               ? sev.sounds.map((snd) => (snd.type === 'hole' ? holeSoundText(snd) : '')).join(' ')
                               : sev.midis.map((x) => (x === null ? '?' : midiToName(x, flats))).join(' ')}
                           </span>
@@ -160,6 +169,20 @@ export function Glyph({ sound, flats }: { sound: Sound; flats: boolean }) {
       <span className="g-num">{sound.hole}</span>
       {sound.bend > 0 && <span className="g-bend">{'ʼ'.repeat(sound.bend)}</span>}
       {sound.over && <span className="g-over">o</span>}
+    </span>
+  );
+}
+
+/** A note name as the main text (Notes mode): letter, accidental and a smaller octave, in the hole's blow/draw colour. */
+export function NoteGlyph({ sound, midi, flats }: { sound: Sound; midi: number | null; flats: boolean }) {
+  const breath = sound.type === 'hole' ? sound.breath : 'pitch';
+  const name = midi === null ? null : /^([A-G])([#b]?)(-?\d+)$/.exec(midiToName(midi, flats));
+  if (!name) return <span className={`glyph note ${breath}`} title="Not playable on this harmonica">?</span>;
+  return (
+    <span className={`glyph note ${breath}`}>
+      <span className="n-letter">{name[1]}</span>
+      {name[2] && <span className="n-acc">{name[2] === '#' ? '♯' : '♭'}</span>}
+      <span className="n-oct">{name[3]}</span>
     </span>
   );
 }

@@ -150,6 +150,8 @@ export interface AppState {
   /** Chromatic slide button latched on (mouse / button). */
   slideLatch: boolean;
   showNoteNames: boolean;
+  /** Read the music as holes (4 -4) or as notes (C5 D5); the file always stores holes. */
+  readAs: ReadAs;
   recording: RecordingState | null;
   recordAppend: boolean;
   recordGrid: number;
@@ -196,13 +198,15 @@ export interface AppState {
 const initial = loadWorking();
 
 const PREFS_KEY = 'harpforge:prefs';
+export type ReadAs = 'holes' | 'notes';
 export interface SheetShow {
-  tab: { lyrics: boolean; chords: boolean };
+  /** `holes`: the small holes under the notes in Notes mode (note names in Holes mode = showNoteNames). */
+  tab: { lyrics: boolean; chords: boolean; holes: boolean };
   numbers: { holes: boolean; lyrics: boolean; chords: boolean };
   staff: { holes: boolean; lyrics: boolean; chords: boolean; header: boolean };
 }
 const SHOW_ALL: SheetShow = {
-  tab: { lyrics: true, chords: true },
+  tab: { lyrics: true, chords: true, holes: true },
   numbers: { holes: true, lyrics: true, chords: true },
   // The page already shows the title and tempo, so the staff leaves them out unless asked.
   staff: { holes: true, lyrics: true, chords: true, header: false },
@@ -213,6 +217,7 @@ function loadPrefs(): {
   harpHidden?: boolean;
   fitWidth?: boolean;
   showNoteNames?: boolean;
+  readAs?: ReadAs;
   sheetShow?: Partial<SheetShow>;
   printPrefs?: Partial<import('../pages/PrintPage').PrintPrefs>;
   textPrefs?: Partial<import('../core/formats/plaintext').PlainTextOptions>;
@@ -241,6 +246,7 @@ export const useApp = create<AppState>((set) => ({
   keyOffset: 0,
   slideLatch: false,
   showNoteNames: prefs.showNoteNames ?? true,
+  readAs: prefs.readAs === 'notes' ? 'notes' : 'holes',
   recording: null,
   recordAppend: true,
   recordGrid: 0.5,
@@ -318,9 +324,9 @@ export const useApp = create<AppState>((set) => ({
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode && s.harpHidden === prev.harpHidden && s.fitWidth === prev.fitWidth && s.showNoteNames === prev.showNoteNames && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps) return;
+  if (s.soundMode === prev.soundMode && s.harpHidden === prev.harpHidden && s.fitWidth === prev.fitWidth && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpHidden: s.harpHidden, fitWidth: s.fitWidth, showNoteNames: s.showNoteNames, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpHidden: s.harpHidden, fitWidth: s.fitWidth, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps }));
   } catch {
     /* storage unavailable */
   }

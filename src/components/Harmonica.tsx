@@ -26,7 +26,9 @@ export function Harmonica() {
   const held = useApp((s) => s.held);
   const activeEvents = useApp((s) => s.activeEvents);
   const keyOffset = useApp((s) => s.keyOffset);
-  const showNames = useApp((s) => s.showNoteNames);
+  const asNotes = useApp((s) => s.readAs === 'notes');
+  // Notes mode always labels the reeds with their notes.
+  const showNames = useApp((s) => s.showNoteNames) || asNotes;
   const slideLatch = useApp((s) => s.slideLatch);
   const practice = useApp((s) => s.practice);
   const flats = prefersFlats(harp.spec.key);
@@ -140,8 +142,17 @@ export function Harmonica() {
             const m = soundPitch(harp, s);
             return (
               <span key={i} className={`np-chip ${s.breath}`}>
-                <b>{holeSoundText(s)}</b>
-                {m !== null && <span>{midiToName(m, flats)}</span>}
+                {asNotes ? (
+                  <>
+                    <b>{m !== null ? midiToName(m, flats) : '?'}</b>
+                    <span>{holeSoundText(s)}</span>
+                  </>
+                ) : (
+                  <>
+                    <b>{holeSoundText(s)}</b>
+                    {m !== null && <span>{midiToName(m, flats)}</span>}
+                  </>
+                )}
               </span>
             );
           })
