@@ -53,7 +53,15 @@ export function SongLine({ editable }: { editable: boolean }) {
     return (
       <header className="song-line">
         <h1 className="sl-title">{meta.title || 'Untitled'}</h1>
-        {meta.artist && <span className="sl-artist">{meta.artist}</span>}
+        {meta.artist ? (
+          <span className="sl-artist">{meta.artist}</span>
+        ) : (
+          // No artist: a dash, in a box as wide as the editor's empty "Artist" field.
+          <span className="sl-artist empty" title="No artist set">
+            <span className="sl-sizer" aria-hidden>Artist</span>
+            <span>—</span>
+          </span>
+        )}
         <span className="sl-item">
           <span className="sl-label">Key</span>
           <span className={`sl-field pick ${meta.key ? '' : 'unset'}`}>{meta.key ?? (detected ? `sounds like ${detected}` : '—')}</span>

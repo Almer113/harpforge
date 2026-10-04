@@ -1260,3 +1260,11 @@ html { scrollbar-gutter: stable; }
 /* The music and the side panel 10px apart (as the bar and the content are), which leaves the music
    1072px at the widest: four 4/4 measures at 100% zoom (4 × (4 beats × 64px + 12px)). */
 .ve-main { gap: 10px; }
+
+/* Cards: 2px side padding, so the glyph has as much room as possible. */
+.ve-item { padding: 2px 2px; }
+
+/* Play, no artist: "—" where the editor shows its "Artist" placeholder, in a box exactly as wide. */
+.song-line .sl-artist.empty { display: inline-grid; min-width: 5ch; color: var(--faint); }
+.sl-artist.empty > span { grid-area: 1 / 1; }
+.sl-artist.empty > .sl-sizer { visibility: hidden; }

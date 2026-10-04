@@ -87,11 +87,55 @@ function stepZoom(dir: 1 | -1) {
 }
 
 /**
- * How much of a note card fits its width (cards are exactly as wide as their length):
- * full; the glyph a size smaller; just a small hole number; or only the blow/draw colour.
+ * How much of a note card fits its width (cards are exactly as long as their notes): full,
+ * if its glyph fits at full size; the glyph a size smaller; just a small hole number; or only
+ * the blow/draw colour. `ems` is the glyph's width in em (from glyphEms).
  */
-function detailLevel(width: number): '' | 'lod-mid' | 'lod-small' | 'lod-bar' {
-  return width >= 40 ? '' : width >= 24 ? 'lod-mid' : width >= 12 ? 'lod-small' : 'lod-bar';
+function detailLevel(width: number, ems: number, stack: boolean): '' | 'lod-mid' | 'lod-small' | 'lod-bar' {
+  const inner = width - 6; // padding and border
+  if (inner >= ems * (stack ? 13 : 18)) return '';
+  if (inner >= ems * (stack ? 11 : 14)) return 'lod-mid';
+  return width >= 12 ? 'lod-small' : 'lod-bar';
+}
+
+/** The widest glyph on a card, in em of its monospace font ("−10ʼ" ≈ 2.6, "C♯5" ≈ 1.9). */
+function glyphEms(sounds: Sound[], midis: (number | null)[], asNotes: boolean, flats: boolean): number {
+  const CH = 0.6; // a monospace character is 0.6 em wide
+  let most = CH;
+  sounds.forEach((s, k) => {
+    let w: number;
+    if (s.type !== 'hole') w = midiToName((s as { midi: number }).midi, flats).length * CH * (16 / 18);
+    else if (asNotes) {
+      const name = midis[k] === null ? '?' : midiToName(midis[k]!, flats);
+      w = (name.length - 1) * CH + 0.7 * CH; // the octave is smaller
+    } else w = (String(s.hole).length + (s.breath === 'draw' ? 0.8 : 0) + (s.slide ? 1 : 0) + (s.over ? 1 : 0) + s.bend * 0.5) * CH;
+    most = Math.max(most, w);
+  });
+  return most;
+}
+
+/** A lyric's width in the card's lyric font (measured once per text). */
+const lyricWidths = new Map<string, number>();
+let lyricCtx: CanvasRenderingContext2D | null | undefined;
+function lyricWidth(text: string): number {
+  const hit = lyricWidths.get(text);
+  if (hit !== undefined) return hit;
+  if (lyricCtx === undefined) {
+    lyricCtx = document.createElement('canvas').getContext('2d');
+    if (lyricCtx) lyricCtx.font = 'italic 11px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
+  }
+  const w = lyricCtx ? lyricCtx.measureText(text).width : text.length * 5.5;
+  lyricWidths.set(text, w);
+  return w;
+}
+
+/**
+ * A lyric that doesn't fit its room: cut with "…" (by the CSS), or just "…" when not even two
+ * letters would show. Either way the whole lyric is in the hover text.
+ */
+function fitLyric(text: string, room: number): { shown: string; cut: boolean } {
+  if (lyricWidth(text) <= room) return { shown: text, cut: false };
+  return { shown: lyricWidth(text.slice(0, 2) + '…') > room ? '…' : text, cut: true };
 }
 
 /** Absolute start beat of each measure as played (short bars and overfull bars take their real length). */
@@ -980,7 +1024,9 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
                   const laneEnd = Math.max(song.cap, len);
                   const nextWith = (key: 'chord' | 'lyric') => meas.items.reduce((best, o) => (o.start > it.start + EPS && o[key] !== undefined && o.start < best ? o.start : best), laneEnd);
                   const w = cardW(it.dur);
-                  const lod = it.dur <= EPS ? '' : detailLevel(w);
+                  const lod = it.dur <= EPS ? '' : detailLevel(w, glyphEms(it.sounds, it.sounds.map((s) => (s.type === 'pitch' ? s.midi : soundPitch(harp, s))), asNotes, flats), it.sounds.length > 1);
+                  const lyricRoom = (nextWith('lyric') - it.start) * zoom - 6;
+                  const lyric = it.lyric ? fitLyric(it.lyric, lyricRoom) : undefined;
                   const selected = ve.selection.some((p) => samePos(p, pos));
                   const just = !selected && samePos(ve.justEntered, pos);
                   const playing = playingAt.has(+(starts[mi] + it.start).toFixed(4));
@@ -1014,7 +1060,9 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
                             : midis.map((x) => (x === null ? '?' : midiToName(x, flats))).join(' ')}
                         </span>
                       )}
-                      <span className="ve-lyric" style={{ maxWidth: (nextWith('lyric') - it.start) * zoom - 6 }}>{it.lyric ?? ''}</span>
+                      <span className="ve-lyric" style={{ maxWidth: lyricRoom }} title={lyric?.cut && !lod ? it.lyric : undefined}>
+                        {lyric?.shown ?? ''}
+                      </span>
                       {it.dur > EPS && <span className="ve-resize" title="Drag to change the length" />}
 
                     </div>

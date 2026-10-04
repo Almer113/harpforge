@@ -243,6 +243,7 @@ function loadPrefs(): {
   harpSize?: HarpSize;
   fitWidth?: boolean;
   dockOpen?: boolean;
+  zoom?: number;
   showNoteNames?: boolean;
   readAs?: ReadAs;
   sheetShow?: { [K in keyof SheetShow]?: Partial<SheetShow[K]> };
@@ -269,6 +270,7 @@ function loadPrefs(): {
     harpSize: p.harpSize === 'full' || p.harpSize === 'slim' || p.harpSize === 'hidden' ? p.harpSize : p.harpHidden === true ? 'hidden' : undefined,
     fitWidth: bool(p.fitWidth),
     dockOpen: bool(p.dockOpen),
+    zoom: typeof p.zoom === 'number' && p.zoom >= 32 && p.zoom <= 160 ? Math.round(p.zoom) : undefined,
     showNoteNames: bool(p.showNoteNames),
     readAs: p.readAs === 'notes' ? 'notes' : p.readAs === 'holes' ? 'holes' : undefined,
     sheetShow: { tab: like(sheet.tab, SHOW_ALL.tab), numbers: like(sheet.numbers, SHOW_ALL.numbers), staff: like(sheet.staff, SHOW_ALL.staff) },
@@ -359,7 +361,7 @@ export const useApp = create<AppState>((set) => ({
     dotted: false,
     triplet: false,
     snap: 0,
-    zoom: 64,
+    zoom: prefs.zoom ?? 64,
     step: false,
     insert: false,
     lastSounds: [{ type: 'hole', hole: 4, breath: 'blow', bend: 0, over: false, slide: false }],
@@ -409,9 +411,9 @@ export const useApp = create<AppState>((set) => ({
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps) return;
+  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.ve.zoom === prev.ve.zoom && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, zoom: s.ve.zoom, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps }));
   } catch {
     /* storage unavailable */
   }
