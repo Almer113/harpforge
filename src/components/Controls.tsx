@@ -149,41 +149,53 @@ const Icon = {
   rec: <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="7" fill="currentColor" /></svg>,
 };
 
-/** Playback settings: loop, metronome, speed and sound (the editor's ♫ menu). */
-function PlaybackSettings() {
-  const loop = useApp((s) => s.loop);
-  const metronome = useApp((s) => s.metronome);
+/**
+ * The sound menu (♫ Real / ♫ Synth), the same on both pages. `withSpeed` (the editor, which has
+ * no speed slider in its bar): the speed is in the menu too, and shows on the button when it isn't 100%.
+ */
+function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
   const speed = useApp((s) => s.speed);
   const soundMode = useApp((s) => s.soundMode);
   const samplesStatus = useApp((s) => s.samplesStatus);
   const { doc } = useParsed();
+  const showSpeed = withSpeed && speed !== 1;
   return (
-    <div className="pb-settings">
-      <label className="check">
-        <input type="checkbox" checked={loop} onChange={(e) => useApp.setState({ loop: e.target.checked })} /> Loop
-      </label>
-      <label className="check">
-        <input type="checkbox" checked={metronome} onChange={(e) => useApp.setState({ metronome: e.target.checked })} /> Metronome
-      </label>
-      <label className="pb-row">
-        <span>Speed</span>
-        <input type="range" min={0.4} max={1.6} step={0.05} value={speed} aria-label="Speed" onChange={(e) => useApp.setState({ speed: parseFloat(e.target.value) })} onDoubleClick={() => useApp.setState({ speed: 1 })} title="Double-click to reset" />
-        <span className="t-value">{Math.round(speed * 100)}% · {Math.round(doc.meta.tempo * speed)} bpm</span>
-      </label>
-      <label className="pb-row">
-        <span>Sound</span>
-        <select value={soundMode} aria-label="Sound" onChange={(e) => useApp.setState({ soundMode: e.target.value as 'samples' | 'synth' })}>
-          <option value="samples">Real harmonica{soundMode === 'samples' && samplesStatus === 'loading' ? ' (loading…)' : ''}{samplesStatus === 'error' ? ' (unavailable)' : ''}</option>
-          <option value="synth">Synth</option>
-        </select>
-      </label>
-    </div>
+    <Popover
+      label={`♫ ${soundMode === 'samples' ? 'Real' : 'Synth'}${showSpeed ? ` · ${Math.round(speed * 100)}%` : ''} ▾`}
+      buttonClass="btn small ghost"
+      title={withSpeed ? 'Sound and speed: the real harmonica (recordings) or a synthesized reed' : 'Sound: the real harmonica (recordings) or a synthesized reed'}
+      ariaLabel={withSpeed ? 'Sound and speed' : 'Sound'}
+      kind="panel"
+      panelClass="menu pb-menu"
+    >
+      <div className="pb-settings">
+        <label className="check">
+          <input type="radio" name="sound-mode" checked={soundMode === 'samples'} onChange={() => useApp.setState({ soundMode: 'samples' })} />
+          Real harmonica{soundMode === 'samples' && samplesStatus === 'loading' ? ' (loading…)' : ''}{samplesStatus === 'error' ? ' (unavailable)' : ''}
+        </label>
+        <span className="mi-hint pb-hint">Recordings of a Hohner Special 20 (public domain, VCSL)</span>
+        <label className="check">
+          <input type="radio" name="sound-mode" checked={soundMode === 'synth'} onChange={() => useApp.setState({ soundMode: 'synth' })} />
+          Synth
+        </label>
+        <span className="mi-hint pb-hint">A generated reed sound</span>
+        {withSpeed && (
+          <label className="pb-row pb-speed">
+            <span>Speed</span>
+            <input type="range" min={0.4} max={1.6} step={0.05} value={speed} aria-label="Speed" onChange={(e) => useApp.setState({ speed: parseFloat(e.target.value) })} onDoubleClick={() => useApp.setState({ speed: 1 })} title="Double-click to reset" />
+            <span className="t-value">{Math.round(speed * 100)}% · {Math.round(doc.meta.tempo * speed)} bpm</span>
+          </label>
+        )}
+      </div>
+    </Popover>
   );
 }
 
-/** Play / pause and stop (the editor bar starts with them, as the Play page's transport does). */
+/** Play / pause, stop, loop and metronome: the start of the bar on both pages. */
 export function PlayStop() {
   const play = useApp((s) => s.play);
+  const loop = useApp((s) => s.loop);
+  const metronome = useApp((s) => s.metronome);
   const recording = useApp((s) => s.recording);
   return (
     <div className="t-group play-stop">
@@ -193,22 +205,22 @@ export function PlayStop() {
       <button className="t-btn" onClick={stop} disabled={play === 'stopped' || !!recording} title="Stop (Esc)" aria-label="Stop">
         {Icon.stop}
       </button>
+      <button className={`t-btn toggle ${loop ? 'on' : ''}`} onClick={() => useApp.setState({ loop: !loop })} title="Loop" aria-label="Loop" aria-pressed={loop}>
+        {Icon.loop}
+      </button>
+      <button className={`t-btn toggle ${metronome ? 'on' : ''}`} onClick={() => useApp.setState({ metronome: !metronome })} title="Metronome during playback" aria-label="Metronome" aria-pressed={metronome}>
+        {Icon.metro}
+      </button>
     </div>
   );
 }
 
 /**
- * Play and stop, and the harmonica. `compact` (the editor: play and stop are PlayStop, at its start): loop, metronome, speed and sound
- * are in a ♫ menu, which shows a dot while loop or the metronome is on.
+ * The transport. Full (Play): play, stop, loop, metronome, speed, sound and the harmonica.
+ * `compact` (the editor, whose bar starts with PlayStop): the sound menu (with the speed) and the harmonica.
  */
 export function Transport({ compact = false }: { compact?: boolean }) {
-  const play = useApp((s) => s.play);
-  const loop = useApp((s) => s.loop);
-  const metronome = useApp((s) => s.metronome);
   const speed = useApp((s) => s.speed);
-  const soundMode = useApp((s) => s.soundMode);
-  const samplesStatus = useApp((s) => s.samplesStatus);
-  const recording = useApp((s) => s.recording);
   const { doc } = useParsed();
   const bpm = Math.round(doc.meta.tempo * speed);
 
@@ -238,23 +250,9 @@ export function Transport({ compact = false }: { compact?: boolean }) {
   }, []);
 
   if (compact) {
-    const on = loop || metronome || speed !== 1;
     return (
       <div className="transport compact">
-        <Popover
-          label={
-            <>
-              ♫ ▾{on && <span className="pb-dot" aria-hidden />}
-            </>
-          }
-          buttonClass="btn small ghost pb-btn"
-          title={`Playback: loop ${loop ? 'on' : 'off'}, metronome ${metronome ? 'on' : 'off'}, ${Math.round(speed * 100)}% speed`}
-          ariaLabel="Playback settings"
-          kind="panel"
-          panelClass="menu pb-menu"
-        >
-          <PlaybackSettings />
-        </Popover>
+        <SoundMenu withSpeed />
         <HarmonicaChip />
       </div>
     );
@@ -262,20 +260,7 @@ export function Transport({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className="transport">
-      <div className="t-group">
-        <button className="t-btn primary" onClick={togglePlay} disabled={!!recording} title="Play / pause (Enter)" aria-label={play === 'playing' ? 'Pause' : 'Play'}>
-          {play === 'playing' ? Icon.pause : Icon.play}
-        </button>
-        <button className="t-btn" onClick={stop} disabled={play === 'stopped' || !!recording} title="Stop (Esc)" aria-label="Stop">
-          {Icon.stop}
-        </button>
-        <button className={`t-btn toggle ${loop ? 'on' : ''}`} onClick={() => useApp.setState({ loop: !loop })} title="Loop" aria-label="Loop" aria-pressed={loop}>
-          {Icon.loop}
-        </button>
-        <button className={`t-btn toggle ${metronome ? 'on' : ''}`} onClick={() => useApp.setState({ metronome: !metronome })} title="Metronome during playback" aria-label="Metronome" aria-pressed={metronome}>
-          {Icon.metro}
-        </button>
-      </div>
+      <PlayStop />
 
       <div className="t-group speed">
         <span className="t-label">Speed</span>
@@ -294,27 +279,7 @@ export function Transport({ compact = false }: { compact?: boolean }) {
       </div>
 
       <div className="t-group t-harp">
-        <Popover
-          label={`♫ ${soundMode === 'samples' ? 'Real' : 'Synth'} ▾`}
-          buttonClass="btn small ghost"
-          title="Sound: the real harmonica (recordings) or a synthesized reed"
-          ariaLabel="Sound"
-          kind="panel"
-          panelClass="menu pb-menu"
-        >
-          <div className="pb-settings">
-            <label className="check">
-              <input type="radio" name="sound-mode" checked={soundMode === 'samples'} onChange={() => useApp.setState({ soundMode: 'samples' })} />
-              Real harmonica{soundMode === 'samples' && samplesStatus === 'loading' ? ' (loading…)' : ''}{samplesStatus === 'error' ? ' (unavailable)' : ''}
-            </label>
-            <span className="mi-hint pb-hint">Recordings of a Hohner Special 20 (public domain, VCSL)</span>
-            <label className="check">
-              <input type="radio" name="sound-mode" checked={soundMode === 'synth'} onChange={() => useApp.setState({ soundMode: 'synth' })} />
-              Synth
-            </label>
-            <span className="mi-hint pb-hint">A generated reed sound</span>
-          </div>
-        </Popover>
+        <SoundMenu />
         <HarmonicaChip />
       </div>
 

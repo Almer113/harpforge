@@ -31,7 +31,17 @@ function MetaInput({ field, value, placeholder, label, className = '' }: { field
   );
 }
 
-/** The song's line: editable (the editor) or read-only (the Play page), laid out the same. */
+const Chevron = (
+  <svg className="sl-chev" viewBox="0 0 10 6" width="10" height="6" aria-hidden>
+    <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+/**
+ * The song's line: editable (the editor) or read-only (the Play page). Both use the same boxes
+ * (title, artist, and a field box for key, time and tempo), so everything sits in the same place;
+ * the editor's field boxes are outlined, with a ▾ on the pickers, and Play's are plain text.
+ */
 export function SongLine({ editable }: { editable: boolean }) {
   const { doc, harp } = useParsed();
   const { meta } = doc;
@@ -46,15 +56,15 @@ export function SongLine({ editable }: { editable: boolean }) {
         {meta.artist && <span className="sl-artist">{meta.artist}</span>}
         <span className="sl-item">
           <span className="sl-label">Key</span>
-          {meta.key ?? (detected ? `sounds like ${detected}` : '—')}
+          <span className={`sl-field pick ${meta.key ? '' : 'unset'}`}>{meta.key ?? (detected ? `sounds like ${detected}` : '—')}</span>
         </span>
         <span className="sl-item">
           <span className="sl-label">Time</span>
-          {meta.time}
+          <span className="sl-field pick">{meta.time}</span>
         </span>
         <span className="sl-item">
           <span className="sl-label">Tempo</span>
-          {meta.tempo} bpm
+          <span className="sl-field">{meta.tempo}<span className="sl-unit">bpm</span></span>
         </span>
       </header>
     );
@@ -82,42 +92,52 @@ export function SongLine({ editable }: { editable: boolean }) {
       <MetaInput field="artist" value={meta.artist ?? ''} placeholder="Artist" label="Artist" className="sl-artist" />
       <label className="sl-item">
         <span className="sl-label">Key</span>
-        <select
-          value={meta.key ?? ''}
-          onChange={(e) => {
-            const s = useApp.getState();
-            s.setText(setMetaFields(s.text, { key: e.target.value || undefined }));
-          }}
-        >
-          <option value="">{detected ? `sounds like ${detected}` : '—'}</option>
-          {KEYS.includes(meta.key ?? '') || !meta.key ? null : <option value={meta.key}>{meta.key}</option>}
-          {KEYS.map((k) => (
-            <option key={k} value={k}>{k}</option>
-          ))}
-        </select>
+        <span className={`sl-field pick ${meta.key ? '' : 'unset'}`}>
+          <select
+            value={meta.key ?? ''}
+            title="The song's key (none set: what the notes suggest)"
+            onChange={(e) => {
+              const s = useApp.getState();
+              s.setText(setMetaFields(s.text, { key: e.target.value || undefined }));
+            }}
+          >
+            <option value="">{detected ? `sounds like ${detected}` : '—'}</option>
+            {KEYS.includes(meta.key ?? '') || !meta.key ? null : <option value={meta.key}>{meta.key}</option>}
+            {KEYS.map((k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+          {Chevron}
+        </span>
       </label>
       <label className="sl-item">
         <span className="sl-label">Time</span>
-        <select value={meta.time} onChange={(e) => changeTime(e.target.value)}>
-          {!TIMES.includes(meta.time) && <option value={meta.time}>{meta.time}</option>}
-          {TIMES.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
+        <span className="sl-field pick">
+          <select value={meta.time} title="Time signature" onChange={(e) => changeTime(e.target.value)}>
+            {!TIMES.includes(meta.time) && <option value={meta.time}>{meta.time}</option>}
+            {TIMES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+          {Chevron}
+        </span>
       </label>
       <label className="sl-item">
         <span className="sl-label">Tempo</span>
-        <input
-          className="meta-input sl-tempo"
-          type="number"
-          min={20}
-          max={400}
-          defaultValue={meta.tempo}
-          key={meta.tempo}
-          onBlur={(e) => setTempo(parseFloat(e.target.value))}
-          onKeyDown={(e) => e.key === 'Enter' && setTempo(parseFloat((e.target as HTMLInputElement).value))}
-        />
-        bpm
+        <span className="sl-field">
+          <input
+            className="sl-tempo"
+            type="number"
+            min={20}
+            max={400}
+            defaultValue={meta.tempo}
+            key={meta.tempo}
+            title="Tempo in beats per minute (20 to 400; arrow keys step it)"
+            onBlur={(e) => setTempo(parseFloat(e.target.value))}
+            onKeyDown={(e) => e.key === 'Enter' && setTempo(parseFloat((e.target as HTMLInputElement).value))}
+          />
+          <span className="sl-unit">bpm</span>
+        </span>
       </label>
     </header>
   );
