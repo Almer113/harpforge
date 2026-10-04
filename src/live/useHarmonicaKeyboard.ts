@@ -9,6 +9,7 @@
 
 import { useEffect } from 'react';
 import { canOver, maxBend } from '../core/instruments';
+import { keysTaken } from './focus';
 import type { Breath, HoleSound } from '../core/types';
 import { getParsed, useApp } from '../state/store';
 import { change, press, release, releaseAll } from './livePlayer';
@@ -20,11 +21,6 @@ export const DRAW_LABELS = ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '[
 
 const BEND_STEP_MS = 260;
 
-function isTyping(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el) return false;
-  return el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
-}
 
 export function useHarmonicaKeyboard(enabled: boolean, opts: { arrows?: boolean } = {}) {
   const arrows = opts.arrows ?? true;
@@ -70,7 +66,7 @@ export function useHarmonicaKeyboard(enabled: boolean, opts: { arrows?: boolean 
     };
 
     const onDown = (e: KeyboardEvent) => {
-      if (isTyping(e.target) || e.ctrlKey || e.metaKey) return;
+      if (keysTaken(e) || e.ctrlKey || e.metaKey) return;
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
         if (!e.repeat) startBend();
         return;
@@ -80,8 +76,10 @@ export function useHarmonicaKeyboard(enabled: boolean, opts: { arrows?: boolean 
         return;
       }
       if (e.code === 'Space') {
+        // Space is the slide button, but only on harps that have one (else it presses buttons as usual).
+        if (!harp().hasSlide) return;
         e.preventDefault();
-        if (!e.repeat && harp().hasSlide) {
+        if (!e.repeat) {
           slide = true;
           refreshHeld();
         }

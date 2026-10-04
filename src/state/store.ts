@@ -111,6 +111,14 @@ export interface PracticeState {
   wrongAt: number;
 }
 
+/** One undo step: the text, and where the visual editor's selection was. */
+export interface HistoryEntry {
+  text: string;
+  sel: Pick<VisualState, 'selection' | 'caret' | 'measure'>;
+}
+
+const snapshot = (s: { text: string; ve: VisualState }): HistoryEntry => ({ text: s.text, sel: { selection: s.ve.selection, caret: s.ve.caret, measure: s.ve.measure } });
+
 export interface RecordingState {
   mode: 'timed' | 'free';
   phase: 'count-in' | 'recording';
@@ -164,7 +172,7 @@ export interface AppState {
   setText(t: string, opts?: { kind?: 'typing' | 'edit' }): void;
   undo(): void;
   redo(): void;
-  history: { past: string[]; future: string[]; lastKind: string; lastAt: number };
+  history: { past: HistoryEntry[]; future: HistoryEntry[]; lastKind: string; lastAt: number; groupAt: number };
   loadText(t: string, docId?: string | null, saved?: boolean): void;
   /** Marks `text` (what was actually written to the library) as saved under `docId`. */
   markSaved(docId: string, text?: string): void;
@@ -234,28 +242,31 @@ export const useApp = create<AppState>((set) => ({
       const kind = opts?.kind ?? 'edit';
       const now = Date.now();
       const h = s.history;
-      const merge = kind === 'typing' && h.lastKind === 'typing' && now - h.lastAt < 1200;
+      // Quick keystrokes make one undo step, but not forever: a step covers at most a few seconds.
+      const merge = kind === 'typing' && h.lastKind === 'typing' && now - h.lastAt < 1200 && now - h.groupAt < 5000;
       return {
         text,
         selectedEvent: null,
-        history: { past: merge ? h.past : [...h.past, s.text].slice(-300), future: [], lastKind: kind, lastAt: now },
+        history: { past: merge ? h.past : [...h.past, snapshot(s)].slice(-300), future: [], lastKind: kind, lastAt: now, groupAt: merge ? h.groupAt : now },
       };
     }),
   undo: () =>
     set((s) => {
       const h = s.history;
-      if (!h.past.length) return {};
-      return { text: h.past[h.past.length - 1], selectedEvent: null, history: { past: h.past.slice(0, -1), future: [s.text, ...h.future], lastKind: 'undo', lastAt: 0 } };
+      const prev = h.past[h.past.length - 1];
+      if (!prev) return {};
+      return { text: prev.text, ve: { ...s.ve, ...prev.sel }, selectedEvent: null, history: { past: h.past.slice(0, -1), future: [snapshot(s), ...h.future], lastKind: 'undo', lastAt: 0, groupAt: 0 } };
     }),
   redo: () =>
     set((s) => {
       const h = s.history;
-      if (!h.future.length) return {};
-      return { text: h.future[0], selectedEvent: null, history: { past: [...h.past, s.text], future: h.future.slice(1), lastKind: 'redo', lastAt: 0 } };
+      const next = h.future[0];
+      if (!next) return {};
+      return { text: next.text, ve: { ...s.ve, ...next.sel }, selectedEvent: null, history: { past: [...h.past, snapshot(s)], future: h.future.slice(1), lastKind: 'redo', lastAt: 0, groupAt: 0 } };
     }),
-  history: { past: [], future: [], lastKind: '', lastAt: 0 },
+  history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 },
   loadText: (text, docId = null, saved = false) =>
-    set({ text, docId, savedText: saved ? text : null, selectedEvent: null, activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0 } }),
+    set({ text, docId, savedText: saved ? text : null, selectedEvent: null, activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } }),
   markSaved: (docId, text) => set((s) => ({ docId, savedText: text ?? s.text })),
   notify: (message) => set({ toast: { message, id: Date.now() } }),
 }));

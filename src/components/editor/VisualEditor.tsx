@@ -42,6 +42,8 @@ import { getParsed, useApp, useParsed, type VisualState } from '../../state/stor
 import { Harmonica } from '../Harmonica';
 import { Glyph } from '../TabView';
 import { Inspector } from './Inspector';
+import { keysTaken } from '../../live/focus';
+import { openShortcuts } from '../Shortcuts';
 
 // ---- Helpers shared with the inspector ------------------------------------------------
 
@@ -141,15 +143,15 @@ export function VisualEditor() {
   // ---- Keyboard shortcuts ----
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement;
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable) return;
+      if (keysTaken(e)) return;
       const st = useApp.getState();
       const v = st.ve;
       const s = fromDoc(getParsed(st.text).doc);
       const sel = v.selection;
       const ctrl = e.ctrlKey || e.metaKey;
 
-      if (ctrl && e.key.toLowerCase() === 'c' && sel.length) {
+      // Copy notes only when no page text is selected (then it's an ordinary copy).
+      if (ctrl && e.key.toLowerCase() === 'c' && sel.length && !window.getSelection()?.toString()) {
         const abs = (p: Pos) => absBeat(s, p);
         const items = sel.map((p) => ({ p, it: s.measures[p.m]?.items.find((x) => Math.abs(x.start - p.start) < EPS) })).filter((x) => x.it);
         const base = Math.min(...items.map((x) => abs(x.p)));
@@ -259,7 +261,6 @@ export function VisualEditor() {
 
   return (
     <div className="ve">
-      <Toolbar song={song} />
       {!hasBars && song.measures.some((m) => m.items.length) && (
         <div className="ve-notice">
           This tab has no bar lines, so it's shown in bars of {parsed.doc.meta.time}. Your first edit here adds the bar lines to the text.
@@ -340,7 +341,15 @@ function addNoteAtCaret() {
 const UNDO = <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 14L4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" /></svg>;
 const REDO = <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 14l5-5-5-5" /><path d="M20 9H10a6 6 0 0 0 0 12h3" /></svg>;
 
+/** The visual editor's tools, shown in the editor page's sticky header. */
+export function VisualToolbar() {
+  const parsed = useParsed();
+  const song = useMemo(() => fromDoc(parsed.doc), [parsed]);
+  return <Toolbar song={song} />;
+}
+
 function Toolbar({ song }: { song: Song }) {
+  const fit = useApp((s) => s.fitWidth);
   const ve = useApp((s) => s.ve);
   const setVe = useApp((s) => s.setVe);
   const canUndo = useApp((s) => s.history.past.length > 0);
@@ -407,8 +416,12 @@ function Toolbar({ song }: { song: Song }) {
         <input type="range" min={36} max={120} step={4} value={ve.zoom} onChange={(e) => setVe({ zoom: parseInt(e.target.value, 10) })} />
       </div>
       <div className="tb-group">
-        <button className="btn small ghost" onClick={() => apply(insertMeasure(song, song.measures.length), { caret: { m: song.measures.length, start: 0 }, measure: song.measures.length })} title="Add a measure at the end">
-          + Measure
+        <button
+          className={`btn small ghost ${fit ? '' : 'on'}`}
+          onClick={() => useApp.setState({ fitWidth: !fit })}
+          title={fit ? 'Measures fill each row. Click to show the rows as the tab’s lines of text.' : 'Rows follow the tab’s lines of text. Click to fill each row.'}
+        >
+          {fit ? '⇥ Fit width' : '↵ Text lines'}
         </button>
       </div>
     </div>
@@ -451,6 +464,9 @@ function segments(cap: number, abs: number, dur: number): { m: number; start: nu
 
 function Score({ song, starts, playingAt, flats, showNames }: { song: Song; starts: number[]; playingAt: Set<number>; flats: boolean; showNames: boolean }) {
   const ve = useApp((s) => s.ve);
+  // Fit to width: measures fill each row and only sections start a new one; the
+  // text's own line breaks show as a small mark.
+  const fit = useApp((s) => s.fitWidth);
   const setVe = useApp((s) => s.setVe);
   const harp = useParsed().harp;
   const zoom = ve.zoom;
@@ -587,11 +603,14 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
           const len = measureLength(meas);
           const over = len > song.cap + EPS;
           return [
-            meas.lineBreak && mi > 0 ? <div key={`br${mi}`} className="ve-break" /> : null,
+            meas.lineBreak && mi > 0 && (!fit || meas.section !== undefined) ? <div key={`br${mi}`} className="ve-break" /> : null,
             <div key={mi} className={`ve-measure ${ve.measure === mi ? 'current' : ''} ${over ? 'overfull' : ''}`}>
               <div className="ve-mhead">
                 <span className="ve-mnum">{mi + 1}</span>
                 {meas.section !== undefined && <span className="ve-section">{meas.section}</span>}
+                {fit && meas.lineBreak && mi > 0 && meas.section === undefined && (
+                  <span className="ve-linemark" title="Starts a new line in the tab">↵</span>
+                )}
                 {meas.startBar === 'repeat-start' && <span className="ve-barflag">𝄆</span>}
                 {meas.endBar === 'repeat-end' && <span className="ve-barflag end">𝄇</span>}
                 {over && <span className="ve-warn" title="This measure holds more beats than the time signature allows">too long</span>}
@@ -662,8 +681,8 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
       </div>
       {ve.caret.m >= song.measures.length && <p className="muted small">The caret is after the last measure — adding a note there creates a new measure.</p>}
       <div className="ve-legend muted small">
-        Click a slot to place the caret · double-click to add a note · drag notes to move them (Alt = copy) · drag a note's right edge to change its length ·
-        ←/→ select · ↑/↓ next note (Shift: by semitone, incl. bends) · Z X C V B lengths · N dotted · M triplet · L tie · / rest · Del delete · Ctrl+C/V copy/paste
+        Click a slot for the caret · double-click to add a note · drag to move (Alt = copy) · drag a note's right edge to change its length ·{' '}
+        <button className="link-btn" onClick={openShortcuts}>all shortcuts (?)</button>
       </div>
     </div>
   );

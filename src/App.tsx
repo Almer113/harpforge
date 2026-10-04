@@ -4,6 +4,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { ExportMenu } from './components/ExportMenu';
 import { ImportDialog } from './components/ImportDialog';
 import { Menu } from './components/Menu';
+import { openShortcuts, Shortcuts } from './components/Shortcuts';
 import { ConvertPage } from './pages/ConvertPage';
 import { EditorPage } from './pages/EditorPage';
 import { LibraryPage } from './pages/LibraryPage';
@@ -30,6 +31,7 @@ function TabActions() {
   const docId = useApp((s) => s.docId);
   return (
     <div className="tab-actions">
+      <button className="btn small ghost kbd-btn" onClick={openShortcuts} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
       <Menu
         label="Import ▾"
         title="Open a file, paste text, or start a new tab"
@@ -170,6 +172,7 @@ export function App() {
         </div>
       )}
       <ImportDialog />
+      <Shortcuts />
       <Toast />
     </div>
   );

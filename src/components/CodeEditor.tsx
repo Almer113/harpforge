@@ -1,7 +1,7 @@
 // A lightweight .htab editor: a transparent textarea over a syntax-highlighted
-// mirror, with error squiggles.
+// mirror, with error squiggles. Long lines wrap; line numbers sit beside each line.
 
-import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
+import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef } from 'react';
 import type { ParseIssue } from '../core/htab/types';
 
 export interface CodeEditorHandle {
@@ -77,7 +77,10 @@ function classify(text: string, issues: ParseIssue[]): string[] {
 
 export const CodeEditor = forwardRef<CodeEditorHandle, Props>(function CodeEditor({ value, onChange, issues }, ref) {
   const ta = useRef<HTMLTextAreaElement>(null);
-  const mirror = useRef<HTMLPreElement>(null);
+  const mirror = useRef<HTMLDivElement>(null);
+  // The text this editor last produced: anything else (undo, an edit elsewhere) came from outside.
+  const emitted = useRef(value);
+  const previous = useRef(value);
 
   useImperativeHandle(ref, () => ({
     select(start, end) {
@@ -85,66 +88,76 @@ export const CodeEditor = forwardRef<CodeEditorHandle, Props>(function CodeEdito
       if (!el) return;
       el.focus({ preventScroll: true });
       el.setSelectionRange(start, end);
-      // Scroll the selection into view.
+      // Scroll the selection's line into view (lines wrap, so measure it in the mirror).
       const line = value.slice(0, start).split('\n').length - 1;
-      const lh = parseFloat(getComputedStyle(el).lineHeight) || 20;
-      const target = line * lh - el.clientHeight / 2;
-      el.scrollTop = Math.max(0, target);
+      const lineEl = mirror.current?.children[line] as HTMLElement | undefined;
+      if (lineEl) el.scrollTop = Math.max(0, lineEl.offsetTop - el.clientHeight / 2);
     },
   }));
 
+  // Undo/redo replace the whole text: keep the caret where the change happened, not at the end.
+  useLayoutEffect(() => {
+    const el = ta.current;
+    const before = previous.current;
+    previous.current = value;
+    if (!el || value === emitted.current || document.activeElement !== el) return;
+    emitted.current = value;
+    let p = 0;
+    while (p < value.length && p < before.length && value[p] === before[p]) p++;
+    el.setSelectionRange(p, p);
+  }, [value]);
+
+  // One block per line, so long lines can wrap and line numbers stay beside their line.
   const highlighted = useMemo(() => {
     const cls = classify(value, issues);
-    const out: React.ReactNode[] = [];
+    const lines: React.ReactNode[] = [];
     let i = 0;
-    while (i < value.length) {
-      let j = i + 1;
-      while (j < value.length && cls[j] === cls[i] && value[j] !== '\n') j++;
-      out.push(cls[i] ? <span key={i} className={cls[i]}>{value.slice(i, j)}</span> : value.slice(i, j));
-      i = j;
+    for (const line of value.split('\n')) {
+      const parts: React.ReactNode[] = [];
+      const end = i + line.length;
+      let k = i;
+      while (k < end) {
+        let j = k + 1;
+        while (j < end && cls[j] === cls[k]) j++;
+        parts.push(cls[k] ? <span key={k} className={cls[k]}>{value.slice(k, j)}</span> : value.slice(k, j));
+        k = j;
+      }
+      lines.push(<div key={i} className="cl">{parts.length ? parts : '​'}</div>);
+      i = end + 1;
     }
-    out.push('\n');
-    return out;
+    return lines;
   }, [value, issues]);
-
-  const lineCount = value.split('\n').length;
 
   return (
     <div className="code-editor">
-      <div className="gutter" aria-hidden>
-        <div className="gutter-inner" style={{ transform: `translateY(${-(ta.current?.scrollTop ?? 0)}px)` }}>
-          {Array.from({ length: lineCount }, (_, i) => (
-            <div key={i}>{i + 1}</div>
-          ))}
-        </div>
-      </div>
       <div className="code-area">
-        <pre ref={mirror} className="code-mirror" aria-hidden>
+        <div ref={mirror} className="code-mirror" aria-hidden>
           {highlighted}
-        </pre>
+        </div>
         <textarea
           ref={ta}
           value={value}
           spellCheck={false}
           autoCapitalize="off"
           autoComplete="off"
-          wrap="off"
-          onChange={(e) => onChange(e.target.value)}
+          aria-label="HarpTab text"
+          onChange={(e) => {
+            emitted.current = e.target.value;
+            onChange(e.target.value);
+          }}
           onScroll={(e) => {
-            const t = e.currentTarget;
-            if (mirror.current) {
-              mirror.current.scrollTop = t.scrollTop;
-              mirror.current.scrollLeft = t.scrollLeft;
-            }
-            const g = t.parentElement?.previousElementSibling?.firstElementChild as HTMLElement | null;
-            if (g) g.style.transform = `translateY(${-t.scrollTop}px)`;
+            if (mirror.current) mirror.current.scrollTop = e.currentTarget.scrollTop;
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Tab') {
+            // Tab indents; Escape leaves the editor, so the keyboard can move on.
+            if (e.key === 'Escape') e.currentTarget.blur();
+            if (e.key === 'Tab' && !e.shiftKey) {
               e.preventDefault();
               const el = e.currentTarget;
               const { selectionStart: a, selectionEnd: b } = el;
-              onChange(value.slice(0, a) + '  ' + value.slice(b));
+              const next = value.slice(0, a) + '  ' + value.slice(b);
+              emitted.current = next;
+              onChange(next);
               requestAnimationFrame(() => el.setSelectionRange(a + 2, a + 2));
             }
           }}

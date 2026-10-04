@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CodeEditor, type CodeEditorHandle } from '../components/CodeEditor';
 import { Transport } from '../components/Controls';
 import { SongDetails } from '../components/editor/SongDetails';
-import { VisualEditor } from '../components/editor/VisualEditor';
+import { VisualEditor, VisualToolbar } from '../components/editor/VisualEditor';
 import { Sheet } from '../components/Sheet';
 import { previewEvent } from '../state/playback';
 import { useApp, useParsed, type EditorMode } from '../state/store';
@@ -16,30 +16,44 @@ const MODES: { id: EditorMode; label: string; hint: string }[] = [
 export function EditorPage() {
   const mode = useApp((s) => s.editorMode);
   const [showHelp, setShowHelp] = useState(false);
+  // The header's height, so the inspector and panes stick just below it.
+  const head = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = head.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => document.documentElement.style.setProperty('--edit-head-h', `${el.offsetHeight}px`));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   return (
     <section className={`page editor-page mode-${mode}`}>
       <SongDetails />
 
-      <div className="editor-bar">
-        <div className="seg big" role="tablist" aria-label="Editor mode">
-          {MODES.map((m) => (
-            <button key={m.id} role="tab" aria-selected={mode === m.id} className={mode === m.id ? 'on' : ''} title={m.hint} onClick={() => useApp.setState({ editorMode: m.id })}>
-              {m.label}
-            </button>
-          ))}
+      <div className="edit-sticky" ref={head}>
+        <Transport />
+        <div className="editor-bar">
+          <div className="seg big" role="tablist" aria-label="Editor mode">
+            {MODES.map((m) => (
+              <button key={m.id} role="tab" aria-selected={mode === m.id} className={mode === m.id ? 'on' : ''} title={m.hint} onClick={() => useApp.setState({ editorMode: m.id })}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+          {mode === 'visual' ? (
+            <VisualToolbar />
+          ) : (
+            <div className="tb-group">
+              <button className={`btn small ghost ${showHelp ? 'on' : ''}`} onClick={() => setShowHelp(!showHelp)}>Syntax help</button>
+            </div>
+          )}
         </div>
       </div>
-
-      <Transport />
 
       {mode === 'visual' ? (
         <VisualEditor />
       ) : (
         <>
-          <div className="text-help-row">
-            <button className={`btn small ghost ${showHelp ? 'on' : ''}`} onClick={() => setShowHelp(!showHelp)}>Syntax help</button>
-          </div>
           {showHelp && <SyntaxHelp />}
           <TextEditor split={mode === 'split'} />
         </>

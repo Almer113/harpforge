@@ -1,6 +1,8 @@
 // Song details: title, artist, key, time signature, tempo and harmonica.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { guessTonic } from '../../core/convert';
+import { keyUsesFlats, pitchClassName } from '../../core/pitch';
 import { setTimeSignature } from '../../core/edit/model';
 import { setMetaFields } from '../../core/htab/meta';
 import { commitSong, currentSong } from '../../state/editor';
@@ -29,7 +31,10 @@ function MetaInput({ field, value, placeholder, width }: { field: string; value:
 }
 
 export function SongDetails() {
-  const { doc } = useParsed();
+  const { doc, harp } = useParsed();
+  // With no key set, show what the song's notes suggest (its last note's pitch).
+  const tonic = useMemo(() => guessTonic(doc, harp), [doc, harp]);
+  const detected = tonic !== undefined ? pitchClassName(tonic, keyUsesFlats(harp.spec.key)) : undefined;
   const { meta } = doc;
   const [reflow, setReflow] = useState(true);
   const hasNotes = doc.lines.some((l) => l.events.some((e) => e.kind === 'note'));
@@ -65,7 +70,7 @@ export function SongDetails() {
               s.setText(setMetaFields(s.text, { key: e.target.value || undefined }));
             }}
           >
-            <option value="">—</option>
+            <option value="">{detected ? `— (sounds like ${detected})` : '—'}</option>
             {KEYS.includes(meta.key ?? '') || !meta.key ? null : <option value={meta.key}>{meta.key}</option>}
             {KEYS.map((k) => (
               <option key={k} value={k}>{k}</option>
