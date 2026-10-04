@@ -154,3 +154,15 @@ describe('settings', () => {
     localStorage.removeItem('harpforge:prefs');
   });
 });
+
+describe('harmonica size setting', () => {
+  it('carries over the old "hidden" choice', async () => {
+    localStorage.setItem('harpforge:prefs', JSON.stringify({ harpHidden: true }));
+    vi.resetModules();
+    expect((await import('./store')).useApp.getState().harpSize).toBe('hidden');
+    localStorage.setItem('harpforge:prefs', JSON.stringify({ harpSize: 'slim', harpHidden: true }));
+    vi.resetModules();
+    expect((await import('./store')).useApp.getState().harpSize).toBe('slim');
+    localStorage.removeItem('harpforge:prefs');
+  });
+});

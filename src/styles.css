@@ -994,3 +994,20 @@ button.ve-mnum:hover { color: var(--brass-2); background: var(--panel-2); }
 /* The editor header stacks the transport above the toolbar, so the harmonica popover (inside the
    transport) opens over the toolbar: as flex items, both take part in z-index. */
 .edit-sticky > .transport { z-index: 16; }
+
+/* ---------- Slim harmonica (Play's Slim size, the editor's dock) ---------- */
+.harp-slim { display: flex; gap: 8px; align-items: stretch; touch-action: none; user-select: none; -webkit-user-select: none; }
+.harp-slim .harp-holes { flex: 1; display: grid; gap: 4px; min-width: 0; }
+.slim-hole { display: grid; grid-template-rows: 1fr 1fr; min-width: 0; border: 1px solid #5b5249; border-radius: 8px; overflow: hidden; background: #0f0d0b; cursor: pointer; }
+.slim-hole > span { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3px 0; font-family: var(--mono); line-height: 1.1; white-space: nowrap; overflow: hidden; }
+.slim-hole b { font-size: 12.5px; }
+.slim-hole small { font-size: 9.5px; opacity: 0.72; }
+.slim-hole .sh-blow { color: var(--blow); border-bottom: 1px solid #2a241e; }
+.slim-hole .sh-draw { color: var(--draw); }
+.slim-hole:hover > span { background: rgba(255, 255, 255, 0.04); }
+.slim-hole.blow-on .sh-blow { background: var(--blow); color: #22160a; }
+.slim-hole.draw-on .sh-draw { background: var(--draw); color: #0c1d26; }
+.slim-hole.blow-target .sh-blow, .slim-hole.draw-target .sh-draw { box-shadow: inset 0 0 0 2px var(--ok); }
+.slim-slide { flex: none; width: 46px; border: 1px solid var(--border-2); border-radius: 8px; background: var(--panel-2); color: var(--muted); font-size: 11px; font-weight: 700; }
+.slim-slide.on { border-color: var(--brass); color: var(--brass-2); background: rgba(227, 169, 72, 0.12); }
+.slim-note { margin: 6px 0 0; }

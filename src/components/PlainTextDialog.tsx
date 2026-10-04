@@ -5,24 +5,17 @@ import { useEffect, useMemo } from 'react';
 import { slugify } from '../core/formats/common';
 import { writePlainText, type PlainTextOptions } from '../core/formats/plaintext';
 import { downloadData } from '../state/actions';
+import { Dialog } from './Dialog';
 import { useApp, useParsed } from '../state/store';
 
 export function PlainTextDialog() {
   const open = useApp((s) => s.plainTextOpen);
   const close = () => useApp.setState({ plainTextOpen: false });
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
   if (!open) return null;
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div className="modal text-modal" role="dialog" aria-modal="true" aria-label="Plain-text tab">
-        <PlainTextBody close={close} />
-      </div>
-    </div>
+    <Dialog label="Plain-text tab" className="text-modal" onClose={close}>
+      <PlainTextBody close={close} />
+    </Dialog>
   );
 }
 

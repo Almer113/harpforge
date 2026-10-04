@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense } from 'react';
+import { Popover } from './Popover';
 import type { NoteEvent, RestEvent } from '../core/htab/types';
 import { useApp, type Parsed, type ReadAs, type SheetShow } from '../state/store';
 import { doPitchClass } from '../core/formats/jianpu';
@@ -123,20 +124,6 @@ export function ShowMenu({ view }: { view: 'tab' | 'numbers' | 'staff' }) {
   const show = useApp((s) => s.sheetShow);
   const names = useApp((s) => s.showNoteNames);
   const notes = useApp((s) => s.readAs === 'notes');
-  const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    window.addEventListener('mousedown', close);
-    window.addEventListener('keydown', esc);
-    return () => {
-      window.removeEventListener('mousedown', close);
-      window.removeEventListener('keydown', esc);
-    };
-  }, [open]);
-
   const set = (patch: Partial<SheetShow['tab']> & Partial<SheetShow['numbers']> & Partial<SheetShow['staff']>) =>
     useApp.setState((s) => ({ sheetShow: { ...s.sheetShow, [view]: { ...s.sheetShow[view], ...patch } } }));
   const items: { label: string; on: boolean; toggle: (v: boolean) => void; hint: string }[] =
@@ -164,23 +151,16 @@ export function ShowMenu({ view }: { view: 'tab' | 'numbers' | 'staff' }) {
   const hidden = items.filter((i) => !i.on && i.label !== 'Title and tempo').length;
 
   return (
-    <div className="show-wrap" ref={root}>
-      <button className={`btn small ghost ${open ? 'on' : ''}`} onClick={() => setOpen(!open)} aria-expanded={open} title="Choose what this view shows">
-        Show{hidden ? ` (${hidden} hidden)` : ''} ▾
-      </button>
-      {open && (
-        <div className="menu show-menu" role="group" aria-label="Show">
-          {items.map((it) => (
-            <label key={it.label} className="show-item">
-              <input type="checkbox" checked={it.on} onChange={(e) => it.toggle(e.target.checked)} />
-              <span>
-                <b>{it.label}</b>
-                <span className="mi-hint">{it.hint}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
+    <Popover label={`Show${hidden ? ` (${hidden} hidden)` : ''} ▾`} title="Choose what this view shows" kind="panel" panelClass="menu show-menu" wrapClass="show-wrap" panelLabel="Show">
+      {items.map((it) => (
+        <label key={it.label} className="show-item">
+          <input type="checkbox" checked={it.on} onChange={(e) => it.toggle(e.target.checked)} />
+          <span>
+            <b>{it.label}</b>
+            <span className="mi-hint">{it.hint}</span>
+          </span>
+        </label>
+      ))}
+    </Popover>
   );
 }

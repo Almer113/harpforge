@@ -21,7 +21,11 @@ interface HoleState {
   draw?: HoleSound;
 }
 
-export function Harmonica() {
+/**
+ * The harmonica. `full`: the drawn instrument with labels and the now-playing chips. `slim`:
+ * one row of holes, blow on top and draw below, for docking under the music.
+ */
+export function Harmonica({ size = 'full' }: { size?: 'full' | 'slim' }) {
   const { harp, score, doc } = useParsed();
   const held = useApp((s) => s.held);
   const activeEvents = useApp((s) => s.activeEvents);
@@ -140,6 +144,34 @@ export function Harmonica() {
     endDrag();
   };
 
+  if (size === 'slim') {
+    return (
+      <div
+        ref={ref}
+        className="harp-slim"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onLostPointerCapture={onPointerUp}
+        onContextMenu={(e) => e.preventDefault()}
+        role="group"
+        aria-label={`${harp.name}: the top half of a hole blows, the bottom half draws`}
+      >
+        <div className="harp-holes" style={{ gridTemplateColumns: `repeat(${harp.holes.length}, minmax(0, 1fr))` }}>
+          {harp.holes.map((h) => (
+            <SlimHole key={h.hole} harp={harp} hole={h.hole} state={lit.get(h.hole)} target={targets.get(h.hole)} flats={flats} asNotes={asNotes} slide={slideLatch && harp.hasSlide} />
+          ))}
+        </div>
+        {harp.hasSlide && (
+          <button className={`slim-slide ${slideLatch ? 'on' : ''}`} onClick={() => useApp.setState({ slideLatch: !slideLatch })} title="Slide button (or hold Space)">
+            slide
+          </button>
+        )}
+      </div>
+    );
+  }
+
   // Fit the holes to the available width (container query units, see .harp-wrap).
   const chrome = 72 + (harp.hasSlide ? 44 : 0);
   const holeWidth = `clamp(30px, calc((min(100cqw, 960px) - ${chrome}px) / ${harp.holes.length}), 76px)`;
@@ -234,11 +266,12 @@ export function Harmonica() {
   );
 }
 
-function Hole({ harp, hole, state, target, flats }: { harp: Harp; hole: number; state?: HoleState; target?: HoleState; flats: boolean }) {
+/** A hole's tooltip: its notes, bends and overblows. */
+function holeTip(harp: Harp, hole: number, flats: boolean): string {
   const h = harp.holes[hole - 1];
   const bendsDraw = maxBend(harp, hole, 'draw');
   const bendsBlow = maxBend(harp, hole, 'blow');
-  const tip = [
+  return [
     `Hole ${hole}`,
     `blow ${midiToName(h.blow, flats)}`,
     `draw ${midiToName(h.draw, flats)}`,
@@ -249,6 +282,40 @@ function Hole({ harp, hole, state, target, flats }: { harp: Harp; hole: number; 
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+/** One hole of the slim harmonica: blow above, draw below, each lit, targeted and labelled. */
+function SlimHole({ harp, hole, state, target, flats, asNotes, slide }: { harp: Harp; hole: number; state?: HoleState; target?: HoleState; flats: boolean; asNotes: boolean; slide: boolean }) {
+  const h = harp.holes[hole - 1];
+  const label = (sound: HoleSound | undefined, breath: Breath, midi: number) => {
+    // A bend or overblow being played shows itself ("-4'"); otherwise the plain hole.
+    const shown: HoleSound = sound ?? { type: 'hole', hole, breath, bend: 0, over: false, slide: false };
+    const pitch = sound ? (soundPitch(harp, sound) ?? midi) : midi;
+    const text = holeSoundText(shown);
+    const note = midiToName(pitch, flats);
+    return asNotes ? (
+      <>
+        <b>{note}</b>
+        <small>{text}</small>
+      </>
+    ) : (
+      <>
+        <b>{text}</b>
+        <small>{note}</small>
+      </>
+    );
+  };
+  const up = slide ? 1 : 0;
+  return (
+    <div className={`slim-hole ${state?.blow ? 'blow-on' : ''} ${state?.draw ? 'draw-on' : ''} ${target?.blow ? 'blow-target' : ''} ${target?.draw ? 'draw-target' : ''}`} title={holeTip(harp, hole, flats)}>
+      <span className="sh-blow">{label(state?.blow, 'blow', h.blow + up)}</span>
+      <span className="sh-draw">{label(state?.draw, 'draw', h.draw + up)}</span>
+    </div>
+  );
+}
+
+function Hole({ harp, hole, state, target, flats }: { harp: Harp; hole: number; state?: HoleState; target?: HoleState; flats: boolean }) {
+  const tip = holeTip(harp, hole, flats);
   const active = state?.blow ?? state?.draw;
   return (
     <div className={`hole ${state?.blow ? 'blow-on' : ''} ${state?.draw ? 'draw-on' : ''} ${target?.blow ? 'blow-target' : ''} ${target?.draw ? 'draw-target' : ''}`} title={tip}>

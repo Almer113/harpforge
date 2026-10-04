@@ -7,6 +7,7 @@ import { guessTonic, harpForPosition, octaveOptions, positionFor, positionName }
 import { mod12, transposeKey } from '../core/pitch';
 import { stop, togglePlay } from '../state/playback';
 import { useApp, useParsed } from '../state/store';
+import { Popover } from './Popover';
 
 export function HarmonicaPicker() {
   const { harp, doc } = useParsed();
@@ -98,14 +99,19 @@ function KeyChoice({ from, to, songKey, onClose }: { from: HarmonicaSpec; to: Ha
   const semis = keyDistance(from, to);
   const movedKey = songKey ? transposeKey(songKey, semis) : undefined;
   const root = useRef<HTMLDivElement>(null);
-  // Escape or a click elsewhere cancels.
+  // Escape or a click elsewhere cancels. Escape is caught first (capture) and marked handled,
+  // so the harmonica popover around it stays open.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      onClose();
+    };
     const onDown = (e: MouseEvent) => !root.current?.contains(e.target as Node) && onClose();
-    window.addEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
     window.addEventListener('mousedown', onDown);
     return () => {
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onKey, true);
       window.removeEventListener('mousedown', onDown);
     };
   }, [onClose]);
@@ -228,41 +234,33 @@ export function Transport() {
 export function HarmonicaChip() {
   const { harp, doc } = useParsed();
   const readAs = useApp((s) => s.readAs);
-  const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
   const tonic = useMemo(() => guessTonic(doc, harp), [doc, harp]);
   const position = tonic !== undefined && harp.spec.family !== 'chromatic' ? positionFor(harp.spec.key, tonic) : undefined;
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('.key-choice') && setOpen(false);
-    window.addEventListener('mousedown', close);
-    window.addEventListener('keydown', esc);
-    return () => {
-      window.removeEventListener('mousedown', close);
-      window.removeEventListener('keydown', esc);
-    };
-  }, [open]);
   return (
-    <div className="harp-chip-wrap" ref={root}>
-      <button className={`harp-chip ${open ? 'on' : ''}`} onClick={() => setOpen(!open)} aria-expanded={open} title="Harmonica, key, position and octave">
-        <span>{harp.name}</span>
-        {position !== undefined && <span className="muted">· {positionName(position)} pos.</span>}
-        <span aria-hidden>▾</span>
-      </button>
-      {open && (
-        <div className="harp-pop" role="dialog" aria-label="Harmonica">
-          <HarmonicaPicker />
-          <OwnedHarps />
-          <p className="muted small">
-            {rangeLabel(harp)} ·{' '}
-            {readAs === 'notes'
-              ? 'Reading in notes: changing the key, type or tuning keeps the notes and finds the holes.'
-              : 'Changing the key asks whether to keep the holes or the notes; type and tuning keep the notes.'}
-          </p>
-        </div>
-      )}
-    </div>
+    <Popover
+      label={
+        <>
+          <span>{harp.name}</span>
+          {position !== undefined && <span className="muted">· {positionName(position)} pos.</span>}
+          <span aria-hidden>▾</span>
+        </>
+      }
+      buttonClass="harp-chip"
+      title="Harmonica, key, position and octave"
+      panelLabel="Harmonica"
+      kind="panel"
+      panelClass="harp-pop"
+      wrapClass="harp-chip-wrap"
+    >
+      <HarmonicaPicker />
+      <OwnedHarps />
+      <p className="muted small">
+        {rangeLabel(harp)} ·{' '}
+        {readAs === 'notes'
+          ? 'Reading in notes: changing the key, type or tuning keeps the notes and finds the holes.'
+          : 'Changing the key asks whether to keep the holes or the notes; type and tuning keep the notes.'}
+      </p>
+    </Popover>
   );
 }
 

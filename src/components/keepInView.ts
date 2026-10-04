@@ -6,7 +6,7 @@ import { useLayoutEffect, type RefObject } from 'react';
  */
 export function useKeepInView(open: boolean, wrap: RefObject<HTMLElement | null>) {
   useLayoutEffect(() => {
-    const menu = wrap.current?.querySelector<HTMLElement>(':scope > .menu');
+    const menu = wrap.current?.querySelector<HTMLElement>(':scope > .pop-panel');
     if (!open || !menu) return;
     menu.style.left = '0';
     menu.style.right = 'auto';

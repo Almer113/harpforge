@@ -64,6 +64,7 @@ function loadWorking(): WorkingCopy {
 }
 
 export type SheetView = 'simple' | 'tab' | 'staff' | 'numbers';
+export type HarpSize = 'full' | 'slim' | 'hidden';
 export type EditorMode = 'visual' | 'text' | 'split';
 
 /** Visual editor UI state. Positions are (measure index, start beat). */
@@ -185,8 +186,8 @@ export interface AppState {
   textPrefs: import('../core/formats/plaintext').PlainTextOptions;
   /** Print view choices (remembered). */
   printPrefs: import('../pages/PrintPage').PrintPrefs;
-  /** Play page: the harmonica is folded away (the keyboard still plays). */
-  harpHidden: boolean;
+  /** Play page: the harmonica drawn in full, as a slim row of holes, or hidden (the keyboard still plays). */
+  harpSize: HarpSize;
   /** Visual editor: measures fill each row (true) or follow the text's lines. */
   fitWidth: boolean;
   editorMode: EditorMode;
@@ -227,7 +228,7 @@ const SHOW_ALL: SheetShow = {
 
 function loadPrefs(): {
   soundMode?: 'samples' | 'synth';
-  harpHidden?: boolean;
+  harpSize?: HarpSize;
   fitWidth?: boolean;
   showNoteNames?: boolean;
   readAs?: ReadAs;
@@ -251,7 +252,8 @@ function loadPrefs(): {
   if (print.size !== undefined && !['compact', 'normal', 'large'].includes(print.size)) delete print.size;
   return {
     soundMode: p.soundMode === 'synth' ? 'synth' : p.soundMode === 'samples' ? 'samples' : undefined,
-    harpHidden: bool(p.harpHidden),
+    // Before there were sizes, the harmonica was either shown or hidden.
+    harpSize: p.harpSize === 'full' || p.harpSize === 'slim' || p.harpSize === 'hidden' ? p.harpSize : p.harpHidden === true ? 'hidden' : undefined,
     fitWidth: bool(p.fitWidth),
     showNoteNames: bool(p.showNoteNames),
     readAs: p.readAs === 'notes' ? 'notes' : p.readAs === 'holes' ? 'holes' : undefined,
@@ -321,7 +323,7 @@ export const useApp = create<AppState>((set) => ({
   midi: { status: 'off', devices: [] },
   practice: null,
   soundMode: prefs.soundMode === 'synth' ? 'synth' : 'samples',
-  harpHidden: !!prefs.harpHidden,
+  harpSize: prefs.harpSize ?? 'full',
   printPrefs: { view: 'tab', size: 'normal', title: true, details: true, chart: false, ...prefs.printPrefs },
   plainTextOpen: false,
   ownedHarps: Array.isArray(prefs.ownedHarps) ? prefs.ownedHarps : [],
@@ -389,9 +391,9 @@ export const useApp = create<AppState>((set) => ({
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode && s.harpHidden === prev.harpHidden && s.fitWidth === prev.fitWidth && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps) return;
+  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpHidden: s.harpHidden, fitWidth: s.fitWidth, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps }));
   } catch {
     /* storage unavailable */
   }

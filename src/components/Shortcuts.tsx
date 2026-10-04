@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { isTyping, overlayOpen } from '../live/focus';
+import { Dialog } from './Dialog';
 
 // Keys are written "Ctrl+Z / Ctrl+Y": each word is a key, and "/", "…" and "or" between them are plain text.
 type Group = { title: string; rows: [string, string][] };
@@ -80,7 +81,7 @@ export function Shortcuts() {
         if (overlayOpen() && !document.querySelector('.shortcuts')) return;
         e.preventDefault();
         setOpen((o) => !o);
-      } else if (e.key === 'Escape') setOpen(false);
+      }
     };
     const onOpen = () => setOpen(true);
     window.addEventListener('keydown', onKey);
@@ -92,31 +93,29 @@ export function Shortcuts() {
   }, []);
   if (!open) return null;
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
-      <div className="modal shortcuts" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
-        <div className="modal-head">
-          <h2>Keyboard shortcuts</h2>
-          <button className="icon-btn" onClick={() => setOpen(false)} aria-label="Close">✕</button>
-        </div>
-        <div className="sc-columns">
-          {COLUMNS.map((groups, c) => (
-            <div key={c} className="sc-column">
-              {groups.map((g) => (
-                <section key={g.title}>
-                  <h3>{g.title}</h3>
-                  {g.rows.map(([k, d]) => (
-                    <div key={k} className="sc-row">
-                      <Keys spec={k} />
-                      <span className="sc-what">{d}</span>
-                    </div>
-                  ))}
-                </section>
-              ))}
-            </div>
-          ))}
-        </div>
+    <Dialog label="Keyboard shortcuts" className="shortcuts" onClose={() => setOpen(false)}>
+      <div className="modal-head">
+        <h2>Keyboard shortcuts</h2>
+        <button className="icon-btn" onClick={() => setOpen(false)} aria-label="Close">✕</button>
       </div>
-    </div>
+      <div className="sc-columns">
+        {COLUMNS.map((groups, c) => (
+          <div key={c} className="sc-column">
+            {groups.map((g) => (
+              <section key={g.title}>
+                <h3>{g.title}</h3>
+                {g.rows.map(([k, d]) => (
+                  <div key={k} className="sc-row">
+                    <Keys spec={k} />
+                    <span className="sc-what">{d}</span>
+                  </div>
+                ))}
+              </section>
+            ))}
+          </div>
+        ))}
+      </div>
+    </Dialog>
   );
 }
 

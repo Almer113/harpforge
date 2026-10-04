@@ -21,6 +21,7 @@ import { loadTabText } from '../state/actions';
 import { stop } from '../state/playback';
 import { getParsed, makeParsed, useApp, useParsed } from '../state/store';
 import { useSuggestions } from '../state/useSuggestions';
+import { Dialog } from './Dialog';
 import { TabView } from './TabView';
 
 const MINE = 'mine';
@@ -62,31 +63,11 @@ function requestClose() {
 
 export function ImportDialog() {
   const draft = useApp((s) => s.importDraft);
-  const close = requestClose;
-
-  useEffect(() => {
-    if (!draft) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      // In the paste box, Escape only leaves the box (the text stays).
-      const el = e.target as HTMLElement;
-      if (el.classList?.contains('paste-box')) {
-        el.blur();
-        return;
-      }
-      close();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [draft]);
-
   if (!draft) return null;
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div className="modal import-modal" role="dialog" aria-modal="true" aria-label="Import">
-        <ImportBody key={`${draft.name}:${draft.pasteText !== undefined ? 'paste' : 'file'}`} />
-      </div>
-    </div>
+    <Dialog label="Import" className="import-modal" onClose={requestClose}>
+      <ImportBody key={`${draft.name}:${draft.pasteText !== undefined ? 'paste' : 'file'}`} />
+    </Dialog>
   );
 }
 
@@ -327,6 +308,13 @@ function ImportBody() {
             autoFocus
             placeholder={'Paste a chord sheet, ChordPro, ABC, MusicXML or a tab — or type notes like  C4 D4 E4~ | G4 …'}
             value={paste}
+            onKeyDown={(e) => {
+              // Escape only leaves the box (the text stays); a second Escape closes the dialog.
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
+            }}
             onChange={(e) => {
               setPaste(e.target.value);
               setPicked(null);

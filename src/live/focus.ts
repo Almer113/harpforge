@@ -1,7 +1,8 @@
 // Whether the keyboard belongs to something else right now (typing, a dialog or menu),
 // so harmonica keys and editor shortcuts stay out of the way.
 
-const OVERLAYS = '.modal-backdrop, .menu, .key-choice, .harp-pop, .shortcuts';
+// The keyboard help is open while you try the keys it lists, so it doesn't count.
+const OVERLAYS = '.modal-backdrop, .pop-panel:not(.keyhelp), .menu, .key-choice, .harp-pop, .shortcuts';
 
 /** Inputs you type text into (a slider or checkbox isn't one). */
 const TEXT_INPUTS = new Set(['', 'text', 'search', 'email', 'url', 'tel', 'password', 'number']);

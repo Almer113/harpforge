@@ -1,19 +1,28 @@
-import { useEffect, useRef, useState } from 'react';
 import { Transport } from '../components/Controls';
 import { Harmonica } from '../components/Harmonica';
 import { InputBar } from '../components/InputBar';
 import '../state/practice';
 import { Sheet } from '../components/Sheet';
+import { Popover } from '../components/Popover';
 import { useHarmonicaKeyboard } from '../live/useHarmonicaKeyboard';
 import { previewEvent } from '../state/playback';
-import { useApp, useParsed } from '../state/store';
+import { useApp, useParsed, type HarpSize } from '../state/store';
 import { rangeLabel, type Harmonica as HarmonicaT } from '../core/instruments';
+
+const SIZES: { id: HarpSize; label: string; title: string }[] = [
+  { id: 'full', label: 'Full', title: 'The whole harmonica, with its keys and notes' },
+  { id: 'slim', label: 'Slim', title: 'One row of holes: more room for the music' },
+  { id: 'hidden', label: 'Hidden', title: 'No harmonica (the keyboard still plays)' },
+];
 
 export function PlayPage() {
   useHarmonicaKeyboard(true);
   const parsed = useParsed();
   const recording = useApp((s) => s.recording);
-  const harpHidden = useApp((s) => s.harpHidden);
+  const harpSize = useApp((s) => s.harpSize);
+  const practising = useApp((s) => !!s.practice);
+  // Practising with the harmonica hidden: the slim one shows, so the next hole can be seen.
+  const shown = harpSize === 'hidden' && practising ? 'slim' : harpSize;
   const { meta } = parsed.doc;
 
   return (
@@ -30,15 +39,20 @@ export function PlayPage() {
 
       <Transport />
 
-      <div className={`stage ${recording ? 'is-recording' : ''} ${harpHidden ? 'folded' : ''}`}>
+      <div className={`stage ${recording ? 'is-recording' : ''} ${shown === 'hidden' ? 'folded' : ''}`}>
         <div className="stage-head">
           <span className="stage-title">Harmonica</span>
           <KeyHelp harp={parsed.harp} />
-          <button className="btn small ghost" onClick={() => useApp.setState({ harpHidden: !harpHidden })} title={harpHidden ? 'Show the harmonica' : 'Fold the harmonica away (the keyboard still plays)'}>
-            {harpHidden ? 'Show ▾' : 'Hide ▴'}
-          </button>
+          <div className="seg" role="radiogroup" aria-label="Harmonica size">
+            {SIZES.map((z) => (
+              <button key={z.id} role="radio" aria-checked={harpSize === z.id} className={harpSize === z.id ? 'on' : ''} onClick={() => useApp.setState({ harpSize: z.id })} title={z.title}>
+                {z.label}
+              </button>
+            ))}
+          </div>
         </div>
-        {!harpHidden && <Harmonica />}
+        {shown !== 'hidden' && <Harmonica size={shown} />}
+        {harpSize === 'hidden' && practising && <p className="muted small slim-note">Shown while you practise, so you can see the next hole.</p>}
         <InputBar />
       </div>
 
@@ -51,31 +65,16 @@ export function PlayPage() {
 function KeyHelp({ harp }: { harp: HarmonicaT }) {
   const { hasSlide, bendable, overblows } = harp;
   const holes = harp.holes.length;
-  const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
-    window.addEventListener('mousedown', close);
-    return () => window.removeEventListener('mousedown', close);
-  }, [open]);
   return (
-    <div className="keys-wrap" ref={root}>
-      <button className={`btn small ghost ${open ? 'on' : ''}`} onClick={() => setOpen(!open)} aria-expanded={open}>
-        ⌨ Keys
-      </button>
-      {open && (
-        <div className="keyhelp">
-          <span><kbd>1</kbd>…<kbd>0</kbd> blow</span>
-          <span><kbd>Q</kbd>…<kbd>P</kbd> draw</span>
-          {bendable && <span><kbd>Shift</kbd> bend (hold to go deeper)</span>}
-          {overblows && <span><kbd>Alt</kbd> overblow / overdraw</span>}
-          {hasSlide && <span><kbd>Space</kbd> slide</span>}
-          {holes > 12 && <span><kbd>←</kbd><kbd>→</kbd> move keys</span>}
-          <span>Mouse: drag sideways to glide{bendable ? ', drag out to bend' : ''}</span>
-          <span><kbd>Enter</kbd> play / pause · <kbd>Esc</kbd> stop</span>
-        </div>
-      )}
-    </div>
+    <Popover label="⌨ Keys" kind="panel" panelClass="keyhelp" wrapClass="keys-wrap" panelLabel="Keyboard keys">
+      <span><kbd>1</kbd>…<kbd>0</kbd> blow</span>
+      <span><kbd>Q</kbd>…<kbd>P</kbd> draw</span>
+      {bendable && <span><kbd>Shift</kbd> bend (hold to go deeper)</span>}
+      {overblows && <span><kbd>Alt</kbd> overblow / overdraw</span>}
+      {hasSlide && <span><kbd>Space</kbd> slide</span>}
+      {holes > 12 && <span><kbd>←</kbd><kbd>→</kbd> move keys</span>}
+      <span>Mouse: drag sideways to glide{bendable ? ', drag out to bend' : ''}</span>
+      <span><kbd>Enter</kbd> play / pause · <kbd>Esc</kbd> stop</span>
+    </Popover>
   );
 }
