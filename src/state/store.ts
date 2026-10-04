@@ -187,8 +187,14 @@ const PREFS_KEY = 'harpforge:prefs';
 export interface SheetShow {
   tab: { lyrics: boolean; chords: boolean };
   numbers: { holes: boolean; lyrics: boolean; chords: boolean };
+  staff: { holes: boolean; lyrics: boolean; chords: boolean; header: boolean };
 }
-const SHOW_ALL: SheetShow = { tab: { lyrics: true, chords: true }, numbers: { holes: true, lyrics: true, chords: true } };
+const SHOW_ALL: SheetShow = {
+  tab: { lyrics: true, chords: true },
+  numbers: { holes: true, lyrics: true, chords: true },
+  // The page already shows the title and tempo, so the staff leaves them out unless asked.
+  staff: { holes: true, lyrics: true, chords: true, header: false },
+};
 
 function loadPrefs(): { soundMode?: 'samples' | 'synth'; harpHidden?: boolean; fitWidth?: boolean; showNoteNames?: boolean; sheetShow?: Partial<SheetShow> } {
   try {
@@ -226,7 +232,11 @@ export const useApp = create<AppState>((set) => ({
   practice: null,
   soundMode: prefs.soundMode === 'synth' ? 'synth' : 'samples',
   harpHidden: !!prefs.harpHidden,
-  sheetShow: { tab: { ...SHOW_ALL.tab, ...prefs.sheetShow?.tab }, numbers: { ...SHOW_ALL.numbers, ...prefs.sheetShow?.numbers } },
+  sheetShow: {
+    tab: { ...SHOW_ALL.tab, ...prefs.sheetShow?.tab },
+    numbers: { ...SHOW_ALL.numbers, ...prefs.sheetShow?.numbers },
+    staff: { ...SHOW_ALL.staff, ...prefs.sheetShow?.staff },
+  },
   fitWidth: prefs.fitWidth !== false,
   editorMode: 'visual',
   ve: {

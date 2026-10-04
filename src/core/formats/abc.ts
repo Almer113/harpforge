@@ -428,6 +428,10 @@ export interface AbcExportOptions {
   /** Add the harmonica tab as a lyric line under the staff. */
   tabLine?: boolean;
   lyrics?: boolean;
+  /** Chord symbols above the staff (default true). */
+  chords?: boolean;
+  /** Title, composer and tempo marking (default true; the staff view can leave them out). */
+  header?: boolean;
   /** Reference number written in X:. */
   index?: number;
 }
@@ -461,13 +465,17 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
   const { meta } = doc;
   const tabLine = opts.tabLine ?? false;
   const withLyrics = opts.lyrics ?? true;
+  const withChords = opts.chords ?? true;
+  const withHeader = opts.header ?? true;
   const fifths = keyFifths(meta.key) ?? 0;
   const keyText = keyFifths(meta.key) !== null ? meta.key! : 'C';
   const unit = 1 / 8;
   const out: string[] = [`X:${opts.index ?? 1}`];
-  out.push(`T:${meta.title || 'Untitled'}`);
-  if (meta.artist) out.push(`C:${meta.artist}`);
-  out.push(`M:${meta.time}`, 'L:1/8', `Q:1/4=${Math.round(meta.tempo)}`, `K:${keyText}`);
+  if (withHeader) {
+    out.push(`T:${meta.title || 'Untitled'}`);
+    if (meta.artist) out.push(`C:${meta.artist}`);
+  }
+  out.push(`M:${meta.time}`, 'L:1/8', ...(withHeader ? [`Q:1/4=${Math.round(meta.tempo)}`] : []), `K:${keyText}`);
   const order: [number, number][] = [];
   let lastTieable: number | null = null;
 
@@ -507,7 +515,7 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
         continue;
       }
       if (e.beats <= 0) {
-        if (e.chord) parts.push(`"${e.chord}"`);
+        if (e.chord && withChords) parts.push(`"${e.chord}"`);
         i++;
         continue;
       }
@@ -529,7 +537,7 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
 
     function emit(ev: NoteEvent | RestEvent, l: number, ei: number, prefix: string, sc: number) {
       const len = lengthText(ev.beats * sc, unit);
-      const chord = ev.chord ? `"${ev.chord.replace(/"/g, '')}"` : '';
+      const chord = ev.chord && withChords ? `"${ev.chord.replace(/"/g, '')}"` : '';
       order.push([l, ei]);
       if (ev.kind === 'rest') {
         parts.push(`${prefix}${chord}z${len}`);

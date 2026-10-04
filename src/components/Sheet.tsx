@@ -37,11 +37,11 @@ export function Sheet({
     <div className="sheet">
       <div className="sheet-head">
         <h2>
-          {view === 'numbers' ? 'Numbered notation' : view === 'staff' ? 'Sheet music' : view === 'simple' ? 'Simple tab' : title}
+          {view === 'numbers' ? 'Numbered notation' : view === 'staff' ? 'Staff notation' : view === 'simple' ? 'Simple tab' : title}
           {view === 'numbers' && <span className="chip plain jp-key">1={doName}</span>}
         </h2>
         <div className="tb-group">
-          {(view === 'tab' || view === 'numbers') && <ShowMenu view={view} />}
+          {view !== 'simple' && <ShowMenu view={view} />}
           <div className="seg" role="tablist" aria-label="Sheet view">
             <button
               role="tab"
@@ -55,8 +55,14 @@ export function Sheet({
             <button role="tab" aria-selected={view === 'tab'} className={view === 'tab' ? 'on' : ''} onClick={() => useApp.setState({ sheetView: 'tab' })}>
               Tab
             </button>
-            <button role="tab" aria-selected={view === 'staff'} className={view === 'staff' ? 'on' : ''} onClick={() => useApp.setState({ sheetView: 'staff' })}>
-              Staff + tab
+            <button
+              role="tab"
+              aria-selected={view === 'staff'}
+              className={view === 'staff' ? 'on' : ''}
+              onClick={() => useApp.setState({ sheetView: 'staff' })}
+              title="Standard notation, with the holes underneath"
+            >
+              Staff
             </button>
             <button
               role="tab"
@@ -85,7 +91,7 @@ export function Sheet({
         />
       ) : (
         <Suspense fallback={<p className="muted">Loading sheet music…</p>}>
-          <StaffView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onNoteClick={(i) => onSelect(i, eventAt(i))} />
+          <StaffView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onNoteClick={(i) => onSelect(i, eventAt(i))} show={show.staff} />
         </Suspense>
       )}
     </div>
@@ -93,7 +99,7 @@ export function Sheet({
 }
 
 /** "Show ▾": what the Tab or Numbers view shows besides the notes. */
-function ShowMenu({ view }: { view: 'tab' | 'numbers' }) {
+function ShowMenu({ view }: { view: 'tab' | 'numbers' | 'staff' }) {
   const show = useApp((s) => s.sheetShow);
   const names = useApp((s) => s.showNoteNames);
   const [open, setOpen] = useState(false);
@@ -110,7 +116,7 @@ function ShowMenu({ view }: { view: 'tab' | 'numbers' }) {
     };
   }, [open]);
 
-  const set = (patch: Partial<SheetShow['tab']> & Partial<SheetShow['numbers']>) =>
+  const set = (patch: Partial<SheetShow['tab']> & Partial<SheetShow['numbers']> & Partial<SheetShow['staff']>) =>
     useApp.setState((s) => ({ sheetShow: { ...s.sheetShow, [view]: { ...s.sheetShow[view], ...patch } } }));
   const items: { label: string; on: boolean; toggle: (v: boolean) => void; hint: string }[] =
     view === 'tab'
@@ -119,12 +125,20 @@ function ShowMenu({ view }: { view: 'tab' | 'numbers' }) {
           { label: 'Lyrics', on: show.tab.lyrics, toggle: (v) => set({ lyrics: v }), hint: 'The words under the notes' },
           { label: 'Chords', on: show.tab.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the notes' },
         ]
-      : [
-          { label: 'Holes', on: show.numbers.holes, toggle: (v) => set({ holes: v }), hint: 'The tab under each number' },
-          { label: 'Lyrics', on: show.numbers.lyrics, toggle: (v) => set({ lyrics: v }), hint: 'The words under the notes' },
-          { label: 'Chords', on: show.numbers.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the notes' },
-        ];
-  const hidden = items.filter((i) => !i.on).length;
+      : view === 'numbers'
+        ? [
+            { label: 'Holes', on: show.numbers.holes, toggle: (v) => set({ holes: v }), hint: 'The tab under each number' },
+            { label: 'Lyrics', on: show.numbers.lyrics, toggle: (v) => set({ lyrics: v }), hint: 'The words under the notes' },
+            { label: 'Chords', on: show.numbers.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the notes' },
+          ]
+        : [
+            { label: 'Holes', on: show.staff.holes, toggle: (v) => set({ holes: v }), hint: 'The tab under the staff' },
+            { label: 'Lyrics', on: show.staff.lyrics, toggle: (v) => set({ lyrics: v }), hint: 'The words under the staff' },
+            { label: 'Chords', on: show.staff.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the staff' },
+            { label: 'Title and tempo', on: show.staff.header, toggle: (v) => set({ header: v }), hint: 'The song’s heading on the staff' },
+          ];
+  // The staff's title is off by default, so it doesn't count as "hidden".
+  const hidden = items.filter((i) => !i.on && i.label !== 'Title and tempo').length;
 
   return (
     <div className="show-wrap" ref={root}>

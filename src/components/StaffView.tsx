@@ -1,4 +1,5 @@
-// Standard notation (via abcjs) with the harmonica tab and lyrics under the staff.
+// Standard notation (via abcjs), optionally with the harmonica holes and lyrics under
+// the staff, chord symbols above it, and the title/tempo header.
 // Notes light up during playback and can be clicked like tab cards.
 
 import abcjs from 'abcjs';
@@ -13,16 +14,21 @@ interface Props {
   activeEvents: number[];
   selectedEvent: number | null;
   onNoteClick?: (scoreIndex: number) => void;
+  show?: { holes: boolean; lyrics: boolean; chords: boolean; header: boolean };
 }
 
-export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick }: Props) {
+export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, show = { holes: true, lyrics: true, chords: true, header: true } }: Props) {
   const host = useRef<HTMLDivElement>(null);
   // k-th rendered note/rest → its SVG elements and score index.
   const map = useRef<{ elems: SVGElement[][]; scoreIndex: (number | undefined)[]; abcElems: unknown[] }>({ elems: [], scoreIndex: [], abcElems: [] });
   const clickRef = useRef(onNoteClick);
   clickRef.current = onNoteClick;
 
-  const abc = useMemo(() => writeAbc(parsed.doc, parsed.harp, { tabLine: true }), [parsed]);
+  const { holes, lyrics, chords, header } = show;
+  const abc = useMemo(
+    () => writeAbc(parsed.doc, parsed.harp, { tabLine: holes, lyrics, chords, header }),
+    [parsed, holes, lyrics, chords, header],
+  );
 
   useEffect(() => {
     if (!host.current) return;
