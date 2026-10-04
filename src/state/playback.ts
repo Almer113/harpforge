@@ -67,6 +67,25 @@ export function togglePlay() {
 }
 
 /** Plays a single score event immediately (clicking a card) and selects it. */
+/** Plays from event `index` (clicking a card while playing jumps there). */
+export function playFrom(index: number) {
+  if (useApp.getState().recording) return;
+  stop();
+  useApp.setState({ selectedEvent: index });
+  void play();
+}
+
+/**
+ * A click on a card in the sheet: while playing, playback jumps there; otherwise the note
+ * sounds and becomes where playback starts (a paused song starts over from it).
+ */
+export function selectEvent(index: number) {
+  const st = useApp.getState().play;
+  if (st === 'playing') return playFrom(index);
+  if (st === 'paused') stop();
+  void previewEvent(index);
+}
+
 export async function previewEvent(index: number) {
   const s = useApp.getState();
   useApp.setState({ selectedEvent: index });

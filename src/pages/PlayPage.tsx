@@ -1,13 +1,13 @@
 import { Transport } from '../components/Controls';
-import { Harmonica } from '../components/Harmonica';
+import { Harmonica, NowPlaying } from '../components/Harmonica';
 import { InputBar } from '../components/InputBar';
 import '../state/practice';
 import { Sheet } from '../components/Sheet';
 import { Popover } from '../components/Popover';
 import { useHarmonicaKeyboard } from '../live/useHarmonicaKeyboard';
-import { previewEvent } from '../state/playback';
+import { selectEvent } from '../state/playback';
 import { useApp, useParsed, type HarpSize } from '../state/store';
-import { rangeLabel, type Harmonica as HarmonicaT } from '../core/instruments';
+import type { Harmonica as HarmonicaT } from '../core/instruments';
 
 const SIZES: { id: HarpSize; label: string; title: string }[] = [
   { id: 'full', label: 'Full', title: 'The whole harmonica, with its keys and notes' },
@@ -31,7 +31,6 @@ export function PlayPage() {
         <h1>{meta.title || 'Untitled'}</h1>
         <div className="chips">
           {meta.artist && <span className="chip plain">{meta.artist}</span>}
-          <span className="chip plain">{rangeLabel(parsed.harp)}</span>
           {meta.key && <span className="chip plain">Key {meta.key}</span>}
           <span className="chip plain">{meta.time} · {meta.tempo} bpm</span>
         </div>
@@ -42,6 +41,7 @@ export function PlayPage() {
       <div className={`stage ${recording ? 'is-recording' : ''} ${shown === 'hidden' ? 'folded' : ''}`}>
         <div className="stage-head">
           <span className="stage-title">Harmonica</span>
+          <NowPlaying />
           <KeyHelp harp={parsed.harp} />
           <div className="seg" role="radiogroup" aria-label="Harmonica size">
             {SIZES.map((z) => (
@@ -56,7 +56,7 @@ export function PlayPage() {
         <InputBar />
       </div>
 
-      <Sheet parsed={parsed} onSelect={(i) => void previewEvent(i)} />
+      <Sheet parsed={parsed} onSelect={(i) => selectEvent(i)} />
     </section>
   );
 }

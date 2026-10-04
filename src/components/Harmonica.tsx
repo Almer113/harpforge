@@ -66,15 +66,6 @@ export function Harmonica({ size = 'full' }: { size?: 'full' | 'slim' }) {
     return map;
   }, [held, activeEvents, score]);
 
-  const sounding = useMemo(() => {
-    const list = Object.values(held);
-    if (!list.length) {
-      const evs = activeEvents.map((i) => score.events[i]).filter(Boolean);
-      return evs.flatMap((e) => e.sounds.filter((s): s is HoleSound => s.type === 'hole'));
-    }
-    return list;
-  }, [held, activeEvents, score]);
-
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef<{ hole: number; breath: Breath; startY: number; over: boolean; pointerId: number } | null>(null);
 
@@ -178,31 +169,6 @@ export function Harmonica({ size = 'full' }: { size?: 'full' | 'slim' }) {
 
   return (
     <div className="harp-wrap">
-      <div className="now-playing" aria-live="polite">
-        {sounding.length ? (
-          sounding.map((s, i) => {
-            const m = soundPitch(harp, s);
-            return (
-              <span key={i} className={`np-chip ${s.breath}`}>
-                {asNotes ? (
-                  <>
-                    <b>{m !== null ? midiToName(m, flats) : '?'}</b>
-                    <span>{holeSoundText(s)}</span>
-                  </>
-                ) : (
-                  <>
-                    <b>{holeSoundText(s)}</b>
-                    {m !== null && <span>{midiToName(m, flats)}</span>}
-                  </>
-                )}
-              </span>
-            );
-          })
-        ) : (
-          <span className="np-idle">Click a hole or press a key to play</span>
-        )}
-      </div>
-
       <div
         ref={ref}
         className={`harp voicing-${harp.voicing}`}
@@ -331,6 +297,37 @@ function Hole({ harp, hole, state, target, flats }: { harp: Harp; hole: number; 
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+/** What's sounding now (holes and notes), for the harmonica's header; empty when nothing is. */
+export function NowPlaying() {
+  const { harp, score, doc } = useParsed();
+  const held = useApp((s) => s.held);
+  const activeEvents = useApp((s) => s.activeEvents);
+  const asNotes = useApp((s) => s.readAs === 'notes');
+  const flats = keyUsesFlats(doc.meta.key ?? harp.spec.key);
+  const list = Object.values(held);
+  const sounding = list.length
+    ? list
+    : activeEvents
+        .map((i) => score.events[i])
+        .filter(Boolean)
+        .flatMap((e) => e.sounds.filter((s): s is HoleSound => s.type === 'hole'));
+  return (
+    <div className="now-playing" aria-live="off">
+      {sounding.map((s, i) => {
+        const m = soundPitch(harp, s);
+        const hole = holeSoundText(s);
+        const note = m !== null ? midiToName(m, flats) : '?';
+        return (
+          <span key={i} className={`np-chip ${s.breath}`}>
+            <b>{asNotes ? note : hole}</b>
+            <span>{asNotes ? hole : note}</span>
+          </span>
+        );
+      })}
     </div>
   );
 }

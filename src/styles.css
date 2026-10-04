@@ -1095,3 +1095,11 @@ button.ve-mnum:hover { color: var(--brass-2); background: var(--panel-2); }
 .edit-sticky .bar-spacer { min-width: 0; }
 /* If the window is too narrow for one row, play and the harmonica wrap to the right. */
 .edit-sticky .transport.compact { margin-left: auto; }
+
+/* ---------- Play page (6c) ---------- */
+.stage-head .now-playing { flex: 1; height: 30px; justify-content: flex-start; min-width: 0; }
+.stage-head .np-chip { padding: 2px 9px; }
+.stage-head .np-chip b { font-size: 14px; }
+.practice-start { background: var(--brass); border-color: var(--brass); color: #22190d; font-weight: 700; }
+.practice-start:hover:not(:disabled) { background: var(--brass-2); }
+.pb-hint { padding: 0 10px 6px 34px; }

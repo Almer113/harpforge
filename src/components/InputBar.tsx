@@ -33,9 +33,9 @@ const TargetIcon = (
 export function InputBar() {
   return (
     <div className="inputbar">
+      <PracticeControl />
       <MicControl />
       <MidiControl />
-      <PracticeControl />
       <RecordControl />
     </div>
   );
@@ -173,7 +173,7 @@ function PracticeControl() {
   if (!practice) {
     return (
       <div className="input-card">
-        <button className="t-btn toggle" onClick={startPractice} title="Step through the tab: it waits until you play each note (keyboard, mouse, MIDI or microphone)">
+        <button className="t-btn toggle practice-start" onClick={startPractice} title="Step through the tab: it waits until you play each note (keyboard, mouse, MIDI or microphone)">
           {TargetIcon} <span>Practice</span>
         </button>
       </div>

@@ -5,7 +5,7 @@ import { stopRecording } from '../live/recorder';
 import { isKeyChange, keyDistance, setHarmonica, shiftOctave } from '../state/actions';
 import { guessTonic, harpForPosition, octaveOptions, positionFor, positionName } from '../core/convert';
 import { mod12, transposeKey } from '../core/pitch';
-import { stop, togglePlay } from '../state/playback';
+import { playFrom, stop, togglePlay } from '../state/playback';
 import { useApp, useParsed } from '../state/store';
 import { Popover } from './Popover';
 
@@ -202,6 +202,13 @@ export function Transport({ compact = false }: { compact?: boolean }) {
       const el = e.target as HTMLElement;
       // Typing, or a dialog/menu is open (Escape closes that instead of stopping the music).
       if (keysTaken(e)) return;
+      // Enter on a card in the sheet plays from that note (instead of just sounding it).
+      const card = el.closest<HTMLElement>('[data-index]');
+      if (e.code === 'Enter' && !e.repeat && card && card.closest('.sheet')) {
+        e.preventDefault();
+        playFrom(Number(card.dataset.index));
+        return;
+      }
       if (e.code === 'Enter' && !e.repeat && !el.closest('button')) {
         e.preventDefault();
         togglePlay();
@@ -275,19 +282,28 @@ export function Transport({ compact = false }: { compact?: boolean }) {
         <span className="t-value">{Math.round(speed * 100)}% · {bpm} bpm</span>
       </div>
 
-      <div className="t-group">
-        <span className="t-label">Sound</span>
-        <select
-          value={soundMode}
-          onChange={(e) => useApp.setState({ soundMode: e.target.value as 'samples' | 'synth' })}
-          title="Real harmonica: recordings of a Hohner Special 20 (public domain, VCSL). Synth: a generated reed sound."
-        >
-          <option value="samples">Real harmonica{soundMode === 'samples' && samplesStatus === 'loading' ? ' (loading…)' : ''}{samplesStatus === 'error' ? ' (unavailable)' : ''}</option>
-          <option value="synth">Synth</option>
-        </select>
-      </div>
-
       <div className="t-group t-harp">
+        <Popover
+          label={`♫ ${soundMode === 'samples' ? 'Real' : 'Synth'} ▾`}
+          buttonClass="btn small ghost"
+          title="Sound: the real harmonica (recordings) or a synthesized reed"
+          ariaLabel="Sound"
+          kind="panel"
+          panelClass="menu pb-menu"
+        >
+          <div className="pb-settings">
+            <label className="check">
+              <input type="radio" name="sound-mode" checked={soundMode === 'samples'} onChange={() => useApp.setState({ soundMode: 'samples' })} />
+              Real harmonica{soundMode === 'samples' && samplesStatus === 'loading' ? ' (loading…)' : ''}{samplesStatus === 'error' ? ' (unavailable)' : ''}
+            </label>
+            <span className="mi-hint pb-hint">Recordings of a Hohner Special 20 (public domain, VCSL)</span>
+            <label className="check">
+              <input type="radio" name="sound-mode" checked={soundMode === 'synth'} onChange={() => useApp.setState({ soundMode: 'synth' })} />
+              Synth
+            </label>
+            <span className="mi-hint pb-hint">A generated reed sound</span>
+          </div>
+        </Popover>
         <HarmonicaChip />
       </div>
 

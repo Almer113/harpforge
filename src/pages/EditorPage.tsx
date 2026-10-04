@@ -5,7 +5,7 @@ import { Popover } from '../components/Popover';
 import { SongFields, SongTitle } from '../components/editor/SongDetails';
 import { UndoRedo, VisualEditor, VisualToolbar } from '../components/editor/VisualEditor';
 import { Sheet } from '../components/Sheet';
-import { previewEvent } from '../state/playback';
+import { selectEvent } from '../state/playback';
 import { useApp, useParsed, type EditorMode } from '../state/store';
 
 const MODES: { id: EditorMode; label: string; hint: string }[] = [
@@ -106,7 +106,7 @@ function TextEditor({ split }: { split: boolean }) {
           parsed={parsed}
           title="Preview"
           onSelect={(i, ev) => {
-            void previewEvent(i);
+            selectEvent(i);
             if (ev?.src) editor.current?.select(ev.src.start, ev.src.end);
           }}
         />
