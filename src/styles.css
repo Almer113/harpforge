@@ -1204,3 +1204,8 @@ html { scrollbar-gutter: stable; }
 /* The play triangle the same size on both pages (no padding squeezing it). */
 .transport .t-btn.primary, .editor-bar .play-stop .t-btn { padding: 0; }
 .t-btn svg { flex: none; }
+/* The Play page's title has the same box as the editor's title field (line height, padding,
+   border), so the text sits at exactly the same height on both pages. */
+.song-line .sl-title { line-height: 32px; }
+.song-line h1.sl-title { padding: 3px 0; border: 1px solid transparent; }
+.song-line.editable input.sl-title { line-height: 32px; }
