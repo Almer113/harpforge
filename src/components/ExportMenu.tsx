@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useKeepInView } from './keepInView';
 import { EXPORTS } from '../core/formats';
 import { exportAs } from '../state/actions';
 
@@ -6,6 +7,7 @@ import { exportAs } from '../state/actions';
 export function ExportMenu({ text, small = false, label = 'Export' }: { text?: string; small?: boolean; label?: string }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  useKeepInView(open, root);
 
   useEffect(() => {
     if (!open) return;

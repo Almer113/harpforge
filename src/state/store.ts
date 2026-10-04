@@ -158,6 +158,8 @@ export interface AppState {
   practice: PracticeState | null;
   /** Recorded harmonica samples or the synthesized reed. */
   soundMode: 'samples' | 'synth';
+  /** What the Tab and Numbers views show besides the notes (note names in Tab = showNoteNames). */
+  sheetShow: SheetShow;
   /** Play page: the harmonica is folded away (the keyboard still plays). */
   harpHidden: boolean;
   /** Visual editor: measures fill each row (true) or follow the text's lines. */
@@ -182,7 +184,13 @@ export interface AppState {
 const initial = loadWorking();
 
 const PREFS_KEY = 'harpforge:prefs';
-function loadPrefs(): { soundMode?: 'samples' | 'synth'; harpHidden?: boolean; fitWidth?: boolean } {
+export interface SheetShow {
+  tab: { lyrics: boolean; chords: boolean };
+  numbers: { holes: boolean; lyrics: boolean; chords: boolean };
+}
+const SHOW_ALL: SheetShow = { tab: { lyrics: true, chords: true }, numbers: { holes: true, lyrics: true, chords: true } };
+
+function loadPrefs(): { soundMode?: 'samples' | 'synth'; harpHidden?: boolean; fitWidth?: boolean; showNoteNames?: boolean; sheetShow?: Partial<SheetShow> } {
   try {
     return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}');
   } catch {
@@ -205,7 +213,7 @@ export const useApp = create<AppState>((set) => ({
   held: {},
   keyOffset: 0,
   slideLatch: false,
-  showNoteNames: true,
+  showNoteNames: prefs.showNoteNames ?? true,
   recording: null,
   recordAppend: true,
   recordGrid: 0.5,
@@ -218,6 +226,7 @@ export const useApp = create<AppState>((set) => ({
   practice: null,
   soundMode: prefs.soundMode === 'synth' ? 'synth' : 'samples',
   harpHidden: !!prefs.harpHidden,
+  sheetShow: { tab: { ...SHOW_ALL.tab, ...prefs.sheetShow?.tab }, numbers: { ...SHOW_ALL.numbers, ...prefs.sheetShow?.numbers } },
   fitWidth: prefs.fitWidth !== false,
   editorMode: 'visual',
   ve: {
@@ -273,9 +282,9 @@ export const useApp = create<AppState>((set) => ({
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode && s.harpHidden === prev.harpHidden && s.fitWidth === prev.fitWidth) return;
+  if (s.soundMode === prev.soundMode && s.harpHidden === prev.harpHidden && s.fitWidth === prev.fitWidth && s.showNoteNames === prev.showNoteNames && s.sheetShow === prev.sheetShow) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpHidden: s.harpHidden, fitWidth: s.fitWidth }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpHidden: s.harpHidden, fitWidth: s.fitWidth, showNoteNames: s.showNoteNames, sheetShow: s.sheetShow }));
   } catch {
     /* storage unavailable */
   }

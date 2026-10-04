@@ -850,7 +850,6 @@ select:focus, .search:focus { border-color: var(--brass); }
 .simpletab.preview .st-note { font-size: 13px; min-width: 0; padding: 0 3px; cursor: inherit; border: 0; }
 .lib-actions { align-items: center; }
 .lib-date { margin-right: auto; }
-.lib-actions .menu-wrap .menu { min-width: 160px; }
 .danger-text { color: var(--danger); }
 .lib-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 28px; background: var(--panel); border: 1px dashed var(--border-2); border-radius: var(--radius); }
 .lib-empty p { margin: 0; max-width: 560px; }
@@ -869,3 +868,18 @@ button:focus:not(:focus-visible) { outline: none; }
 .harp-pop .key-choice { position: static; width: auto; margin-top: 8px; box-shadow: none; }
 /* The playing note scrolls into view below the sticky top bar and transport (or the editor's header). */
 html { scroll-padding-top: calc(var(--topbar-h) + var(--edit-head-h, 64px) + 14px); }
+
+/* Library cards: menus may reach outside the card */
+.lib-card { overflow: visible; position: relative; }
+.lib-card:has(.menu) { z-index: 30; }
+.lib-open { border-radius: var(--radius) var(--radius) 0 0; }
+
+/* Sheet "Show" checklist */
+.show-wrap { position: relative; }
+.show-menu { min-width: 240px; gap: 2px; }
+.show-item { display: flex; align-items: flex-start; gap: 10px; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
+.show-item:hover { background: var(--panel-2); }
+.show-item input { margin-top: 3px; accent-color: var(--brass); }
+.show-item > span { display: flex; flex-direction: column; gap: 1px; }
+.lib-actions .menu-wrap .menu { min-width: 270px; }
+.lib-actions .menu-wrap:last-child .menu { min-width: 160px; }

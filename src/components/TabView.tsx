@@ -17,6 +17,9 @@ interface Props {
   activeEvents: number[];
   selectedEvent: number | null;
   showNoteNames: boolean;
+  /** Lyrics under the notes and chord symbols above them (both shown unless turned off). */
+  showLyrics?: boolean;
+  showChords?: boolean;
   onCardClick?: (scoreIndex: number, ev: NoteEvent | RestEvent) => void;
   /** Follow the play-head by scrolling. */
   follow?: boolean;
@@ -43,7 +46,7 @@ function toMeasures(events: TabEvent[]): Measure[] {
   return out;
 }
 
-export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, onCardClick, follow = true, notation = 'holes' }: Props) {
+export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, showLyrics = true, showChords = true, onCardClick, follow = true, notation = 'holes' }: Props) {
   const activeSet = new Set(activeEvents);
   const { doc, score, indexByKey, harp } = parsed;
   const flats = prefersFlats(doc.meta.key ?? harp.spec.key);
@@ -87,7 +90,7 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, on
                     const sev = idx !== undefined ? score.events[idx] : undefined;
                     const width = Math.max(30, ev.beats * BEAT_PX);
                     if (ev.kind === 'rest' && ev.beats === 0) {
-                      return ev.chord ? <div key={ei} className="card marker"><span className="card-chord">{ev.chord}</span></div> : null;
+                      return ev.chord && showChords ? <div key={ei} className="card marker"><span className="card-chord">{ev.chord}</span></div> : null;
                     }
                     const active = idx !== undefined && activeSet.has(idx);
                     const selected = idx !== undefined && idx === selectedEvent;
@@ -102,7 +105,7 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, on
                         onClick={() => idx !== undefined && onCardClick?.(idx, ev)}
                         title={sev && !sev.rest ? sev.midis.map((x) => (x === null ? 'not playable' : midiToName(x, flats))).join(' + ') : 'rest'}
                       >
-                        <span className="card-chord">{ev.chord ?? ''}</span>
+                        {showChords && <span className="card-chord">{ev.chord ?? ''}</span>}
                         <span className="card-body">
                           {numbers && ev.kind === 'note' && ev.tied ? (
                             <TieDashes beats={ev.beats} />
@@ -125,7 +128,7 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, on
                               : sev.midis.map((x) => (x === null ? '?' : midiToName(x, flats))).join(' ')}
                           </span>
                         )}
-                        <span className="card-lyric">{ev.lyric ?? ''}</span>
+                        {showLyrics && <span className="card-lyric">{ev.lyric ?? ''}</span>}
                       </button>
                     );
                   })}

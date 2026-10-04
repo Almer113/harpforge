@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useKeepInView } from './keepInView';
 
 export interface MenuItem {
   label: ReactNode;
@@ -10,6 +11,7 @@ export interface MenuItem {
 export function Menu({ label, items, className = 'btn small ghost', title, align = 'right' }: { label: ReactNode; items: MenuItem[]; className?: string; title?: string; align?: 'left' | 'right' }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  useKeepInView(open, root);
   useEffect(() => {
     if (!open) return;
     // Keyboard: the first item gets focus, arrows move, Escape returns to the button.
