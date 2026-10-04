@@ -1,3 +1,4 @@
+import { DEFAULT_PLAIN_TEXT } from '../core/formats/plaintext';
 import { create } from 'zustand';
 import { parseHtab } from '../core/htab/parser';
 import type { ParseIssue, TabDoc } from '../core/htab/types';
@@ -160,6 +161,9 @@ export interface AppState {
   soundMode: 'samples' | 'synth';
   /** What the Tab and Numbers views show besides the notes (note names in Tab = showNoteNames). */
   sheetShow: SheetShow;
+  /** Plain-text export: open, and its choices (remembered). */
+  plainTextOpen: boolean;
+  textPrefs: import('../core/formats/plaintext').PlainTextOptions;
   /** Print view choices (remembered). */
   printPrefs: import('../pages/PrintPage').PrintPrefs;
   /** Play page: the harmonica is folded away (the keyboard still plays). */
@@ -205,6 +209,7 @@ function loadPrefs(): {
   showNoteNames?: boolean;
   sheetShow?: Partial<SheetShow>;
   printPrefs?: Partial<import('../pages/PrintPage').PrintPrefs>;
+  textPrefs?: Partial<import('../core/formats/plaintext').PlainTextOptions>;
 } {
   try {
     return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}');
@@ -242,6 +247,8 @@ export const useApp = create<AppState>((set) => ({
   soundMode: prefs.soundMode === 'synth' ? 'synth' : 'samples',
   harpHidden: !!prefs.harpHidden,
   printPrefs: { view: 'tab', size: 'normal', title: true, details: true, chart: false, ...prefs.printPrefs },
+  plainTextOpen: false,
+  textPrefs: { ...DEFAULT_PLAIN_TEXT, ...prefs.textPrefs },
   sheetShow: {
     tab: { ...SHOW_ALL.tab, ...prefs.sheetShow?.tab },
     numbers: { ...SHOW_ALL.numbers, ...prefs.sheetShow?.numbers },
@@ -302,9 +309,9 @@ export const useApp = create<AppState>((set) => ({
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode && s.harpHidden === prev.harpHidden && s.fitWidth === prev.fitWidth && s.showNoteNames === prev.showNoteNames && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs) return;
+  if (s.soundMode === prev.soundMode && s.harpHidden === prev.harpHidden && s.fitWidth === prev.fitWidth && s.showNoteNames === prev.showNoteNames && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpHidden: s.harpHidden, fitWidth: s.fitWidth, showNoteNames: s.showNoteNames, sheetShow: s.sheetShow, printPrefs: s.printPrefs }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpHidden: s.harpHidden, fitWidth: s.fitWidth, showNoteNames: s.showNoteNames, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs }));
   } catch {
     /* storage unavailable */
   }

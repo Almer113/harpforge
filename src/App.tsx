@@ -4,6 +4,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { ExportMenu } from './components/ExportMenu';
 import { ImportDialog } from './components/ImportDialog';
 import { Menu } from './components/Menu';
+import { PlainTextDialog } from './components/PlainTextDialog';
 import { openShortcuts, Shortcuts } from './components/Shortcuts';
 import { LibraryPage } from './pages/LibraryPage';
 import { PlayPage } from './pages/PlayPage';
@@ -189,6 +190,7 @@ export function App() {
         </div>
       )}
       <ImportDialog />
+      <PlainTextDialog />
       <Shortcuts />
       <Toast />
     </div>

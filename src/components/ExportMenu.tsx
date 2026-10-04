@@ -44,6 +44,19 @@ export function ExportMenu({ text, small = false, label = 'Export' }: { text?: s
               <span className="mi-hint">Ink on white, with a choice of view and size</span>
             </button>
           )}
+          {text === undefined && (
+            <button
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                setOpen(false);
+                useApp.setState({ plainTextOpen: true });
+              }}
+            >
+              <span className="mi-name">Plain text… <span className="mi-ext">.txt</span></span>
+              <span className="mi-hint">To post on a forum or in a message: copy, or save as .txt</span>
+            </button>
+          )}
           {EXPORTS.map((f) => (
             <button
               key={f.id}

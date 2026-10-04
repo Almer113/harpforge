@@ -923,3 +923,14 @@ html { scroll-padding-top: calc(var(--topbar-h) + var(--edit-head-h, 64px) + 14p
   .page.print-page { padding: 0; max-width: none; }
   .paper { width: auto; margin: 0; padding: 0; box-shadow: none; border-radius: 0; }
 }
+
+/* ---------- Plain-text export ---------- */
+.text-modal { width: min(1000px, 96vw); }
+.text-grid { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 18px; align-items: start; }
+.text-options { display: flex; flex-direction: column; gap: 10px; }
+.text-options .field { display: flex; flex-direction: column; gap: 4px; }
+.text-options .field > span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); font-weight: 700; }
+.text-options select { width: 100%; }
+.text-options p { margin: 0; }
+.text-checks { display: flex; flex-direction: column; gap: 6px; }
+.text-preview { margin: 0; padding: 12px 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; font-size: 13px; line-height: 1.45; max-height: 60vh; overflow: auto; white-space: pre; }
