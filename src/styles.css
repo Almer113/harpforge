@@ -839,3 +839,19 @@ select:focus, .search:focus { border-color: var(--brass); }
 .preview-head .btn { margin-left: auto; }
 .import-modal { max-height: 94vh; overflow-y: auto; }
 .import-modal .modal-actions { position: sticky; bottom: -18px; margin: 0 -20px -18px; padding: 12px 20px; background: var(--panel); border-top: 1px solid var(--border); }
+
+/* ---------- Library ---------- */
+.lib-title { display: flex; flex-direction: column; gap: 1px; }
+.lib-card .chips { margin-top: 0; }
+.lib-preview { white-space: normal; padding: 8px 10px; max-height: 92px; overflow: hidden; }
+.simpletab.preview { gap: 4px; }
+.simpletab.preview .st-line { column-gap: 14px; row-gap: 2px; }
+.simpletab.preview .st-measure { gap: 2px; }
+.simpletab.preview .st-note { font-size: 13px; min-width: 0; padding: 0 3px; cursor: inherit; border: 0; }
+.lib-actions { align-items: center; }
+.lib-date { margin-right: auto; }
+.lib-actions .menu-wrap .menu { min-width: 160px; }
+.danger-text { color: var(--danger); }
+.lib-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 28px; background: var(--panel); border: 1px dashed var(--border-2); border-radius: var(--radius); }
+.lib-empty p { margin: 0; max-width: 560px; }
+.lib-backup { margin: 6px 0 0; padding-top: 12px; border-top: 1px solid var(--border); }

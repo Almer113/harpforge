@@ -3,7 +3,7 @@
 
 import { useEffect, useRef } from 'react';
 import { holeSoundText, soundText } from '../core/htab/serializer';
-import type { NoteEvent, TabEvent } from '../core/htab/types';
+import type { NoteEvent, TabDoc, TabEvent } from '../core/htab/types';
 import { eventKey } from '../core/score';
 import type { Parsed } from '../state/store';
 
@@ -59,6 +59,29 @@ function measuresOf(events: TabEvent[]): { ev: NoteEvent; ei: number }[][] {
     } else if (ev.kind === 'note' && !ev.tied && ev.sounds.length) out[out.length - 1].push({ ev, ei });
   });
   return out.filter((m) => m.length);
+}
+
+/** The first lines of a tab in Simple Tab style, not clickable (library cards). */
+export function SimpleTabPreview({ doc, lines = 2 }: { doc: TabDoc; lines?: number }) {
+  const shown = doc.lines.map((l) => measuresOf(l.events)).filter((m) => m.length).slice(0, lines);
+  if (!shown.length) return <span className="muted small">No notes yet</span>;
+  return (
+    <div className="simpletab preview">
+      {shown.map((measures, li) => (
+        <div className="st-line" key={li}>
+          {measures.map((m, mi) => (
+            <span className="st-measure" key={mi}>
+              {m.map(({ ev, ei }) => (
+                <span key={ei} className={`st-note ${breathClass(ev)}`}>
+                  <Token ev={ev} />
+                </span>
+              ))}
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect }: Props) {
