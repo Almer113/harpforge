@@ -10,6 +10,12 @@ export interface Imported {
   doc: TabDoc;
   warnings: string[];
   format: string;
+  /** The parts the file holds (MIDI tracks and channels), when there's a choice. */
+  parts?: { id: string; label: string }[];
+  /** The part imported. */
+  part?: string;
+  /** Imports another of `parts`. */
+  choosePart?: (id: string) => Imported;
 }
 
 export function notesMeta(partial: Partial<TabMeta> = {}): TabMeta {
@@ -42,7 +48,8 @@ const MODE_SHIFT: Record<string, number> = {
  */
 export function keyFifths(key: string | undefined): number | null {
   if (!key) return null;
-  const m = /^\s*([A-G])([#b♯♭]?)\s*([A-Za-z]*)/.exec(key);
+  // "Low F" and "High G" harps have the key signature of F and G.
+  const m = /^\s*(?:(?:Low|High)\s+)?([A-G])([#b♯♭]?)\s*([A-Za-z]*)/i.exec(key);
   if (!m) return null;
   let f = LETTER_FIFTHS[m[1]];
   if (m[2] === '#' || m[2] === '♯') f += 7;

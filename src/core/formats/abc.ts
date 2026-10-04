@@ -174,7 +174,7 @@ export function parseAbc(text: string): Imported {
     if (!trimmed) continue;
     // "+:" continues the field above it (most often a long lyrics line).
     const field = /^([A-Za-z+]):(.*)$/.exec(trimmed);
-    if (field && !/^[|[]/.test(trimmed)) {
+    if (field && !/^[|[]/.test(trimmed) && !/^\|/.test(field[2])) {
       const [, f, v] = field;
       if (f === '+') {
         if (lastField === 'w' && (!currentVoice || currentVoice === firstVoice)) attachLyrics(v, true);
@@ -442,6 +442,16 @@ export interface AbcExportOptions {
 
 const LEN_DENS = [1, 2, 4, 8, 16, 32];
 
+/** Tuplet ratios tried for lengths no plain note shows: p notes in the time of q. */
+const TUPLETS: [number, number][] = [
+  [3, 2],
+  [5, 4],
+  [5, 2],
+  [6, 4],
+  [7, 4],
+  [7, 8],
+];
+
 function lengthText(beats: number, unit: number): string {
   const [n, d] = toFraction(beats / (unit * 4), [1, 2, 4, 8, 16, 32, 3, 6, 12, 24]);
   if (n === 1 && d === 1) return '';
@@ -451,8 +461,10 @@ function lengthText(beats: number, unit: number): string {
 }
 
 function isPlainLength(beats: number, unit: number): boolean {
-  const [, d] = toFraction(beats / (unit * 4), [1, 2, 3, 4, 6, 8, 12, 16, 24, 32]);
-  return LEN_DENS.includes(d);
+  // Exactly a plain length (toFraction rounds to its nearest fraction when none fits).
+  const x = beats / (unit * 4);
+  const [n, d] = toFraction(x, [1, 2, 3, 4, 6, 8, 12, 16, 24, 32]);
+  return LEN_DENS.includes(d) && Math.abs(n / d - x) < 1e-6;
 }
 
 function tabToken(e: NoteEvent): string {
@@ -472,7 +484,8 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
   const withChords = opts.chords ?? true;
   const withHeader = opts.header ?? true;
   const fifths = keyFifths(meta.key) ?? 0;
-  const keyText = keyFifths(meta.key) !== null ? meta.key! : 'C';
+  // "Low F" / "High G" are harps, not keys: ABC's K: is F / G.
+  const keyText = keyFifths(meta.key) !== null ? meta.key!.replace(/^\s*(Low|High)\s+/i, '') : 'C';
   const unit = 1 / 8;
   const out: string[] = [`X:${opts.index ?? 1}`];
   if (withHeader) {
@@ -523,17 +536,19 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
         i++;
         continue;
       }
-      // Triplet-ish runs: lengths with a factor of 3 in the denominator.
-      let tupletPrefix = '';
-      let scale = 1;
+      // Tuplet runs: p notes in the time of q (triplets 3:2, quintuplets 5:4 …), written "(3" or "(p:q:n".
       if (!isPlainLength(e.beats, unit)) {
-        let n = 0;
-        while (n < 3 && i + n < events.length && events[i + n].kind !== 'bar' && !isPlainLength((events[i + n] as NoteEvent).beats, unit)) n++;
-        tupletPrefix = n === 3 ? '(3' : `(3:2:${n}`;
-        scale = 1.5;
-        for (let k = 0; k < n; k++) emit(events[i + k] as NoteEvent | RestEvent, li, i + k, k === 0 ? tupletPrefix : '', scale);
-        i += n;
-        continue;
+        const ratio = TUPLETS.find(([p, q]) => isPlainLength((e.beats * p) / q, unit));
+        if (ratio) {
+          const [p, q] = ratio;
+          const fits = (ev: TabEvent) => ev.kind !== 'bar' && ev.beats > 0 && !isPlainLength(ev.beats, unit) && isPlainLength((ev.beats * p) / q, unit);
+          let n = 0;
+          while (n < p && i + n < events.length && fits(events[i + n])) n++;
+          const prefix = p === 3 && q === 2 && n === 3 ? '(3' : `(${p}:${q}:${n}`;
+          for (let k = 0; k < n; k++) emit(events[i + k] as NoteEvent | RestEvent, li, i + k, k === 0 ? prefix : '', p / q);
+          i += n;
+          continue;
+        }
       }
       emit(e, li, i, '', 1);
       i++;

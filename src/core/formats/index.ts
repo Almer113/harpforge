@@ -115,7 +115,7 @@ export const EXPORTS: { id: ExportKind; name: string; ext: string; mime: string;
   { id: 'musicxml', name: 'MusicXML', ext: 'musicxml', mime: 'application/vnd.recordare.musicxml+xml', hint: 'For MuseScore, Finale, Sibelius…', loses: 'The tab is a second lyric line; comments are left out' },
   { id: 'midi', name: 'MIDI', ext: 'mid', mime: 'audio/midi', hint: 'Plays in any MIDI app', loses: 'Notes only: no tab, lyrics, chord symbols or sections' },
   { id: 'chordpro', name: 'ChordPro', ext: 'cho', mime: 'text/plain', hint: 'Chords + lyrics only', loses: 'No melody or tab' },
-  { id: 'jianpu', name: 'Numbered notation', ext: 'txt', mime: 'text/plain', hint: 'Jianpu (1=C …), common for tremolo', loses: 'Harmonica chords keep only their top note; no tab' },
+  { id: 'jianpu', name: 'Numbered notation', ext: 'txt', mime: 'text/plain', hint: 'Jianpu (1=C …), common for tremolo', loses: 'Harmonica chords keep only their top note; notes the harp can’t play become rests (and lose their syllable); no tab' },
 ];
 
 export function exportDoc(kind: ExportKind, doc: TabDoc, harp: Harmonica, htabText?: string): { filename: string; data: string | Uint8Array; mime: string } {

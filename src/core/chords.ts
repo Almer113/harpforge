@@ -85,8 +85,9 @@ export function isChordSymbol(word: string): boolean {
   if (!m) return false;
   const suffix = m[2];
   if (QUALITIES.some(([names]) => names.includes(suffix))) return true;
-  // Accept extensions like "maj7(#11)", "7(b9)", "sus4add9".
-  return /^(maj|min|m|M|dim|aug|sus|add|\+|-|°|ø|Δ)?[0-9#b()+add susmajΔ°ø/]*$/.test(suffix) && suffix.length <= 10;
+  // Accept extensions like "maj7(#11)", "7(b9)", "sus4add9": made of chord words, digits and
+  // accidentals only, so words such as "Bad" or "Dad" (B + "ad") aren't chords.
+  return /^(?:maj|min|dim|aug|sus|add|alt|omit|no|m|M|\+|-|°|ø|Δ|\d|#|b|♯|♭|\(|\)|,)*$/.test(suffix) && suffix.length <= 10;
 }
 
 export interface HarmonicaChord {

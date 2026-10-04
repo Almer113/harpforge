@@ -189,6 +189,11 @@ function parseLine(s: string, doPc: number, warnings: string[], ctx: TieContext)
       else if (s.startsWith('||', i)) [style, len] = ['double', 2];
       else if (s.startsWith('|]', i)) [style, len] = ['final', 2];
       else if (s.startsWith('|:', i)) [style, len] = ['repeat-start', 2];
+      // A chord symbol right before a bar line, with no note after it, marks the end of its bar.
+      if (pendingChord && !group) {
+        events.push({ kind: 'rest', beats: 0, chord: pendingChord });
+        pendingChord = undefined;
+      }
       events.push({ kind: 'bar', style });
       i += len;
       continue;
@@ -205,16 +210,19 @@ function parseLine(s: string, doPc: number, warnings: string[], ctx: TieContext)
       continue;
     }
     if (c === '}') {
-      // A group lasts one beat, plus one per "~" after it; items share it by weight.
+      // A group lasts one beat, plus one per "~" after it, divided by an optional "/N"
+      // ("{5 6 7}/2" = half a beat); items share it by weight.
       let tildes = 0;
       while (s[i + 1 + tildes] === '~') tildes++;
+      const div = /^\/(\d{1,2})/.exec(s.slice(i + 1 + tildes));
+      const total = (1 + tildes) / (div ? Math.max(1, parseInt(div[1], 10)) : 1);
       if (group && group.length) {
         const sum = group.reduce((a, e) => a + e.beats, 0);
-        for (const e of group) e.beats = ((1 + tildes) * e.beats) / sum;
+        for (const e of group) e.beats = (total * e.beats) / sum;
         events.push(...group);
       }
       group = null;
-      i += 1 + tildes;
+      i += 1 + tildes + (div ? div[0].length : 0);
       continue;
     }
     if (c === '-' || c === '–' || c === '—') {
@@ -292,6 +300,8 @@ function parseLine(s: string, doPc: number, warnings: string[], ctx: TieContext)
     warnings.push(`Skipped "${c}" in numbered notation`);
     i++;
   }
+  // A chord symbol at the end of the line: a marker at the end of the bar.
+  if (pendingChord) events.push({ kind: 'rest', beats: 0, chord: pendingChord });
   return events;
 }
 
@@ -305,6 +315,14 @@ export function durationSpelling(beats: number): { suffix: string; dashes: numbe
   for (const [b, suffix, dashes] of table) if (Math.abs(beats - b) < 1e-6) return { suffix, dashes };
   if (Math.abs(beats - Math.round(beats)) < 1e-6 && beats >= 1) return { suffix: '', dashes: Math.round(beats) - 1 };
   return null;
+}
+
+/** A group's length after its "}": "~" per extra beat, and "/N" for part of a beat ("~~/2" = 1½ beats). */
+function groupLength(sum: number): string {
+  const isInt = (x: number) => Math.abs(x - Math.round(x)) < 1e-6;
+  if (isInt(sum) && sum >= 1 - 1e-6) return '~'.repeat(Math.round(sum) - 1);
+  for (const n of [2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 24, 48]) if (isInt(sum * n)) return '~'.repeat(Math.max(0, Math.round(sum * n) - 1)) + '/' + n;
+  return '~'.repeat(Math.max(0, Math.round(sum) - 1));
 }
 
 export function writeJianpu(doc: TabDoc, harp?: Harmonica): string {
@@ -336,7 +354,8 @@ export function writeJianpu(doc: TabDoc, harp?: Harmonica): string {
         return chord + '~' + (sp ? sp.suffix : '');
       }
       const core = midis.length ? degreeText(midiToDegree(midis[midis.length - 1], doPc)) : '0';
-      if (e.kind === 'note') lyrics.push(e.lyric ? e.lyric.trim().replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-') : '*');
+      // A note the harp can't play is written as a rest ("0"), which takes no syllable.
+      if (e.kind === 'note' && midis.length) lyrics.push(e.lyric ? e.lyric.trim().replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-') : '*');
       if (scaleBeats !== null) return chord + core + '~'.repeat(Math.max(0, Math.round(scaleBeats) - 1));
       const sp = durationSpelling(e.beats)!;
       return chord + core + sp.suffix + ' -'.repeat(sp.dashes);
@@ -359,16 +378,18 @@ export function writeJianpu(doc: TabDoc, harp?: Harmonica): string {
         continue;
       }
       // Odd rhythms (triplets…): a { } group adding up to whole beats.
+      // (It stops at a bar line or a chord symbol on its own; one that ends off the beat gets "/N".)
       const group: (NoteEvent | RestEvent)[] = [];
       let sum = 0;
-      while (i < events.length && events[i].kind !== 'bar' && (group.length === 0 || Math.abs(sum - Math.round(sum)) > 1e-6)) {
+      const wholeBeats = (e: TabEvent) => e.kind !== 'bar' && e.beats >= 1 - 1e-6 && Math.abs(e.beats - Math.round(e.beats)) < 1e-6;
+      while (i < events.length && events[i].kind !== 'bar' && (events[i] as NoteEvent | RestEvent).beats > 0 && (group.length === 0 || (Math.abs(sum - Math.round(sum)) > 1e-6 && !wholeBeats(events[i])))) {
         const g = events[i] as NoteEvent | RestEvent;
         group.push(g);
         sum += g.beats;
         i++;
       }
       const unit = Math.min(...group.map((g) => g.beats));
-      parts.push('{' + group.map((g) => tokenFor(g, g.beats / unit)).join(' ') + '}' + '~'.repeat(Math.max(0, Math.round(sum) - 1)));
+      parts.push('{' + group.map((g) => tokenFor(g, g.beats / unit)).join(' ') + '}' + groupLength(sum));
     }
     out.push(parts.join(' '));
     if (lyrics.some((l) => l !== '*')) {

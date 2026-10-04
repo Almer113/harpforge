@@ -346,6 +346,25 @@ function ImportBody() {
               )}
             </div>
             {analysis.chordSheet && <p className="hint">A chord sheet: the chords are played as harmonica chords. Record or type the melody afterwards if you like.</p>}
+            {imported.parts && imported.choosePart && draft.imported && (
+              <label className="import-part">
+                <span>Part</span>
+                <select
+                  value={imported.part}
+                  onChange={(e) => {
+                    const next = imported.choosePart!(e.target.value);
+                    setPicked(null);
+                    setShifts({});
+                    useApp.setState({ importDraft: { ...draft, imported: { ...next, kind: draft.imported!.kind } } });
+                  }}
+                  title="The file holds several parts: pick the one with the melody"
+                >
+                  {imported.parts.map((p) => (
+                    <option key={p.id} value={p.id}>{p.label}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             {imported.warnings.length > 0 && (
               <div className="issues">
                 {imported.warnings.slice(0, 5).map((w, i) => (

@@ -85,9 +85,12 @@ export function parseGuitarTab(text: string): Imported {
       if (block.every((l) => l[col] === '|') && col > Math.max(...starts)) bars.push(col);
     }
     block.forEach((l, s) => {
+      // A digit right after a two-digit fret is part of it; "35" (no fret 35) is two notes.
+      let partOf = -1;
       for (let col = starts[s]; col < l.length; col++) {
-        if (!/\d/.test(l[col]) || /\d/.test(l[col - 1] ?? '')) continue;
+        if (!/\d/.test(l[col]) || col === partOf) continue;
         const two = /\d/.test(l[col + 1] ?? '') && parseInt(l.slice(col, col + 2), 10) <= 24;
+        if (two) partOf = col + 1;
         const fret = parseInt(two ? l.slice(col, col + 2) : l[col], 10);
         const list = byCol.get(col) ?? [];
         list.push(tuning[s] + fret + 12);

@@ -74,6 +74,16 @@ const MODE_SUFFIX: Record<Mode, string> = { major: '', minor: 'm', dorian: ' dor
 
 const MODE_OFFSET: Record<Mode, number> = { major: 0, dorian: 2, phrygian: 4, lydian: 5, mixolydian: 7, minor: 9, locrian: 11 };
 
+/**
+ * The key a key signature and mode name give: (0, "dorian") → "D dorian", (-1, "minor") → "Dm".
+ * Unknown mode names count as major.
+ */
+export function keyFromSignature(fifths: number, modeName?: string): string {
+  const word = (modeName ?? 'major').trim().toLowerCase();
+  const mode: Mode = word === 'ionian' ? 'major' : word === 'aeolian' ? 'minor' : word in MODE_OFFSET ? (word as Mode) : 'major';
+  return pitchClassName(mod12(fifths * 7) + MODE_OFFSET[mode], fifths < 0) + MODE_SUFFIX[mode];
+}
+
 /** The pitch classes of a key's scale (C major and A minor share theirs), or null. */
 export function keyScale(name: string | undefined): number[] | null {
   const k = parseKey(name);

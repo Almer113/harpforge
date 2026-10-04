@@ -2,7 +2,7 @@
 
 import type { Harmonica } from '../instruments';
 import { beatsPerBar, type NoteEvent, type TabDoc } from '../htab/types';
-import { pitchClassName } from '../pitch';
+import { keyFromSignature } from '../pitch';
 import { clustersToEvents, quantize } from '../timeline';
 import type { Sound } from '../types';
 import { wrapEvents } from '../htab/serializer';
@@ -20,6 +20,12 @@ interface RawNote {
 interface RawTrack {
   name: string;
   notes: RawNote[];
+}
+
+/** One line of music to choose from: a track, or one channel of a track that holds several. */
+interface Part extends RawTrack {
+  id: string;
+  label: string;
 }
 
 class Reader {
@@ -58,7 +64,12 @@ class Reader {
   }
 }
 
-export function parseMidi(data: Uint8Array): Imported {
+/**
+ * Reads a MIDI file and takes one part as the melody: the one named like a melody, or the
+ * busiest single line. Tracks holding several channels (format 0) are split by channel;
+ * `part` picks another part (see Imported.parts).
+ */
+export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Imported {
   const warnings: string[] = [];
   const r = new Reader(data);
   if (r.str(4) !== 'MThd') throw new Error('Not a MIDI file');
@@ -101,13 +112,12 @@ export function parseMidi(data: Uint8Array): Imported {
         else if (type === 0x58 && timeSig === null) timeSig = `${d[0]}/${Math.pow(2, d[1])}`;
         else if (type === 0x59 && keySig === null) {
           const sf = (d[0] << 24) >> 24;
-          const minor = d[1] === 1;
-          const majorPc = (sf * 7 + 1200) % 12;
-          keySig = minor ? pitchClassName(majorPc + 9, sf < 0) + 'm' : pitchClassName(majorPc, sf < 0);
+          keySig = keyFromSignature(sf, d[1] === 1 ? 'minor' : 'major');
         } else if (type === 0x03) {
           const name = new TextDecoder().decode(d).trim();
           track.name = name;
-          if (t === 0 && name && ntrks > 1) title ??= name;
+          // The first track's name is the song's (one-track files too, like our own export).
+          if (t === 0 && name) title ??= name;
         }
         continue;
       }
@@ -141,10 +151,16 @@ export function parseMidi(data: Uint8Array): Imported {
     if (track.notes.length) tracks.push(track);
   }
 
-  // Pick the melody: skip drums; prefer named melody tracks, then the most monophonic busy track.
-  const candidates = tracks
-    .map((tr) => ({ ...tr, notes: tr.notes.filter((n) => n.channel !== 9) }))
-    .filter((tr) => tr.notes.length);
+  // Parts: each track, split by channel when it holds several (drums, channel 10, left out).
+  const candidates: Part[] = [];
+  tracks.forEach((tr, ti) => {
+    const channels = [...new Set(tr.notes.map((n) => n.channel))].filter((c) => c !== 9).sort((a, b) => a - b);
+    for (const ch of channels) {
+      const name = tr.name || (tracks.length > 1 ? `Track ${ti + 1}` : '');
+      const label = channels.length > 1 || !name ? `${name ? name + ' · ' : ''}channel ${ch + 1}` : name;
+      candidates.push({ id: `${ti}:${ch}`, label, name: tr.name, notes: tr.notes.filter((n) => n.channel === ch) });
+    }
+  });
   if (!candidates.length) throw new Error('No notes found in this MIDI file.');
   const score = (tr: RawTrack) => {
     const sorted = [...tr.notes].sort((a, b) => a.start - b.start);
@@ -155,8 +171,8 @@ export function parseMidi(data: Uint8Array): Imported {
     return named + mono + avg / 10;
   };
   candidates.sort((a, b) => score(b) - score(a));
-  const chosen = candidates[0];
-  if (candidates.length > 1) warnings.push(`Imported the melody from track "${chosen.name || 'unnamed'}" (${candidates.length} tracks with notes).`);
+  const chosen = candidates.find((c) => c.id === opts.part) ?? candidates[0];
+  if (candidates.length > 1) warnings.push(`Imported “${chosen.label}” as the melody (${candidates.length} parts with notes: pick another under Part).`);
 
   const meta = notesMeta({
     title: title || undefined,
@@ -176,7 +192,8 @@ export function parseMidi(data: Uint8Array): Imported {
   const clusters = quantize(notes, grid, (a, b) => a.type === 'pitch' && b.type === 'pitch' && a.midi === b.midi);
   for (const c of clusters) c.sounds.sort((a, b) => (a.type === 'pitch' && b.type === 'pitch' ? a.midi - b.midi : 0));
   const events = clustersToEvents(clusters, beatsPerBar(meta));
-  return { doc: { meta, lines: wrapEvents(events, 4) }, warnings, format: 'MIDI' };
+  const parts = candidates.length > 1 ? candidates.map((c) => ({ id: c.id, label: c.label })) : undefined;
+  return { doc: { meta, lines: wrapEvents(events, 4) }, warnings, format: 'MIDI', parts, part: chosen.id, choosePart: (id) => parseMidi(data, { part: id }) };
 }
 
 // ---- Writing --------------------------------------------------------------------
