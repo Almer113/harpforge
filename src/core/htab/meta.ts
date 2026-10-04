@@ -1,6 +1,6 @@
 // Edits header fields in .htab text without touching the body.
 
-import { HEADER_ALIASES, splitHeader } from './parser';
+import { HEADER_ALIASES, headerValue, splitHeader } from './parser';
 
 /** Canonical header names, as written by the serializer. */
 const CANONICAL: Record<string, string> = {
@@ -45,7 +45,7 @@ export function setMetaFields(text: string, patch: Record<string, string | numbe
         if (remaining.has(field)) {
           const v = remaining.get(field);
           remaining.delete(field);
-          if (v !== undefined && v !== '') out.push(`${line.slice(0, colon).trim()}: ${v}`);
+          if (v !== undefined && v !== '') out.push(`${line.slice(0, colon).trim()}: ${headerValue(v)}`);
           continue;
         }
       }
@@ -56,7 +56,7 @@ export function setMetaFields(text: string, patch: Record<string, string | numbe
     out.push('---');
   }
   for (const [k, v] of remaining) {
-    if (v !== undefined && v !== '') out.push(`${CANONICAL[k] ?? k}: ${v}`);
+    if (v !== undefined && v !== '') out.push(`${CANONICAL[k] ?? k}: ${headerValue(v)}`);
   }
   out.push('---');
   const body = headerEnd >= 0 ? text.slice(bodyStart) : text.replace(/^\s*\n/, '');

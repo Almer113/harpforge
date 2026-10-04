@@ -71,7 +71,7 @@ function classify(text: string, issues: ParseIssue[]): string[] {
       if (m[0].length === 0) TOKEN_RE.lastIndex++;
     }
   }
-  for (const is of issues) mark(is.span.start, is.span.end, is.severity === 'error' ? 'hl-err' : 'hl-warn');
+  for (const is of issues) if (is.severity !== 'info') mark(is.span.start, is.span.end, is.severity === 'error' ? 'hl-err' : 'hl-warn');
   return cls;
 }
 

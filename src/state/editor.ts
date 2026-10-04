@@ -2,7 +2,7 @@
 
 import { fromDoc, type Song } from '../core/edit/model';
 import { retabNotes } from '../core/edit/retab';
-import { spliceBody } from '../core/edit/splice';
+import { keptMessage, spliceBody, type SpliceReport } from '../core/edit/splice';
 import { transposeChord } from '../core/chords';
 import { keyUsesFlats, transposeKey } from '../core/pitch';
 import { setMetaFields } from '../core/htab/meta';
@@ -16,10 +16,10 @@ export function currentSong(): Song {
 }
 
 /** The current text with its body replaced by `song` (the header is kept as written). */
-export function songText(song: Song): string {
+export function songText(song: Song, report?: SpliceReport): string {
   const current = useApp.getState().text;
   // Lines the edit didn't touch keep their own text, comments and blank lines.
-  let text = current.slice(0, splitHeader(current).bodyStart) + spliceBody(current, song) + '\n';
+  let text = current.slice(0, splitHeader(current).bodyStart) + spliceBody(current, song, report) + '\n';
   if (song.meta.time !== getParsed(current).doc.meta.time) text = setMetaFields(text, { time: song.meta.time });
   return text;
 }
@@ -46,19 +46,25 @@ export function retabSelection(shift: number) {
     st.notify(shift ? 'Nothing to move.' : 'Already the easiest way to play these notes.');
     return;
   }
-  let text = songText(out);
+  const report: SpliceReport = { kept: [] };
+  let text = songText(out, report);
   if (whole && shift % 12 !== 0 && out.meta.key && out.meta.key !== song.meta.key) text = setMetaFields(text, { key: out.meta.key });
   st.setText(text);
   const what = whole ? 'the song' : `${sel.length} note${sel.length === 1 ? '' : 's'}`;
   const tech = (t: { bends: number; overblows: number }) => `${t.bends} bend${t.bends === 1 ? '' : 's'}${t.overblows ? `, ${t.overblows} overblow${t.overblows === 1 ? '' : 's'}` : ''}`;
-  const lost = r.unplayable ? ` — ${r.unplayable} note${r.unplayable === 1 ? '' : 's'} don't fit this harp (kept as note names)` : '';
-  if (shift === 0) st.notify(`Made ${what} easier: ${r.changed} note${r.changed === 1 ? '' : 's'} changed (${tech(r.before)} → ${tech(r.after)})`);
-  else st.notify(`Moved ${what} ${Math.abs(shift) === 12 ? 'an octave' : `${Math.abs(shift)} semitone${Math.abs(shift) === 1 ? '' : 's'}`} ${shift > 0 ? 'up' : 'down'}${lost}`);
+  const lost = r.unplayable ? ` — ${r.unplayable} note${r.unplayable === 1 ? '' : 's'} don't fit this harp (kept as note names or as written)` : '';
+  const kept = keptMessage(report);
+  const also = kept ? ` ${kept}` : '';
+  if (shift === 0) st.notify(`Made ${what} easier: ${r.changed} note${r.changed === 1 ? '' : 's'} changed (${tech(r.before)} → ${tech(r.after)}).${also}`);
+  else st.notify(`Moved ${what} ${Math.abs(shift) === 12 ? 'an octave' : `${Math.abs(shift)} semitone${Math.abs(shift) === 1 ? '' : 's'}`} ${shift > 0 ? 'up' : 'down'}${lost}.${also}`);
 }
 
 /** Writes a song back into the text as one undo step ('typing' groups keystrokes). */
 export function commitSong(song: Song, kind: 'edit' | 'typing' = 'edit') {
-  useApp.getState().setText(songText(song), { kind });
+  const report: SpliceReport = { kept: [] };
+  useApp.getState().setText(songText(song, report), { kind });
+  const kept = keptMessage(report);
+  if (kept) useApp.getState().notify(kept);
 }
 
 /** Parses what's typed in the inspector: "-4'", "(4 5 6)", "-(1 2 3)" or a pitch like "C5". */

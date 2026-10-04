@@ -32,7 +32,8 @@ describe('visual edits keep the text', () => {
 
   it('keeps comments, blank lines and spellings of lines that were not edited', () => {
     const text = doc('# intro riff\n+4 -3b 5 6 |\n\n# verse\n4 5 6 7 |  # end');
-    expect(edit(text, setSound(1, 0, 6))).toBe('# intro riff\n+4 -3b 5 6 |\n\n# verse\n6 5 6 7 |');
+    // The edited line keeps its own comment.
+    expect(edit(text, setSound(1, 0, 6))).toBe('# intro riff\n+4 -3b 5 6 |\n\n# verse\n6 5 6 7 | # end');
   });
 
   it('keeps pickups, short bars and bars that run on to the next line', () => {

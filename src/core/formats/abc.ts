@@ -121,6 +121,7 @@ export function parseAbc(text: string): Imported {
   };
 
   let lyricRest: (NoteEvent | null)[] = [];
+  let continuesLine = false;
   let lastField = '';
   const attachLyrics = (textLine: string, continued = false) => {
     // Tokenize: syllables separated by spaces or hyphens; _ * skip; | to next bar (approximate: ignored).
@@ -204,7 +205,10 @@ export function parseAbc(text: string): Imported {
     lastField = '';
     if (currentVoice && firstVoice && currentVoice !== firstVoice) continue;
 
-    // Music line
+    // Music line. A "w:" line belongs to the music line just before it, so notes of a line
+    // that had no lyrics aren't given the next line's words (unless it continued with "\").
+    if (!continuesLine) pendingLyricNotes = [];
+    continuesLine = /\\\s*$/.test(line);
     const events: TabEvent[] = [];
     let pendingChord: string | undefined;
     let tuplet: { left: number; factor: number } | null = null;

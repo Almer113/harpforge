@@ -3,7 +3,7 @@
 import { guessTonic, positionFor, positionName, retab, transposeDoc } from '../core/convert';
 import { setMetaFields } from '../core/htab/meta';
 import { splitHeader } from '../core/htab/parser';
-import { replaceLines } from '../core/edit/splice';
+import { keptMessage, replaceLines, type SpliceReport } from '../core/edit/splice';
 import { keyUsesFlats } from '../core/pitch';
 import { getHarmonica, specId, type HarmonicaSpec } from '../core/instruments';
 import { BLANK } from '../demo/songs';
@@ -46,10 +46,11 @@ export function setHarmonica(spec: HarmonicaSpec, keep: 'holes' | 'notes' = 'not
     const semis = keyDistance(p.harp.spec, to.spec);
     const moved = transposeDoc(p.doc, semis);
     if (moved.meta.key) fields.key = moved.meta.key;
-    const body = replaceLines(s.text, moved.lines, keyUsesFlats(moved.meta.key ?? to.spec.key));
+    const report: SpliceReport = { kept: [] };
+    const body = replaceLines(s.text, moved.lines, keyUsesFlats(moved.meta.key ?? to.spec.key), report);
     s.setText(setMetaFields(header, fields) + body + (body ? '\n' : ''));
     if (p.doc.lines.some((l) => l.events.some((e) => e.kind === 'note')))
-      s.notify(`Same holes on ${to.name}${moved.meta.key ? ` — the song is now in ${moved.meta.key}` : ''}, chords moved too.`);
+      s.notify(`Same holes on ${to.name}${moved.meta.key ? ` — the song is now in ${moved.meta.key}` : ''}, chords moved too.${withKept(report)}`);
     return;
   }
   // Reading in notes, the notes stay in their octave if they fit.
@@ -58,12 +59,13 @@ export function setHarmonica(spec: HarmonicaSpec, keep: 'holes' | 'notes' = 'not
   const tonic = guessTonic(p.doc, p.harp);
   if (p.doc.meta.position !== undefined) fields.position = tonic !== undefined && to.spec.family !== 'chromatic' ? positionName(positionFor(to.spec.key, tonic)!) : undefined;
   // Only the lines whose notes changed are rewritten; comments and spacing stay.
-  const body = replaceLines(s.text, r.doc.lines);
+  const report: SpliceReport = { kept: [] };
+  const body = replaceLines(s.text, r.doc.lines, undefined, report);
   s.setText(setMetaFields(header, fields) + body + (body ? '\n' : ''));
   if (r.stats.unplayable)
-    s.notify(`Re-tabbed for ${to.name} — ${r.stats.unplayable} note(s) don't fit this harmonica and are kept as note names (e.g. A#4).`);
-  else if (r.warnings.length) s.notify(`Re-tabbed for ${to.name} — ${r.warnings.join('; ')}.`);
-  else if (r.stats.notes) s.notify(`Re-tabbed for ${to.name} ✓`);
+    s.notify(`Re-tabbed for ${to.name} — ${r.stats.unplayable} note(s) don't fit this harmonica and are kept as note names or as written (${r.warnings[0]}).${withKept(report)}`);
+  else if (r.warnings.length) s.notify(`Re-tabbed for ${to.name} — ${r.warnings.join('; ')}.${withKept(report)}`);
+  else if (r.stats.notes) s.notify(`Re-tabbed for ${to.name} ✓${withKept(report)}`);
 }
 
 /** Moves the whole tab an octave up (+12) or down (−12) on the same harmonica, if it fits. */
@@ -77,9 +79,16 @@ export function shiftOctave(shift: 12 | -12) {
   }
   stop();
   const header = s.text.slice(0, splitHeader(s.text).bodyStart);
-  const body = replaceLines(s.text, opt.result.doc.lines);
+  const report: SpliceReport = { kept: [] };
+  const body = replaceLines(s.text, opt.result.doc.lines, undefined, report);
   s.setText(header + body + (body ? '\n' : ''));
-  s.notify(`Moved an octave ${shift > 0 ? 'up' : 'down'} ✓`);
+  s.notify(`Moved an octave ${shift > 0 ? 'up' : 'down'} ✓${withKept(report)}`);
+}
+
+/** " Kept “x” in a comment…" after a message, when a rewrite kept unreadable tokens. */
+function withKept(report: SpliceReport): string {
+  const m = keptMessage(report);
+  return m ? ` ${m}` : '';
 }
 
 export function confirmDiscard(): boolean {

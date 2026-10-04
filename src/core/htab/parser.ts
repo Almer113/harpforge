@@ -55,16 +55,22 @@ export function splitHeader(text: string): { header: { key: string; value: strin
     }
     const content = stripComment(line);
     const colon = content.indexOf(':');
-    if (colon > 0) header.push({ key: content.slice(0, colon).trim().toLowerCase(), value: content.slice(colon + 1).trim(), line: idx });
+    if (colon > 0) header.push({ key: content.slice(0, colon).trim().toLowerCase(), value: content.slice(colon + 1).trim().replace(/\\#/g, '#'), line: idx });
     offset += line.length + 1;
   }
   // Unterminated header: treat everything as header.
   return { header, bodyStart: text.length, headerEnd: text.length };
 }
 
+/** A header value as written: a "#" that would start a comment (" # ") is written "\#". */
+export function headerValue(v: string | number): string {
+  return String(v).replace(/(^|\s)#(?=\s|$)/g, '$1\\#');
+}
+
+/** A header line without its comment: "#" after a space and before a space or the end ("title: Song #2" keeps its "#2"). */
 function stripComment(line: string): string {
   for (let i = 0; i < line.length; i++) {
-    if (line[i] === '#' && (i === 0 || /\s/.test(line[i - 1]))) return line.slice(0, i);
+    if (line[i] === '#' && (i === 0 || /\s/.test(line[i - 1])) && (i === line.length - 1 || /\s/.test(line[i + 1]))) return line.slice(0, i);
   }
   return line;
 }
@@ -338,6 +344,8 @@ export function parseHtab(text: string): ParseResult {
   const lines: TabLine[] = [];
   let pendingSection: string | undefined;
   let lastLine: TabLine | undefined;
+  // Lyrics lines after the last tab line: the first is its lyrics, more are extra verses (kept, not shown).
+  let verses = 0;
 
   let offset = bodyStart;
   const body = text.slice(bodyStart);
@@ -354,7 +362,9 @@ export function parseHtab(text: string): ParseResult {
       continue;
     }
     if (/^w:/i.test(trimmed)) {
-      if (lastLine) attachLyrics(lastLine, trimmed.slice(2));
+      if (lastLine && verses++ === 0) attachLyrics(lastLine, trimmed.slice(2));
+      else if (lastLine)
+        issues.push({ message: `Verse ${verses} is kept as written; only the first verse is shown and played`, span: { start: lineStart, end: lineStart + line.length }, severity: 'info' });
       else issues.push({ message: 'Lyrics line "w:" must follow a tab line', span: { start: lineStart, end: lineStart + line.length }, severity: 'warning' });
       continue;
     }
@@ -371,6 +381,7 @@ export function parseHtab(text: string): ParseResult {
     }
     lines.push(tabLine);
     lastLine = tabLine;
+    verses = 0;
   }
   if (pendingSection !== undefined) lines.push({ section: pendingSection, events: [] });
 

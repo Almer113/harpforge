@@ -68,7 +68,8 @@ export interface TabMeta {
 export interface ParseIssue {
   message: string;
   span: Span;
-  severity: 'error' | 'warning';
+  /** 'info' is a note, not a problem (e.g. an extra verse that's kept but not shown). */
+  severity: 'error' | 'warning' | 'info';
 }
 
 export interface TabDoc {

@@ -71,19 +71,21 @@ function TextEditor({ split }: { split: boolean }) {
   const parsed = useParsed();
   const editor = useRef<CodeEditorHandle>(null);
   const lineOf = (offset: number) => text.slice(0, offset).split('\n').length;
+  const problems = parsed.issues.filter((i) => i.severity !== 'info').length;
   const editorPane = (
     <div className="editor-pane">
       <CodeEditor ref={editor} value={text} onChange={(t) => setText(t, { kind: 'typing' })} issues={parsed.issues} />
-      <div className={`issues ${parsed.issues.length ? '' : 'ok'}`}>
-        {parsed.issues.length === 0 ? (
-          <span>✓ No problems</span>
-        ) : (
-          parsed.issues.slice(0, 50).map((is, i) => (
+      <div className={`issues ${problems ? '' : 'ok'}`}>
+        {!problems && <span>✓ No problems</span>}
+        {/* Problems first, then notes (an extra verse that's kept but not shown). */}
+        {[...parsed.issues]
+          .sort((a, b) => +(a.severity === 'info') - +(b.severity === 'info'))
+          .slice(0, 50)
+          .map((is, i) => (
             <button key={i} className={`issue ${is.severity}`} onClick={() => editor.current?.select(is.span.start, is.span.end)}>
               <b>Line {lineOf(is.span.start)}</b> {is.message}
             </button>
-          ))
-        )}
+          ))}
       </div>
     </div>
   );

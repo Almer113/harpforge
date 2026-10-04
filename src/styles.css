@@ -975,3 +975,6 @@ button.ve-mnum:hover { color: var(--brass-2); background: var(--panel-2); }
 .play-as .seg button.draw { color: var(--draw); }
 .play-as .seg button.on { color: inherit; }
 .insp-warn { color: var(--danger); margin: 0 0 8px; }
+
+/* A note in the problems list (not a problem). */
+.issue.info { border-color: var(--border-2); background: transparent; color: var(--muted); }

@@ -15,6 +15,7 @@ import {
 } from './instruments';
 import { keyUsesFlats, midiToName, mod12, parseKey, parsePitchClass, transposeKey } from './pitch';
 import { findHarmonicaChord, isNoChord, parseChord, transposeChord } from './chords';
+import { holeSoundText } from './htab/serializer';
 import type { NoteEvent, RestEvent, TabDoc, TabEvent, TabMeta } from './htab/types';
 import type { Breath, HoleSound, Sound } from './types';
 
@@ -145,11 +146,16 @@ export function notesToTab(doc: TabDoc, harp: Harmonica, opts: NotesToTabOptions
   const stats: ConvertStats = { notes: 0, bends: 0, overblows: 0, slides: 0, unplayable: 0, reducedChords: 0, cost: 0 };
 
   // 1. Candidates per note event.
-  type Slot = { line: number; index: number; event: NoteEvent; cands: Candidate[]; pitches: number[] };
+  // `missing`: holes the source harp doesn't have (no pitch to convert); the note is kept as written.
+  type Slot = { line: number; index: number; event: NoteEvent; cands: Candidate[]; pitches: number[]; missing?: boolean };
   const slots: Slot[] = [];
   doc.lines.forEach((l, li) =>
     l.events.forEach((e, ei) => {
       if (e.kind !== 'note' || e.tied) return;
+      if (e.sounds.some((s) => s.type === 'hole' && (!opts.sourceHarp || soundPitch(opts.sourceHarp, s) === null))) {
+        slots.push({ line: li, index: ei, event: e, cands: [], pitches: [], missing: true });
+        return;
+      }
       const raw = eventPitches(e, opts.sourceHarp).filter((m): m is number => m !== null).map((m) => m + shift);
       const pitches = [...new Set(raw)].sort((a, b) => a - b);
       let cands: Candidate[] = [];
@@ -227,6 +233,13 @@ export function notesToTab(doc: TabDoc, harp: Harmonica, opts: NotesToTabOptions
         }
         const slot = lookup.get(`${li}:${ei}`)!;
         const c = chosen.get(slot);
+        if (slot.missing) {
+          stats.unplayable++;
+          stats.cost += 25;
+          const holes = e.sounds.filter((s) => s.type === 'hole' && (!opts.sourceHarp || soundPitch(opts.sourceHarp, s) === null)).map((s) => holeSoundText(s as HoleSound));
+          warnings.push(`hole ${holes.join(' ')} doesn't exist on ${opts.sourceHarp?.name ?? 'this harmonica'}, so it was kept as written`);
+          return { ...e };
+        }
         if (!c) {
           if (slot.pitches.length) {
             stats.unplayable++;
