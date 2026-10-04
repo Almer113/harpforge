@@ -49,10 +49,13 @@ describe('edit model: doc ↔ measures', () => {
     expect(s.measures[2].items).toHaveLength(1); // rests are gaps
   });
 
-  it('bars unbarred tabs by the time signature', () => {
+  it('cuts unbarred tabs into measures for editing, but writes no bar lines back (B22)', () => {
     const s = song('4 4 6 6 -6 -6 6~', '4/4');
     expect(s.measures.map((m) => m.items.length)).toEqual([4, 3]);
-    expect(body(s)).toBe('4 4 6 6 | -6 -6 6~ |');
+    expect(body(s)).toBe('4 4 6 6 -6 -6 6~');
+    // An edit keeps it unbarred and adds no rests.
+    const e = updateItem(song('4 5 6 7 8 9'), { m: 0, start: 0 }, { sounds: [holeSound(3, 'blow')] });
+    expect(body(e)).toBe('3 5 6 7 8 9');
   });
 });
 

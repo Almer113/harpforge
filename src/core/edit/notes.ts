@@ -5,7 +5,7 @@
 import { allOptions, soundPitch, type Harmonica, type ReedOption } from '../instruments';
 import { keyScale, parsePitchClass } from '../pitch';
 import type { HoleSound, Sound } from '../types';
-import { absBeat, allPositions, findItem, type Pos, type Song } from './model';
+import { allPositions, findItem, realBeat, type Pos, type Song } from './model';
 
 export function pitchOf(harp: Harmonica, s: Sound): number | null {
   return s.type === 'pitch' ? s.midi : soundPitch(harp, s);
@@ -30,13 +30,13 @@ export interface Near {
 
 /** The holes played just before and just after `pos` (which needn't hold a note yet). */
 export function neighbours(song: Song, pos: Pos): Near {
-  const at = absBeat(song, pos);
+  const at = realBeat(song, pos);
   let before: { t: number; s: HoleSound } | undefined;
   let after: { t: number; s: HoleSound } | undefined;
   for (const p of allPositions(song)) {
     const s = findItem(song, p)?.sounds.find((x): x is HoleSound => x.type === 'hole');
     if (!s) continue;
-    const t = absBeat(song, p);
+    const t = realBeat(song, p);
     if (t < at - 1e-6 && (!before || t >= before.t)) before = { t, s };
     if (t > at + 1e-6 && (!after || t < after.t)) after = { t, s };
   }

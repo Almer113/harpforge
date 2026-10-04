@@ -11,7 +11,6 @@ import * as engine from '../../audio/engine';
 import {
   advance,
   allPositions,
-  absBeat,
   chainAt,
   chainLength,
   EPS,
@@ -30,6 +29,7 @@ import {
   deleteNotes,
   makeRoom,
   realBeat,
+  posAtReal,
   ripple,
   setTie,
   snapTo,
@@ -752,14 +752,15 @@ function peekText(it: Item, midis: (number | null)[], flats: boolean): string {
  * Splits a span (absolute start + length) into one segment per measure, so previews
  * line up with the lanes — measures are separated by gaps and can wrap onto new lines.
  */
-function segments(cap: number, abs: number, dur: number): { m: number; start: number; len: number }[] {
+function segments(song: Song, abs: number, dur: number): { m: number; start: number; len: number }[] {
   const out: { m: number; start: number; len: number }[] = [];
   let at = abs;
   let left = dur;
   for (let guard = 0; left > EPS && guard < 64; guard++) {
-    const m = Math.floor(at / cap + EPS);
-    const start = at - m * cap;
-    const len = Math.min(left, cap - start);
+    const { m, start } = posAtReal(song, at);
+    const meas = song.measures[m];
+    const len = Math.min(left, (meas ? measureSpan(song, meas) : song.cap) - start);
+    if (len <= EPS) break;
     out.push({ m, start, len });
     at += len;
     left -= len;
@@ -816,9 +817,9 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
       }
       const r = lane.el.getBoundingClientRect();
       const start = Math.max(0, Math.min(song.cap - snap, snapTo((e.clientX - r.left) / zoom - d.grab, snap)));
-      const head = Math.max(0, lane.m * song.cap + start - d.offset);
+      const head = Math.max(0, realBeat(song, { m: lane.m, start }) - d.offset);
       // The other selected notes follow at the same distance.
-      const grabbedHead = absBeat(song, d.pos) - d.offset;
+      const grabbedHead = realBeat(song, d.pos) - d.offset;
       const others = d.group.filter((g) => !samePos(g.pos, chainAt(song, d.pos)[0])).map((g) => ({ abs: Math.max(0, g.abs + head - grabbedHead), dur: g.len }));
       ghostRef.current = { m: lane.m, start, abs: head, dur: d.total, copy: e.altKey, others };
       setGhost(ghostRef.current);
@@ -852,7 +853,7 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
         const to = { m: g.m, start: g.start };
         if (d.group.length > 1) {
           // Several notes: all move by the same amount (Alt copies).
-          const delta = g.abs - (absBeat(s, d.pos) - d.offset);
+          const delta = g.abs - (realBeat(s, d.pos) - d.offset);
           if (Math.abs(delta) > EPS || g.copy) {
             const { song: next, moved } = moveItems(s, d.group.map((x) => x.pos), delta, g.copy);
             apply(next, { selection: moved, anchor: moved[0], measure: moved[0]?.m ?? to.m });
@@ -895,7 +896,7 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
     }
     const group =
       !resize && selection.length > 1 && selection.some((p) => samePos(p, pos))
-        ? selection.map((p) => chainAt(song, p)[0] ?? p).filter((p, i, all) => all.findIndex((q) => samePos(q, p)) === i).map((p) => ({ pos: p, abs: absBeat(song, p), len: chainLength(song, chainAt(song, p)) }))
+        ? selection.map((p) => chainAt(song, p)[0] ?? p).filter((p, i, all) => all.findIndex((q) => samePos(q, p)) === i).map((p) => ({ pos: p, abs: realBeat(song, p), len: chainLength(song, chainAt(song, p)) }))
         : [];
     drag.current = {
       pos,
@@ -905,7 +906,7 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
       grab: (e.clientX - rect.left) / zoom,
       moved: false,
       mode: resize ? 'resize' : 'move',
-      offset: absBeat(song, pos) - absBeat(song, chain[0] ?? pos),
+      offset: realBeat(song, pos) - realBeat(song, chain[0] ?? pos),
       total: chainLength(song, chain),
       group,
       collapse: !e.ctrlKey && !e.metaKey && !e.shiftKey && inSelection && sel.length > 1,
@@ -1070,19 +1071,19 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
                 })}
                 {ve.caret.m === mi && <span className="ve-caret" style={{ left: ve.caret.start * zoom }} />}
                 {ghost &&
-                  ghost.others.flatMap((o) => segments(song.cap, o.abs, o.dur))
+                  ghost.others.flatMap((o) => segments(song, o.abs, o.dur))
                     .filter((g) => g.m === mi)
                     .map((g) => (
                       <span key={`o${g.start}`} className={`ve-ghost ${ghost.copy ? 'copy' : ''}`} style={{ left: g.start * zoom, width: cardW(g.len) }} />
                     ))}
                 {ghost &&
-                  segments(song.cap, ghost.abs, ghost.dur)
+                  segments(song, ghost.abs, ghost.dur)
                     .filter((g) => g.m === mi)
                     .map((g) => (
                       <span key={`g${g.start}`} className={`ve-ghost ${ghost.copy ? 'copy' : ''}`} style={{ left: g.start * zoom, width: cardW(g.len) }} />
                     ))}
                 {resizeDur &&
-                  segments(song.cap, absBeat(song, resizeDur.pos), resizeDur.dur)
+                  segments(song, realBeat(song, resizeDur.pos), resizeDur.dur)
                     .filter((g) => g.m === mi)
                     .map((g) => <span key={`r${g.start}`} className="ve-resize-ghost" style={{ left: g.start * zoom, width: cardW(g.len) }} />)}
               </div>

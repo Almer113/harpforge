@@ -82,7 +82,11 @@ export function SongLine({ editable }: { editable: boolean }) {
   const changeTime = (time: string) => {
     if (time === meta.time) return;
     // Re-barring (⋯ → Measures) splits notes that cross the new bar lines.
-    if (useApp.getState().rebar && hasNotes) commitSong(setTimeSignature(currentSong(), time, true));
+    if (useApp.getState().rebar && hasNotes) {
+      const info = { shortBars: 0 };
+      commitSong(setTimeSignature(currentSong(), time, true, info));
+      if (info.shortBars) useApp.getState().notify(`${info.shortBars === 1 ? 'A bar was' : `${info.shortBars} bars were`} shortened so the repeat signs stay where they are`);
+    }
     else {
       const s = useApp.getState();
       s.setText(setMetaFields(s.text, { time }));

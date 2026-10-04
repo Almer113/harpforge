@@ -3,7 +3,7 @@
 
 import { parseHtab } from '../htab/parser';
 import { bodyText } from '../htab/serializer';
-import { absBeat, chainAt, chainLength, EPS, findItem, fromDoc, measureSpan, placeItem, posAt, samePos, toDoc, type Item, type Pos, type Song } from './model';
+import { chainAt, chainLength, clearSpan, EPS, findItem, fromDoc, measureSpan, placeItem, posAtReal, realBeat, samePos, toDoc, type Item, type Measure, type Pos, type Song } from './model';
 
 interface Piece {
   rel: number;
@@ -18,12 +18,12 @@ function piecesOf(song: Song, positions: Pos[]): Piece[] {
     if (findItem(song, head) && !heads.some((h) => samePos(h, head))) heads.push(head);
   }
   if (!heads.length) return [];
-  const base = Math.min(...heads.map((h) => absBeat(song, h)));
+  const base = Math.min(...heads.map((h) => realBeat(song, h)));
   return heads
     .map((h) => {
       const item = { ...findItem(song, h)!, dur: chainLength(song, chainAt(song, h)) };
       delete item.tied;
-      return { rel: absBeat(song, h) - base, item };
+      return { rel: realBeat(song, h) - base, item };
     })
     .sort((a, b) => a.rel - b.rel);
 }
@@ -32,26 +32,25 @@ function piecesOf(song: Song, positions: Pos[]): Piece[] {
 export function copyText(song: Song, positions: Pos[]): string {
   const pieces = piecesOf(song, positions);
   if (!pieces.length) return '';
-  // Keep the bar lines where they were: the first note sits where it did in its bar, and the
-  // part of that bar before it is left out (written like a pickup).
-  const first = positions.map((p) => chainAt(song, p)[0] ?? p).reduce((a, b) => (absBeat(song, b) < absBeat(song, a) ? b : a));
-  const phase = first.start;
-  let s: Song = { meta: song.meta, cap: song.cap, measures: [{ items: [], endBar: 'single', lineBreak: true }] };
+  // Keep the bar lines where they were: the copy starts at the first note, and its bars end
+  // where the song's bars do (the first one is cut short like a pickup; short bars stay short).
+  const first = positions.map((p) => chainAt(song, p)[0] ?? p).reduce((a, b) => (realBeat(song, b) < realBeat(song, a) ? b : a));
+  const end = Math.max(...pieces.map((p) => p.rel + p.item.dur));
+  const measures: Measure[] = [];
+  for (let m = first.m, t = 0; t < end - EPS; m++) {
+    const src = song.measures[m];
+    const span = (src ? measureSpan(song, src) : song.cap) - (m === first.m ? first.start : 0);
+    measures.push({ items: [], endBar: 'single', lineBreak: m === first.m, len: Math.min(span, end - t) });
+    t += span;
+  }
+  let s: Song = { meta: song.meta, cap: song.cap, measures };
   for (const p of pieces) {
-    const at = posAt(s, phase + p.rel);
+    const at = posAtReal(s, p.rel);
     s = placeItem(s, at.m, { ...p.item, start: at.start });
   }
-  const head = s.measures[0];
-  if (phase > EPS) {
-    head.items = head.items.map((it) => ({ ...it, start: it.start - phase }));
-    head.len = song.cap - phase;
-  }
-  // The copied notes, not the rest of the last bar or its bar line.
-  const end = phase + Math.max(...pieces.map((p) => p.rel + p.item.dur));
-  const lastIndex = s.measures.length - 1;
-  const last = s.measures[lastIndex];
-  last.len = end - lastIndex * s.cap - (lastIndex === 0 ? phase : 0);
-  last.endBar = 'none';
+  // Full bars are written as full bars; the last one ends at the copied notes, with no bar line.
+  for (const m of s.measures) if (m.len !== undefined && m.len >= song.cap - EPS) delete m.len;
+  s.measures[s.measures.length - 1].endBar = 'none';
   return bodyText(toDoc(s).lines).trim();
 }
 
@@ -78,15 +77,17 @@ export function pasteText(song: Song, text: string, at: Pos): { song: Song; plac
   }
   const notes = pieces.filter((p) => p.item.sounds.length || p.item.chord || p.item.lyric);
   if (!notes.length) return null;
-  const base = absBeat(song, at);
-  let s = song;
+  const base = realBeat(song, at);
+  // The pasted stretch overwrites what's there, rests included ("4 . 5" leaves a gap).
+  const length = Math.max(t, ...notes.map((p) => p.rel + p.item.dur));
+  let s = clearSpan(song, base, base + length);
   const placed: Pos[] = [];
   let end = base;
   for (const p of notes) {
-    const to = posAt(s, base + p.rel);
+    const to = posAtReal(s, base + p.rel);
     s = placeItem(s, to.m, { ...p.item, start: to.start });
     placed.push(to);
     end = Math.max(end, base + p.rel + p.item.dur);
   }
-  return { song: s, placed, end: posAt(s, end) };
+  return { song: s, placed, end: posAtReal(s, end) };
 }
