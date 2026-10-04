@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { writeAbc } from '../core/formats/abc';
 import { eventKey } from '../core/score';
 import type { Parsed } from '../state/store';
+import { followTo } from './follow';
 
 interface Props {
   parsed: Parsed;
@@ -81,7 +82,7 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick }: 
       }
       if (on && set[0]) lastActive = set[0];
     });
-    lastActive?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    followTo(lastActive);
   }, [activeEvents, selectedEvent, abc]);
 
   return <div className="staffview" ref={host} />;

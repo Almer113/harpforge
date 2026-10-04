@@ -855,3 +855,12 @@ select:focus, .search:focus { border-color: var(--brass); }
 .lib-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 28px; background: var(--panel); border: 1px dashed var(--border-2); border-radius: var(--radius); }
 .lib-empty p { margin: 0; max-width: 560px; }
 .lib-backup { margin: 6px 0 0; padding-top: 12px; border-top: 1px solid var(--border); }
+
+/* ---------- Accessibility ---------- */
+:root { --faint: #8b7e6e; }
+:focus-visible { outline: 2px solid var(--brass-2); outline-offset: 2px; }
+button:focus:not(:focus-visible) { outline: none; }
+.code-area textarea:focus-visible { outline: none; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
+}

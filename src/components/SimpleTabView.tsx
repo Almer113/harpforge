@@ -6,6 +6,7 @@ import { holeSoundText, soundText } from '../core/htab/serializer';
 import type { NoteEvent, TabDoc, TabEvent } from '../core/htab/types';
 import { eventKey } from '../core/score';
 import type { Parsed } from '../state/store';
+import { followTo } from './follow';
 
 interface Props {
   parsed: Parsed;
@@ -90,9 +91,10 @@ export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect }:
 
   useEffect(() => {
     if (!activeEvents.length || !root.current) return;
-    root.current.querySelector(`[data-index="${activeEvents[activeEvents.length - 1]}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    followTo(root.current.querySelector(`[data-index="${activeEvents[activeEvents.length - 1]}"]`));
   }, [activeEvents]);
 
+  const activeSet = new Set(activeEvents);
   const lines = doc.lines.map((l, li) => ({ li, measures: measuresOf(l.events) })).filter((l) => l.measures.length);
   if (!lines.length) return <div className="tab-empty"><p>This tab is empty.</p></div>;
 
@@ -104,7 +106,7 @@ export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect }:
             <span className="st-measure" key={mi}>
               {m.map(({ ev, ei }) => {
                 const idx = indexByKey.get(eventKey(li, ei));
-                const active = idx !== undefined && activeEvents.includes(idx);
+                const active = idx !== undefined && activeSet.has(idx);
                 const selected = idx !== undefined && idx === selectedEvent;
                 return (
                   <button

@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Toast } from './components/Controls';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ExportMenu } from './components/ExportMenu';
 import { ImportDialog } from './components/ImportDialog';
 import { Menu } from './components/Menu';
 import { openShortcuts, Shortcuts } from './components/Shortcuts';
-import { EditorPage } from './pages/EditorPage';
 import { LibraryPage } from './pages/LibraryPage';
 import { PlayPage } from './pages/PlayPage';
 import { importFile, importFromFile, newTab, openPasteImport, saveCurrent } from './state/actions';
@@ -22,6 +21,9 @@ const NAV: { id: Page; label: string }[] = [
 ];
 
 startRouter();
+
+// The editor is the biggest page: it loads the first time it's opened.
+const EditorPage = lazy(() => import('./pages/EditorPage').then((m) => ({ default: m.EditorPage })));
 
 /** What you can do with the open tab, the same on every page. */
 function TabActions() {
@@ -156,7 +158,11 @@ export function App() {
       <main>
         <ErrorBoundary resetKey={page}>
           {page === 'play' && <PlayPage />}
-          {page === 'editor' && <EditorPage />}
+          {page === 'editor' && (
+            <Suspense fallback={<section className="page"><p className="muted">Loading the editor…</p></section>}>
+              <EditorPage />
+            </Suspense>
+          )}
           {page === 'library' && <LibraryPage />}
         </ErrorBoundary>
       </main>

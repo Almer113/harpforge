@@ -172,16 +172,16 @@ export function Transport() {
   return (
     <div className="transport">
       <div className="t-group">
-        <button className="t-btn primary" onClick={togglePlay} disabled={!!recording} title="Play / pause (Enter)">
+        <button className="t-btn primary" onClick={togglePlay} disabled={!!recording} title="Play / pause (Enter)" aria-label={play === 'playing' ? 'Pause' : 'Play'}>
           {play === 'playing' ? Icon.pause : Icon.play}
         </button>
-        <button className="t-btn" onClick={stop} disabled={play === 'stopped' || !!recording} title="Stop (Esc)">
+        <button className="t-btn" onClick={stop} disabled={play === 'stopped' || !!recording} title="Stop (Esc)" aria-label="Stop">
           {Icon.stop}
         </button>
-        <button className={`t-btn toggle ${loop ? 'on' : ''}`} onClick={() => useApp.setState({ loop: !loop })} title="Loop">
+        <button className={`t-btn toggle ${loop ? 'on' : ''}`} onClick={() => useApp.setState({ loop: !loop })} title="Loop" aria-label="Loop" aria-pressed={loop}>
           {Icon.loop}
         </button>
-        <button className={`t-btn toggle ${metronome ? 'on' : ''}`} onClick={() => useApp.setState({ metronome: !metronome })} title="Metronome during playback">
+        <button className={`t-btn toggle ${metronome ? 'on' : ''}`} onClick={() => useApp.setState({ metronome: !metronome })} title="Metronome during playback" aria-label="Metronome" aria-pressed={metronome}>
           {Icon.metro}
         </button>
       </div>

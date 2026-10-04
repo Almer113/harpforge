@@ -8,6 +8,7 @@ import type { HoleSound, Sound } from '../core/types';
 import type { Parsed } from '../state/store';
 import { doPitchClass, midiToDegree } from '../core/formats/jianpu';
 import { holeSoundText } from '../core/htab/serializer';
+import { followTo } from './follow';
 
 const BEAT_PX = 46;
 
@@ -43,6 +44,7 @@ function toMeasures(events: TabEvent[]): Measure[] {
 }
 
 export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, onCardClick, follow = true, notation = 'holes' }: Props) {
+  const activeSet = new Set(activeEvents);
   const { doc, score, indexByKey, harp } = parsed;
   const flats = prefersFlats(doc.meta.key ?? harp.spec.key);
   const numbers = notation === 'numbers';
@@ -52,7 +54,7 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, on
   useEffect(() => {
     if (!follow || !activeEvents.length || !root.current) return;
     const el = root.current.querySelector(`[data-index="${activeEvents[activeEvents.length - 1]}"]`);
-    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    followTo(el);
   }, [activeEvents, follow]);
 
   useEffect(() => {
@@ -87,7 +89,7 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, on
                     if (ev.kind === 'rest' && ev.beats === 0) {
                       return ev.chord ? <div key={ei} className="card marker"><span className="card-chord">{ev.chord}</span></div> : null;
                     }
-                    const active = idx !== undefined && activeEvents.includes(idx);
+                    const active = idx !== undefined && activeSet.has(idx);
                     const selected = idx !== undefined && idx === selectedEvent;
                     const bad = sev?.midis.some((x) => x === null);
                     const breath = ev.kind === 'note' ? breathOf(ev.sounds) : 'rest';
