@@ -58,13 +58,13 @@ export function PrintPage() {
     <section className="page print-page">
       <div className="print-controls no-print">
         <div className="tb-group">
-          <button className="btn small ghost" onClick={() => history.back()}>← Back</button>
+          <button className="btn small ghost" onClick={() => { const { prevPage, setPage } = useApp.getState(); setPage(prevPage === 'print' ? 'play' : prevPage); }}>← Back</button>
           <h1>Print</h1>
         </div>
         <div className="print-options">
-          <div className="seg" role="tablist" aria-label="What to print">
+          <div className="seg" role="radiogroup" aria-label="What to print">
             {VIEWS.map((v) => (
-              <button key={v.id} role="tab" aria-selected={prefs.view === v.id} className={prefs.view === v.id ? 'on' : ''} onClick={() => set({ view: v.id })}>
+              <button key={v.id} role="radio" aria-checked={prefs.view === v.id} className={prefs.view === v.id ? 'on' : ''} onClick={() => set({ view: v.id })}>
                 {v.label}
               </button>
             ))}
@@ -100,6 +100,7 @@ export function PrintPage() {
         )}
         {prefs.chart && (
           <table className="hole-chart" aria-label="Hole chart">
+            <caption>{rangeLabel(harp)}</caption>
             <tbody>
               <tr>
                 <th>Hole</th>
@@ -120,7 +121,6 @@ export function PrintPage() {
                 ))}
               </tr>
             </tbody>
-            <caption>{rangeLabel(harp)}</caption>
           </table>
         )}
         <div className="paper-body">

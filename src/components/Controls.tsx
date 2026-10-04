@@ -275,6 +275,7 @@ export function Transport({ compact = false }: { compact?: boolean }) {
           max={1.6}
           step={0.05}
           value={speed}
+          aria-label="Speed"
           onChange={(e) => useApp.setState({ speed: parseFloat(e.target.value) })}
           onDoubleClick={() => useApp.setState({ speed: 1 })}
           title="Double-click to reset"

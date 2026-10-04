@@ -46,22 +46,22 @@ export function Sheet({
         <div className="tb-group">
           {view !== 'simple' && <ShowMenu view={view} />}
           {(view === 'tab' || view === 'simple') && <ReadAsSwitch />}
-          <div className="seg" role="tablist" aria-label="Sheet view">
+          <div className="seg" role="radiogroup" aria-label="Sheet view">
             <button
-              role="tab"
-              aria-selected={view === 'simple'}
+              role="radio"
+              aria-checked={view === 'simple'}
               className={view === 'simple' ? 'on' : ''}
               onClick={() => useApp.setState({ sheetView: 'simple' })}
               title="Just the holes, all the same size"
             >
               Simple Tab
             </button>
-            <button role="tab" aria-selected={view === 'tab'} className={view === 'tab' ? 'on' : ''} onClick={() => useApp.setState({ sheetView: 'tab' })}>
+            <button role="radio" aria-checked={view === 'tab'} className={view === 'tab' ? 'on' : ''} onClick={() => useApp.setState({ sheetView: 'tab' })}>
               Tab
             </button>
             <button
-              role="tab"
-              aria-selected={view === 'staff'}
+              role="radio"
+              aria-checked={view === 'staff'}
               className={view === 'staff' ? 'on' : ''}
               onClick={() => useApp.setState({ sheetView: 'staff' })}
               title="Standard notation, with the holes underneath"
@@ -69,8 +69,8 @@ export function Sheet({
               Staff
             </button>
             <button
-              role="tab"
-              aria-selected={view === 'numbers'}
+              role="radio"
+              aria-checked={view === 'numbers'}
               className={view === 'numbers' ? 'on' : ''}
               onClick={() => useApp.setState({ sheetView: 'numbers' })}
               title="Numbered notation (jianpu): 1 = do of the key"

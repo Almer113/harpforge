@@ -202,6 +202,8 @@ export interface AppState {
   samplesStatus: 'idle' | 'loading' | 'ready' | 'error';
 
   setPage(p: Page): void;
+  /** The page before this one (where the print view's Back goes). */
+  prevPage: Page;
   /** Changes the tab text and records an undo step ('typing' groups quick keystrokes). */
   setText(t: string, opts?: { kind?: 'typing' | 'edit' }): void;
   undo(): void;
@@ -361,7 +363,8 @@ export const useApp = create<AppState>((set) => ({
   setVe: (patch) => set((s) => ({ ve: { ...s.ve, ...('selection' in patch && !('panel' in patch) ? { panel: undefined } : {}), ...patch } })),
   samplesStatus: 'idle',
 
-  setPage: (page) => set({ page }),
+  prevPage: 'play',
+  setPage: (page) => set((s) => (page === s.page ? {} : { page, prevPage: s.page })),
   setText: (text, opts) =>
     set((s) => {
       if (text === s.text) return {};

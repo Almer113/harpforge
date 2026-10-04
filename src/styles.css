@@ -1103,3 +1103,36 @@ button.ve-mnum:hover { color: var(--brass-2); background: var(--panel-2); }
 .practice-start { background: var(--brass); border-color: var(--brass); color: #22190d; font-weight: 700; }
 .practice-start:hover:not(:disabled) { background: var(--brass-2); }
 .pb-hint { padding: 0 10px 6px 34px; }
+
+/* ---------- 6d: focus, cards, printing from the browser ---------- */
+/* Keyboard focus: a light ring, unlike the brass of "selected". */
+:root { --focus: #fff4e2; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.card:focus-visible, .st-note:focus-visible, .pal-btn:focus-visible, .seg button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: 0 0 0 5px rgba(0, 0, 0, 0.55); }
+
+/* Library cards: the title's button covers the card; the actions sit above it. */
+.lib-main { position: relative; padding: 14px 16px 10px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.lib-card h3 { margin: 0; font-size: 16px; }
+.lib-open { all: unset; cursor: pointer; font: inherit; color: var(--text); border-radius: 4px; }
+.lib-open::after { content: ''; position: absolute; inset: 0; border-radius: var(--radius) var(--radius) 0 0; }
+.lib-card:hover .lib-open { color: var(--brass-2); }
+.lib-open:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.lib-actions { position: relative; z-index: 1; }
+
+/* Import: a row's choice is a button beside its octave buttons. */
+.s-pick { all: unset; display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; cursor: pointer; text-align: left; border-radius: 6px; }
+.s-pick:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
+.hole-chart caption { caption-side: bottom; }
+
+/* Printing from the browser's menu (not the print view): ink on paper, without the controls. */
+@media print {
+  html:not(.printing) {
+    --bg: #fff; --bg-2: #f6f2ec; --panel: transparent; --panel-2: #f1ece5; --border: #cfc6ba; --border-2: #a99e90;
+    --text: #1a1714; --muted: #4f463c; --faint: #6d6357; --brass: #8a5a12; --brass-2: #8a5a12;
+    --blow: #b8570a; --draw: #11638c; --pitch: #6b3fa0; --staff-ink: #111111; color-scheme: light;
+  }
+  html:not(.printing) body { background: #fff !important; color: var(--text); }
+  html:not(.printing) :is(.topbar, .transport, .stage, .edit-sticky, .ve-dock, .ve-inspector, .sheet-head .tb-group, .lib-backup, .lib-actions, .toast, .modal-backdrop) { display: none !important; }
+  html:not(.printing) .page { max-width: none; padding: 0; }
+  html:not(.printing) .sheet, html:not(.printing) .lib-card { box-shadow: none; }
+}

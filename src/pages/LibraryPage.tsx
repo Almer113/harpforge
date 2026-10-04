@@ -137,14 +137,14 @@ export function LibraryPage() {
           <p className="muted">Your saved tabs. Click one to play it.</p>
         </div>
         <div className="tb-group">
-          <input className="search" placeholder="Search titles, artists, lyrics…" value={query} onChange={(e) => setQuery(e.target.value)} />
-          <select value={family} onChange={(e) => setFamily(e.target.value)} title="Show one kind of harmonica">
+          <input className="search" type="search" aria-label="Search your tabs" placeholder="Search titles, artists, lyrics…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <select value={family} onChange={(e) => setFamily(e.target.value)} title="Show one kind of harmonica" aria-label="Kind of harmonica">
             <option value="all">All harmonicas</option>
             {FAMILIES.map((f) => (
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
           </select>
-          <select value={sort} onChange={(e) => setSort(e.target.value as 'recent' | 'title')} title="Order">
+          <select value={sort} onChange={(e) => setSort(e.target.value as 'recent' | 'title')} title="Order" aria-label="Order">
             <option value="recent">Recently changed</option>
             <option value="title">Title A–Z</option>
           </select>
@@ -182,9 +182,14 @@ export function LibraryPage() {
             const ti = info.get(t.id);
             return (
               <article key={t.id} className={`lib-card ${t.id === docId ? 'current' : ''}`}>
-                <button className="lib-open" onClick={() => open(t)} title="Play this tab">
+                <div className="lib-main">
                   <div className="lib-title">
-                    <h3>{t.title}</h3>
+                    <h3>
+                      {/* Covers the whole card (see .lib-open::after), so a click anywhere plays it. */}
+                      <button className="lib-open" onClick={() => open(t)} title="Play this tab">
+                        {t.title}
+                      </button>
+                    </h3>
                     {ti?.artist && <span className="muted small">{ti.artist}</span>}
                   </div>
                   <div className="chips">
@@ -192,7 +197,7 @@ export function LibraryPage() {
                     {t.id === docId && <span className="chip plain">Open now</span>}
                   </div>
                   <div className="lib-preview">{ti && <SimpleTabPreview doc={ti.doc} />}</div>
-                </button>
+                </div>
                 <div className="lib-actions">
                   <span className="muted small lib-date">{relativeDate(t.updatedAt)}</span>
                   <button className="btn small" onClick={() => open(t, 'editor')}>Edit</button>

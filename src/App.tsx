@@ -81,6 +81,9 @@ export function App() {
   const page = useApp((s) => s.page);
   const setPage = useApp((s) => s.setPage);
   const dirty = useApp(isDirty);
+  const docId = useApp((s) => s.docId);
+  // In the library and unchanged (as the Save button says "Saved ✓").
+  const saved = !!docId && !dirty;
   const { doc } = useParsed();
   // The sticky headers sit just below the top bar, whatever its height.
   const topbar = useRef<HTMLElement>(null);
@@ -190,8 +193,8 @@ export function App() {
             </button>
           ))}
         </div>
-        <div className="doc-status" title={dirty ? 'Unsaved changes (Ctrl+S to save)' : 'Saved in your library'}>
-          <span className={`dot ${dirty ? 'dirty' : 'clean'}`} />
+        <div className="doc-status" title={saved ? 'Saved in your library' : docId ? 'Unsaved changes (Ctrl+S to save)' : 'Not in your library yet (Ctrl+S to save)'}>
+          <span className={`dot ${saved ? 'clean' : 'dirty'}`} aria-hidden />
           <span className="doc-title">{doc.meta.title || 'Untitled'}</span>
         </div>
         <TabActions />

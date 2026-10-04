@@ -74,11 +74,12 @@ export function ImportDialog() {
 function techniqueTags(s: Pick<Suggestion, 'stats'>) {
   const t = s.stats;
   const tags: { text: string; cls?: string }[] = [];
+  const n = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
   if (t.unplayable > 0) tags.push({ text: `${t.unplayable} missing`, cls: 'bad' });
-  if (t.reducedChords > 0) tags.push({ text: `${t.reducedChords} partial chords` });
-  if (t.bends > 0) tags.push({ text: `${t.bends} bends` });
-  if (t.overblows > 0) tags.push({ text: `${t.overblows} overblows` });
-  if (t.slides > 0) tags.push({ text: `${t.slides} slide notes` });
+  if (t.reducedChords > 0) tags.push({ text: n(t.reducedChords, 'partial chord', 'partial chords') });
+  if (t.bends > 0) tags.push({ text: n(t.bends, 'bend', 'bends') });
+  if (t.overblows > 0) tags.push({ text: n(t.overblows, 'overblow', 'overblows') });
+  if (t.slides > 0) tags.push({ text: n(t.slides, 'slide note', 'slide notes') });
   if (!tags.length) tags.push({ text: 'no techniques needed', cls: 'good' });
   return tags;
 }
@@ -356,30 +357,19 @@ function ImportBody() {
             <h4>{mine.length > 1 ? 'Your harmonicas' : 'Your harmonica'}</h4>
             <div className="suggestions compact">
               {mine.map((m) => (
-                // A div, not a button: it holds the octave buttons (buttons can't nest).
-                <div
-                  key={m.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={choice?.id === m.id}
-                  className={`suggestion ${choice?.id === m.id ? 'active' : ''}`}
-                  onClick={() => setPicked(m.id)}
-                  onKeyDown={(e) => {
-                    if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
-                      e.preventDefault();
-                      setPicked(m.id);
-                    }
-                  }}
-                >
-                  <span className="rank">{m.current ? '✓' : '★'}</span>
-                  <span className="s-main">
-                    <b>{harmonicaName(m.spec)}</b>
-                    <span className="s-tags">
-                      {m.current && <span>open now</span>}
-                      {m.shift !== 0 && <span>{m.shift > 0 ? '+' : '−'}{Math.abs(m.shift / 12)} oct</span>}
-                      {techniqueTags(m).map((t) => <span key={t.text} className={t.cls}>{t.text}</span>)}
+                // The choice is a button; the octave buttons sit beside it (buttons can't hold buttons).
+                <div key={m.id} className={`suggestion ${choice?.id === m.id ? 'active' : ''}`} onClick={() => setPicked(m.id)}>
+                  <button className="s-pick" aria-pressed={choice?.id === m.id} onClick={() => setPicked(m.id)}>
+                    <span className="rank">{m.current ? '✓' : '★'}</span>
+                    <span className="s-main">
+                      <b>{harmonicaName(m.spec)}</b>
+                      <span className="s-tags">
+                        {m.current && <span>open now</span>}
+                        {m.shift !== 0 && <span>{m.shift > 0 ? '+' : '−'}{Math.abs(m.shift / 12)} oct</span>}
+                        {techniqueTags(m).map((t) => <span key={t.text} className={t.cls}>{t.text}</span>)}
+                      </span>
                     </span>
-                  </span>
+                  </button>
                   {!analysis.chordSheet && (
                     <span className="oct-btns" onClick={(e) => e.stopPropagation()}>
                       <button className="icon-btn" title="An octave lower" disabled={m.shift <= -24} onClick={() => { setPicked(m.id); setShifts((x) => ({ ...x, [m.id]: m.shift - 12 })); }}>▼</button>

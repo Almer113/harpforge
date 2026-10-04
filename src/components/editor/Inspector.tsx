@@ -195,7 +195,7 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
           </b>
           <span className="muted small">
             {durationLabel(total)}
-            {chain.length > 1 && ` · tied across ${measuresSpanned} measures`}
+            {chain.length > 1 && ` · tied${measuresSpanned > 1 ? ` across ${measuresSpanned} measures` : ''}`}
           </span>
         </div>
         {item.sounds.length > 0 && (
@@ -208,10 +208,11 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
       {asNotes && item.sounds.length > 0 && <NoteFields song={song} pos={pos} item={item} flats={flats} />}
 
       {!asNotes && (
-      <label className="field">
-        <span>Holes</span>
+      <div className="field">
+        <span id="insp-holes">Holes</span>
         <div className="row">
           <input
+            aria-labelledby="insp-holes"
             className={`meta-input mono ${bad ? 'bad' : ''}`}
             value={input}
             placeholder="-4'  or  (4 5 6)"
@@ -223,7 +224,7 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
           <button className="icon-btn" title="Next note down (↓) — Shift-click: one semitone" onClick={(e) => { const s = stepPitch(harp, item.sounds, -1, e.shiftKey); if (s) { set({ sounds: s }); playSounds(s); } }}>▼</button>
         </div>
         {bad && <span className="input-error">Use tab like -4' or (4 5 6), or a note like C5.</span>}
-      </label>
+      </div>
       )}
 
       {first && !asNotes && (
@@ -364,10 +365,11 @@ function NoteFields({ song, pos, item, flats }: { song: Song; pos: Pos; item: It
 
   return (
     <>
-      <label className="field">
-        <span>Note</span>
+      <div className="field">
+        <span id="insp-note">Note</span>
         <div className="row">
           <input
+            aria-labelledby="insp-note"
             className={`meta-input mono ${bad ? 'bad' : ''}`}
             value={input}
             placeholder="D5  or  C5 E5 G5"
@@ -379,7 +381,7 @@ function NoteFields({ song, pos, item, flats }: { song: Song; pos: Pos; item: It
           <button className="icon-btn" title="Next note of the scale down (↓) — Shift-click: one semitone (Shift+↓)" onClick={(e) => step(-1, e.shiftKey)}>▼</button>
         </div>
         {bad && <span className="input-error">Type a note like D5, Bb4 or F#5 — or several for a chord: C5 E5 G5.</span>}
-      </label>
+      </div>
       {off.length > 0 && (
         <p className="insp-warn small">
           {names(off)} {off.length === 1 ? 'isn’t' : 'aren’t'} on this harmonica, so the tab keeps the note name. Move it an octave, or pick a harmonica that has it.
