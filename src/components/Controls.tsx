@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FAMILIES, getHarmonica, keysFor, rangeLabel, tuningsFor, type Family, type HarmonicaSpec } from '../core/instruments';
+import { keysTaken } from '../live/focus';
 import { stopRecording } from '../live/recorder';
 import { isKeyChange, keyDistance, setHarmonica, shiftOctave } from '../state/actions';
 import { guessTonic, harpForPosition, octaveOptions, positionFor, positionName } from '../core/convert';
@@ -156,7 +157,8 @@ export function Transport() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return;
+      // Typing, or a dialog/menu is open (Escape closes that instead of stopping the music).
+      if (keysTaken(e)) return;
       if (e.code === 'Enter' && !e.repeat && !el.closest('button')) {
         e.preventDefault();
         togglePlay();

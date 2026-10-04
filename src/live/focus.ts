@@ -1,7 +1,7 @@
 // Whether the keyboard belongs to something else right now (typing, a dialog or menu),
 // so harmonica keys and editor shortcuts stay out of the way.
 
-const OVERLAYS = '.modal-backdrop, .menu, .key-choice, .harp-pop, .keys-wrap .keyhelp, .shortcuts';
+const OVERLAYS = '.modal-backdrop, .menu, .key-choice, .harp-pop, .shortcuts';
 
 export function isTyping(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;

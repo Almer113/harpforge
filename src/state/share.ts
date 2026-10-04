@@ -3,6 +3,7 @@
 
 import { deflateSync, inflateSync, strFromU8, strToU8 } from 'fflate';
 import { loadTabText } from './actions';
+import { pageHash } from './router';
 import { useApp } from './store';
 
 const PARAM = 'tab';
@@ -52,12 +53,12 @@ export function openSharedFromUrl() {
   try {
     text = decodeTab(m[1]);
   } catch {
-    history.replaceState(null, '', location.pathname + location.search);
+    history.replaceState(null, '', location.pathname + location.search + pageHash(useApp.getState().page));
     useApp.getState().notify('That share link is damaged or incomplete.');
     return;
   }
   // If the user keeps their unsaved tab instead, the link stays in the address bar for later.
   if (!loadTabText(text, 'shared link', { unchanged: true, message: 'Opened a shared tab — Save it to keep it in your library.' })) return;
-  history.replaceState(null, '', location.pathname + location.search);
+  history.replaceState(null, '', location.pathname + location.search + pageHash('play'));
   useApp.getState().setPage('play');
 }

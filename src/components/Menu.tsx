@@ -12,8 +12,21 @@ export function Menu({ label, items, className = 'btn small ghost', title, align
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
+    // Keyboard: the first item gets focus, arrows move, Escape returns to the button.
+    const items = () => [...(root.current?.querySelectorAll<HTMLButtonElement>('.menu-item') ?? [])];
+    items()[0]?.focus({ preventScroll: true });
     const close = (e: MouseEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        root.current?.querySelector<HTMLButtonElement>(':scope > button')?.focus();
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const list = items();
+        const i = list.indexOf(document.activeElement as HTMLButtonElement);
+        list[(i + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length]?.focus();
+        e.preventDefault();
+      }
+    };
     window.addEventListener('mousedown', close);
     window.addEventListener('keydown', esc);
     return () => {

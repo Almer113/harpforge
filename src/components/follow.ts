@@ -7,8 +7,10 @@ if (typeof window !== 'undefined') {
   const mark = () => (lastUserScroll = Date.now());
   window.addEventListener('wheel', mark, { passive: true });
   window.addEventListener('touchmove', mark, { passive: true });
+  // Keys that scroll the page — unless something used them first (harmonica keys, the editor's arrows).
   window.addEventListener('keydown', (e) => {
-    if (['PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) mark();
+    if (!['PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown', ' '].includes(e.key)) return;
+    setTimeout(() => !e.defaultPrevented && mark());
   });
   // Dragging a scrollbar.
   window.addEventListener('mousedown', (e) => {

@@ -416,6 +416,9 @@ function Toolbar({ song }: { song: Song }) {
         <input type="range" min={36} max={120} step={4} value={ve.zoom} onChange={(e) => setVe({ zoom: parseInt(e.target.value, 10) })} />
       </div>
       <div className="tb-group">
+        <button className="btn small ghost" onClick={() => apply(insertMeasure(song, song.measures.length), { caret: { m: song.measures.length, start: 0 }, measure: song.measures.length })} title="Add a measure at the end">
+          + Measure
+        </button>
         <button
           className={`btn small ghost ${fit ? '' : 'on'}`}
           onClick={() => useApp.setState({ fitWidth: !fit })}

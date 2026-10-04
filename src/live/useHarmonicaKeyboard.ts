@@ -76,8 +76,13 @@ export function useHarmonicaKeyboard(enabled: boolean, opts: { arrows?: boolean 
         return;
       }
       if (e.code === 'Space') {
-        // Space is the slide button, but only on harps that have one (else it presses buttons as usual).
-        if (!harp().hasSlide) return;
+        // Space is the slide button on harps that have one. Otherwise it only presses a button
+        // you've moved to with the keyboard, not the last one clicked (a mis-hit mid-song).
+        if (!harp().hasSlide) {
+          const el = e.target as HTMLElement;
+          if (!(el.tagName === 'BUTTON' && el.matches(':focus-visible'))) e.preventDefault();
+          return;
+        }
         e.preventDefault();
         if (!e.repeat) {
           slide = true;

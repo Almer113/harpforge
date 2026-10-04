@@ -23,7 +23,10 @@ export function EditorPage() {
     if (!el) return;
     const ro = new ResizeObserver(() => document.documentElement.style.setProperty('--edit-head-h', `${el.offsetHeight}px`));
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty('--edit-head-h');
+    };
   }, []);
 
   return (

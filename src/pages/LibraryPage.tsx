@@ -9,7 +9,7 @@ import { specFromMeta } from '../core/score';
 import { confirmDiscard, downloadData, importFile, newTab, openPasteImport } from '../state/actions';
 import { stop } from '../state/playback';
 import { useApp } from '../state/store';
-import { copyText, deleteTab, exportLibrary, importLibrary, listTabs, persistStorage, readBackup, saveTab, type SavedTab } from '../storage/library';
+import { copyText, deleteTab, exportLibrary, importLibrary, listTabs, persistStorage, readBackup, saveTab, seedDemos, type SavedTab } from '../storage/library';
 
 export function LibraryPage() {
   const [tabs, setTabs] = useState<SavedTab[] | null>(null);
@@ -30,11 +30,17 @@ export function LibraryPage() {
     }
   }, [sort]);
   const docId = useApp((s) => s.docId);
+  const savedText = useApp((s) => s.savedText);
 
+  // After the first-run demos are in (seedDemos runs once), and again whenever something is saved.
   const refresh = useCallback(() => {
-    listTabs().then(setTabs).catch(() => setTabs([]));
+    seedDemos()
+      .catch(() => undefined)
+      .then(listTabs)
+      .then(setTabs)
+      .catch(() => setTabs([]));
   }, []);
-  useEffect(refresh, [refresh, docId]);
+  useEffect(refresh, [refresh, docId, savedText]);
 
   const open = (t: SavedTab, page: 'play' | 'editor' = 'play') => {
     const s = useApp.getState();
@@ -108,7 +114,7 @@ export function LibraryPage() {
   // What each tab holds, read once per list (for search, filters and previews).
   const info = useMemo(() => {
     const out = new Map<string, TabInfo>();
-    for (const t of tabs ?? []) out.set(t.id, describeTab(t.text));
+    for (const t of tabs ?? []) out.set(t.id, describeCached(t));
     return out;
   }, [tabs]);
 
@@ -210,6 +216,16 @@ interface TabInfo {
   artist?: string;
   family: string;
   searchText: string;
+}
+
+// Parsed once per saved version of a tab.
+const described = new Map<string, { at: number; info: TabInfo }>();
+function describeCached(t: SavedTab): TabInfo {
+  const hit = described.get(t.id);
+  if (hit && hit.at === t.updatedAt) return hit.info;
+  const info = describeTab(t.text);
+  described.set(t.id, { at: t.updatedAt, info });
+  return info;
 }
 
 function describeTab(text: string): TabInfo {

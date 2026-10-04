@@ -9,18 +9,26 @@ import { getHarmonica, type HarmonicaSpec } from '../core/instruments';
 
 let worker: Worker | null | undefined;
 let nextId = 1;
-const waiting = new Map<number, (s: Suggestion[]) => void>();
+const waiting = new Map<number, { req: Omit<SuggestRequest, 'id'>; resolve: (s: Suggestion[]) => void }>();
+
+function computeHere({ doc, chordSheet, sourceSpec, families, limit }: Omit<SuggestRequest, 'id'>): Suggestion[] {
+  return chordSheet ? suggestForChordSheet(doc, { limit, families }) : suggestHarmonicas(doc, { limit, families, sourceHarp: sourceSpec ? getHarmonica(sourceSpec) : undefined });
+}
 
 function getWorker(): Worker | null {
   if (worker !== undefined) return worker;
   try {
     worker = new Worker(new URL('../core/suggest.worker.ts', import.meta.url), { type: 'module' });
     worker.onmessage = (e: MessageEvent<SuggestResponse>) => {
-      waiting.get(e.data.id)?.(e.data.suggestions);
+      waiting.get(e.data.id)?.resolve(e.data.suggestions);
       waiting.delete(e.data.id);
     };
+    // The worker failed (couldn't load, or threw): answer what's waiting here, and stop using it.
     worker.onerror = () => {
+      worker?.terminate();
       worker = null;
+      for (const { req, resolve } of waiting.values()) resolve(computeHere(req));
+      waiting.clear();
     };
   } catch {
     worker = null;
@@ -30,15 +38,10 @@ function getWorker(): Worker | null {
 
 function compute(req: Omit<SuggestRequest, 'id'>): Promise<Suggestion[]> {
   const w = getWorker();
-  if (!w) {
-    const { doc, chordSheet, sourceSpec, families, limit } = req;
-    return Promise.resolve(
-      chordSheet ? suggestForChordSheet(doc, { limit, families }) : suggestHarmonicas(doc, { limit, families, sourceHarp: sourceSpec ? getHarmonica(sourceSpec) : undefined }),
-    );
-  }
+  if (!w) return Promise.resolve(computeHere(req));
   const id = nextId++;
   return new Promise((resolve) => {
-    waiting.set(id, resolve);
+    waiting.set(id, { req, resolve });
     w.postMessage({ ...req, id });
   });
 }

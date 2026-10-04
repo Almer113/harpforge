@@ -23,14 +23,18 @@ export class ErrorBoundary extends Component<{ children: ReactNode; resetKey?: u
 
   render() {
     if (!this.state.error) return this.props.children;
+    // A page whose code couldn't be downloaded (offline, or the app was updated) needs a reload.
+    const loadFailed = /dynamically imported module|Importing a module script failed|Loading chunk/i.test(this.state.error.message);
     return (
       <section className="page">
         <div className="crash">
-          <h2>Something went wrong on this page</h2>
-          <p className="muted">Your tab is safe — it's kept separately. Try another page, or reload.</p>
+          <h2>{loadFailed ? 'This page couldn’t be loaded' : 'Something went wrong on this page'}</h2>
+          <p className="muted">
+            Your tab is safe — it's kept separately. {loadFailed ? 'Check your connection, then reload.' : 'Try another page, or reload.'}
+          </p>
           <pre className="crash-detail">{this.state.error.message}</pre>
           <div className="tb-group">
-            <button className="btn" onClick={() => this.setState({ error: null })}>Try again</button>
+            {!loadFailed && <button className="btn" onClick={() => this.setState({ error: null })}>Try again</button>}
             <button className="btn ghost" onClick={() => location.reload()}>Reload</button>
           </div>
         </div>

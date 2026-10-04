@@ -2,7 +2,7 @@
 // (chord sheets, ABC, ChordPro, MusicXML, a tab) or notes typed in. It shows what was
 // found, suggests harmonicas (or keeps yours), previews the tab with sound, and opens it.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as engine from '../audio/engine';
 import {
   chordSheetToTab,
@@ -87,6 +87,12 @@ function ImportBody() {
   const draft = useApp((s) => s.importDraft)!;
   const current = useParsed();
   const [paste, setPaste] = useState(draft.pasteText ?? '');
+  // Parsing and ranking wait for a pause in typing.
+  const [pasteSettled, setPasteSettled] = useState(paste);
+  useEffect(() => {
+    const t = setTimeout(() => setPasteSettled(paste), paste === pasteSettled ? 0 : 250);
+    return () => clearTimeout(t);
+  }, [paste, pasteSettled]);
   const [picked, setPicked] = useState<string | null>(null);
   const [pattern, setPattern] = useState<StrumPattern>('halves');
   const [family, setFamily] = useState<string>('all');
@@ -97,14 +103,14 @@ function ImportBody() {
 
   const imported = useMemo<(Imported & { kind?: string }) | null>(() => {
     if (draft.imported) return draft.imported;
-    if (!pasteMode || !paste.trim()) return null;
+    if (!pasteMode || !pasteSettled.trim()) return null;
     try {
-      const kind = sniffText(paste);
-      return { ...importText(paste, kind), kind };
+      const kind = sniffText(pasteSettled);
+      return { ...importText(pasteSettled, kind), kind };
     } catch {
       return null;
     }
-  }, [draft.imported, paste, pasteMode]);
+  }, [draft.imported, pasteSettled, pasteMode]);
 
   const analysis = useMemo(() => {
     if (!imported) return null;
@@ -168,8 +174,23 @@ function ImportBody() {
     setPlaying(false);
     setActive([]);
   };
-  useEffect(() => () => engine.stopPlayback(), []);
-  useEffect(() => stopPreview(), [result]);
+  // Only the preview's own playback is stopped here (the app's playback is the app's).
+  const playingRef = useRef(false);
+  playingRef.current = playing;
+  useEffect(
+    () => () => {
+      if (playingRef.current) {
+        engine.stopPlayback();
+        restoreVoicing();
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  useEffect(() => {
+    if (playingRef.current) stopPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result]);
   const togglePreview = async () => {
     if (playing || !result) return stopPreview();
     stop();
@@ -265,6 +286,7 @@ function ImportBody() {
             onChange={(e) => {
               setPaste(e.target.value);
               setPicked(null);
+              setMyShift(null);
             }}
             spellCheck={false}
           />

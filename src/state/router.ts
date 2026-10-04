@@ -13,6 +13,7 @@ function pageFromHash(hash: string): Page | null {
 }
 
 const hashFor = (p: Page) => `#/${SLUGS[p]}`;
+export const pageHash = hashFor;
 
 /** Reads the page from the URL and keeps the two in step. Call once at start-up. */
 export function startRouter() {
@@ -31,7 +32,9 @@ export function startRouter() {
   });
   // …and Back / Forward / an edited URL change the page.
   const sync = () => {
-    const p = pageFromHash(location.hash);
+    if (/[#&]tab=/.test(location.hash)) return; // a share link: share.ts opens it
+    // No page in the URL (the bare address): that's Play.
+    const p = pageFromHash(location.hash) ?? 'play';
     if (p && p !== useApp.getState().page) useApp.getState().setPage(p);
   };
   window.addEventListener('popstate', sync);

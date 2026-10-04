@@ -1,7 +1,7 @@
 // "?" opens a list of every keyboard shortcut.
 
 import { useEffect, useState } from 'react';
-import { isTyping } from '../live/focus';
+import { isTyping, overlayOpen } from '../live/focus';
 
 const GROUPS: { title: string; rows: [string, string][] }[] = [
   {
@@ -47,6 +47,8 @@ export function Shortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === '?' && !isTyping(e.target)) {
+        // Not on top of another dialog or menu (but '?' again closes this one).
+        if (overlayOpen() && !document.querySelector('.shortcuts')) return;
         e.preventDefault();
         setOpen((o) => !o);
       } else if (e.key === 'Escape') setOpen(false);

@@ -864,3 +864,8 @@ button:focus:not(:focus-visible) { outline: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
 }
+/* In the harmonica popover the key question opens in place, below the key menu. */
+.harp-pop .picker-key:has(.key-choice) { grid-column: 1 / -1; }
+.harp-pop .key-choice { position: static; width: auto; margin-top: 8px; box-shadow: none; }
+/* The playing note scrolls into view below the sticky top bar and transport (or the editor's header). */
+html { scroll-padding-top: calc(var(--topbar-h) + var(--edit-head-h, 64px) + 14px); }
