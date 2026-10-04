@@ -28,6 +28,8 @@ export interface RestEvent {
   chord?: string;
   /** Lyrics over a rest: used by chord sheets, where chords have no melody yet. */
   lyric?: string;
+  /** Written "_": the harp rests while a syllable is sung (the "w:" line counts it like a note). */
+  sung?: boolean;
   src?: Span;
 }
 

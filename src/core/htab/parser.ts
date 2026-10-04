@@ -36,7 +36,7 @@ export const HEADER_ALIASES: Record<string, keyof TabMeta | 'extra'> = {
 };
 
 /** Splits off the `---` front matter. Returns body start offset. */
-export function splitHeader(text: string): { header: { key: string; value: string; line: number }[]; bodyStart: number; headerEnd: number } {
+export function splitHeader(text: string): { header: { key: string; value: string; line: number }[]; bodyStart: number; headerEnd: number; unterminated?: boolean } {
   const lines = text.split('\n');
   let idx = 0;
   let offset = 0;
@@ -48,6 +48,30 @@ export function splitHeader(text: string): { header: { key: string; value: strin
   const header: { key: string; value: string; line: number }[] = [];
   offset += lines[idx].length + 1;
   idx++;
+  const start = offset;
+  for (let i = idx; i < lines.length; i++) {
+    if (lines[i].trim() === '---') break;
+    // No closing "---": the header ends at the first line that isn't "key: value" (the tab).
+    if (i === lines.length - 1 || (lines[i].trim() !== '' && !/^\s*#/.test(lines[i]) && (!/^\s*[A-Za-z][A-Za-z -]*:/.test(lines[i]) || /^\s*w:/i.test(lines[i])))) {
+      if (lines.slice(i).some((l) => l.trim() === '---')) break;
+      let end = start;
+      const fields: { key: string; value: string; line: number }[] = [];
+      for (let k = idx; k < i; k++) {
+        const content = stripComment(lines[k]);
+        const colon = content.indexOf(':');
+        if (colon > 0) fields.push({ key: content.slice(0, colon).trim().toLowerCase(), value: content.slice(colon + 1).trim().replace(/\\#/g, '#'), line: k });
+        end += lines[k].length + 1;
+      }
+      const last = i === lines.length - 1 && /^\s*[A-Za-z][A-Za-z -]*:/.test(lines[i]) && !/^\s*w:/i.test(lines[i]);
+      if (last) {
+        const content = stripComment(lines[i]);
+        const colon = content.indexOf(':');
+        fields.push({ key: content.slice(0, colon).trim().toLowerCase(), value: content.slice(colon + 1).trim().replace(/\\#/g, '#'), line: i });
+        end = text.length;
+      }
+      return { header: fields, bodyStart: Math.min(end, text.length), headerEnd: Math.min(end, text.length), unterminated: true };
+    }
+  }
   for (; idx < lines.length; idx++) {
     const line = lines[idx];
     if (line.trim() === '---') {
@@ -58,8 +82,7 @@ export function splitHeader(text: string): { header: { key: string; value: strin
     if (colon > 0) header.push({ key: content.slice(0, colon).trim().toLowerCase(), value: content.slice(colon + 1).trim().replace(/\\#/g, '#'), line: idx });
     offset += line.length + 1;
   }
-  // Unterminated header: treat everything as header.
-  return { header, bodyStart: text.length, headerEnd: text.length };
+  return { header, bodyStart: text.length, headerEnd: text.length, unterminated: true };
 }
 
 /**
@@ -99,6 +122,9 @@ function readMeta(header: { key: string; value: string }[]): TabMeta {
       if (n > 0) meta.tempo = Math.min(400, Math.max(20, n));
     } else if (field === 'harmonica') {
       meta.harmonica = value.toLowerCase();
+    } else if (field === 'harpKey') {
+      // "bb", "f#", "low f": the note letter in capitals ("Bb", "F#", "Low F").
+      meta.harpKey = value.replace(/^((?:low|high)\s+)?([a-g])(?=[#b♯♭]?$)/i, (_m, pre: string | undefined, l: string) => (pre ? pre[0].toUpperCase() + pre.slice(1).toLowerCase() : '') + l.toUpperCase());
     } else if (field !== 'extra') {
       (meta as unknown as Record<string, string>)[field] = value;
     }
@@ -108,8 +134,8 @@ function readMeta(header: { key: string; value: string }[]): TabMeta {
 
 /** Parses one sound word: a hole action ("-4'", "+6", "4D", "<5", "6o") or a pitch ("C#4"). */
 export function parseSound(word: string, defaultBreath: Breath | null = null): Sound | string {
-  if (/^[A-G]/.test(word)) {
-    const midi = parseNoteName(word);
+  if (/^[A-Ga-g]/.test(word)) {
+    const midi = parseNoteName(word[0].toUpperCase() + word.slice(1));
     return midi === null ? `Unknown note "${word}"` : { type: 'pitch', midi };
   }
   let i = 0;
@@ -181,9 +207,23 @@ function parseRange(ctx: Ctx, from: number, to: number, inGroup: boolean): TabEv
 
     // Bar lines
     if (c === '|' || (c === ':' && s[i + 1] === '|')) {
+      // A chord symbol right before a bar line, with no note after it, marks the end of its bar.
+      if (ctx.pendingChord && !inGroup) events.push({ kind: 'rest', beats: 0, chord: takeChord() });
       let style: BarEvent['style'] = 'single';
       let len = 1;
-      if (s.startsWith(':||', i)) [style, len] = ['repeat-end', 3];
+      if (s.startsWith(':|:', i) || s.startsWith(':||:', i)) {
+        // End one repeat and start the next.
+        const n = s.startsWith(':||:', i) ? 4 : 3;
+        if (inGroup) issue(ctx, 'Bar lines are not allowed inside { }', i, i + n);
+        else {
+          events.push({ kind: 'bar', style: 'repeat-end', src: { start: ctx.base + i, end: ctx.base + i + n } });
+          events.push({ kind: 'bar', style: 'repeat-start', src: { start: ctx.base + i, end: ctx.base + i + n } });
+        }
+        i += n;
+        continue;
+      }
+      if (s.startsWith('||:', i)) [style, len] = ['repeat-start', 3];
+      else if (s.startsWith(':||', i)) [style, len] = ['repeat-end', 3];
       else if (s.startsWith(':|', i)) [style, len] = ['repeat-end', 2];
       else if (s.startsWith('||', i)) [style, len] = ['double', 2];
       else if (s.startsWith('|]', i)) [style, len] = ['final', 2];
@@ -274,7 +314,7 @@ function parseRange(ctx: Ctx, from: number, to: number, inGroup: boolean): TabEv
 
     // Plain word: sound or rest
     let j = i;
-    while (j < to && !/\s/.test(s[j]) && !STOP_CHARS.has(s[j])) j++;
+    while (j < to && !/\s/.test(s[j]) && !STOP_CHARS.has(s[j]) && !(s[j] === ':' && s[j + 1] === '|')) j++;
     const raw = s.slice(i, j);
     let core = raw;
     let tildes = 0;
@@ -285,6 +325,9 @@ function parseRange(ctx: Ctx, from: number, to: number, inGroup: boolean): TabEv
     const src = { start: ctx.base + i, end: ctx.base + j };
     if (core === '.' || core === 'r' || core === 'R') {
       events.push({ kind: 'rest', beats: 1 + tildes, chord: takeChord(), src });
+    } else if (core === '_') {
+      // The harp rests while a syllable is sung: the "w:" line counts it like a note.
+      events.push({ kind: 'rest', beats: 1 + tildes, chord: takeChord(), sung: true, src });
     } else if (core === '') {
       // A bare "~": a tie — the previous note keeps sounding (one beat per "~").
       // Its sounds are filled in after the whole tab is read (it may cross lines).
@@ -315,10 +358,32 @@ function attachLyrics(line: TabLine, text: string) {
   const syllables = splitLyrics(text);
   let k = 0;
   for (const ev of line.events) {
-    if (ev.kind !== 'note' || ev.tied) continue; // tied notes aren't sung again
+    // Notes take a syllable (tied ones aren't sung again), and so do sung rests ("_").
+    if (!((ev.kind === 'note' && !ev.tied) || (ev.kind === 'rest' && ev.sung))) continue;
     if (k >= syllables.length) break;
     const syl = syllables[k++];
     if (syl !== '*' && syl !== '_') ev.lyric = syl;
+  }
+}
+
+/**
+ * A tie that continues a note in the same bar is part of that note: "{4 5} {~ 6}" is a
+ * quarter-note 5 written beat by beat, so it's one note (one card, one staff note), just as
+ * "5~" would be. Ties over a bar line, and ties carrying a chord change, stay separate.
+ */
+function joinTiesInBars(lines: TabLine[]) {
+  for (const line of lines) {
+    const out: TabEvent[] = [];
+    for (const ev of line.events) {
+      const prev = out[out.length - 1];
+      if (ev.kind === 'note' && ev.tied && !ev.chord && ev.beats > 0 && prev?.kind === 'note' && prev.beats > 0 && JSON.stringify(prev.sounds) === JSON.stringify(ev.sounds)) {
+        prev.beats += ev.beats;
+        if (prev.src && ev.src) prev.src = { start: prev.src.start, end: ev.src.end };
+        continue;
+      }
+      out.push(ev);
+    }
+    line.events = out;
   }
 }
 
@@ -348,8 +413,12 @@ function resolveTies(lines: TabLine[], issues: ParseIssue[]) {
 
 export function parseHtab(text: string): ParseResult {
   const issues: ParseIssue[] = [];
-  const { header, bodyStart } = splitHeader(text);
+  const { header, bodyStart, unterminated } = splitHeader(text);
   const meta = readMeta(header);
+  if (unterminated) {
+    const at = text.indexOf('---');
+    issues.push({ message: 'The header has no closing "---" (it ends where the tab starts)', span: { start: Math.max(0, at), end: Math.max(0, at) + 3 }, severity: 'warning' });
+  }
   const lines: TabLine[] = [];
   let pendingSection: string | undefined;
   let lastLine: TabLine | undefined;
@@ -395,5 +464,6 @@ export function parseHtab(text: string): ParseResult {
   if (pendingSection !== undefined) lines.push({ section: pendingSection, events: [] });
 
   resolveTies(lines, issues);
+  joinTiesInBars(lines);
   return { doc: { meta, lines }, issues };
 }

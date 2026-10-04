@@ -31,8 +31,13 @@ function chordText(sounds: Sound[], opts: SerializeOptions): string {
   return '(' + sounds.map((s) => soundText(s, opts)).join(' ') + ')';
 }
 
+/** A rest that carries a syllable: written "_" and counted by the "w:" line. */
+function isSung(e: NoteEvent | RestEvent): boolean {
+  return e.kind === 'rest' && (!!e.lyric || !!e.sung);
+}
+
 function eventCore(e: NoteEvent | RestEvent, opts: SerializeOptions): string {
-  if (e.kind === 'rest') return '.';
+  if (e.kind === 'rest') return isSung(e) ? '_' : '.';
   if (e.tied) return '~';
   return e.sounds.length === 1 ? soundText(e.sounds[0], opts) : chordText(e.sounds, opts);
 }
@@ -52,11 +57,13 @@ const BAR_TEXT: Record<BarEvent['style'], string> = {
 const EPS = 1e-6;
 const isInt = (x: number) => Math.abs(x - Math.round(x)) < EPS;
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+// Divisions a beat can be written in (5 and 7 for quintuplets and septuplets).
+const DIVISORS = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 28, 48];
 
 /** A group's length as "~" marks and an optional "/N" divider: 1.5 beats → "~~/2". */
 function groupLength(sum: number): string {
-  if (isInt(sum) && sum >= 1) return '~'.repeat(Math.round(sum) - 1);
-  for (const n of [2, 3, 4, 6, 8, 12, 16, 24, 48]) {
+  if (isInt(sum) && sum >= 1 - EPS) return '~'.repeat(Math.round(sum) - 1);
+  for (const n of DIVISORS.slice(1)) {
     if (isInt(sum * n) && sum * n >= 1 - EPS) return '~'.repeat(Math.round(sum * n) - 1) + '/' + n;
   }
   return '~'.repeat(Math.max(0, Math.round(sum) - 1));
@@ -65,59 +72,145 @@ function groupLength(sum: number): string {
 function groupText(items: (NoteEvent | RestEvent)[], opts: SerializeOptions): string {
   const sum = items.reduce((a, e) => a + e.beats, 0);
   let ints: number[] | null = null;
-  for (const d of [1, 2, 3, 4, 6, 8, 12, 16, 24, 48]) {
+  for (const d of DIVISORS) {
     if (items.every((e) => isInt(e.beats * d))) {
       ints = items.map((e) => Math.max(1, Math.round(e.beats * d)));
       break;
     }
   }
-  ints ??= items.map((e) => Math.max(1, Math.round(e.beats * 48)));
+  // Lengths no division above fits: relative weights in 1/48ths of their sum.
+  ints ??= items.map((e) => Math.max(1, Math.round((e.beats / sum) * 48)));
   const g = ints.reduce((a, b) => gcd(a, b));
   const parts = items.map((e, k) => withChord(e, eventCore(e, opts) + '~'.repeat(ints![k] / g - 1)));
   // A group cut short by a bar line (odd meters such as 7/8) gets a fractional length.
   return '{' + parts.join(' ') + '}' + groupLength(sum);
 }
 
+type Sounding = NoteEvent | RestEvent;
+
+/** Part of an event cut at a beat: the first part is the event; later parts continue it (a tie, or more rest). */
+function pieceOf(e: Sounding, beats: number, first: boolean): Sounding {
+  if (first) return { ...e, beats };
+  if (e.kind === 'note') return { kind: 'note', sounds: e.sounds, beats, tied: true };
+  return { kind: 'rest', beats };
+}
+
+/**
+ * Notes of one length spanning several beats in a way the beat can't show (quarter-note
+ * triplets, a quintuplet over two beats): kept as one group rather than cut at the beats.
+ */
+function tupletRun(evs: Sounding[], k: number, t: number, atBeat: (x: number) => boolean): Sounding[] | null {
+  const run: Sounding[] = [];
+  let sum = 0;
+  for (let i = k; i < evs.length && run.length < 24; i++) {
+    const e = evs[i];
+    if (e.beats <= EPS) return null;
+    run.push(e);
+    sum += e.beats;
+    if (atBeat(t + sum)) break;
+  }
+  if (!atBeat(t + sum) || run.length < 2 || sum < 1 + EPS) return null;
+  const len = run[0].beats;
+  return run.every((e) => Math.abs(e.beats - len) < EPS) && !isInt(len * 4) ? run : null;
+}
+
+/**
+ * One stretch between bar lines. Whole beats are single tokens ("4", "4~"); shorter notes
+ * go in one group per beat ("{4 5}"), and a note that runs over a beat is cut there and
+ * continues with a tie ("{4 5} {~ 6}"), so the text reads beat by beat. A pickup (a short
+ * first bar) is counted from its end, where its beats are.
+ */
+function stretchText(events: Sounding[], opts: SerializeOptions, fromEnd: boolean): string[] {
+  // A chord symbol on its own goes onto the note right after it.
+  const evs: Sounding[] = [];
+  for (let k = 0; k < events.length; k++) {
+    const e = events[k];
+    const next = events[k + 1];
+    if (e.beats <= EPS && e.chord && next && next.beats > EPS && !next.chord) {
+      events[k + 1] = { ...next, chord: e.chord };
+      continue;
+    }
+    evs.push(e);
+  }
+  const total = evs.reduce((a, e) => a + e.beats, 0);
+  const offset = fromEnd && !isInt(total) ? total - Math.floor(total) : 0;
+  const atBeat = (x: number) => isInt(x - offset);
+  const out: string[] = [];
+  let group: Sounding[] = [];
+  const flush = () => {
+    if (group.length) out.push(groupText(group, opts));
+    group = [];
+  };
+  let t = 0;
+  for (let k = 0; k < evs.length; k++) {
+    const e = evs[k];
+    if (e.beats <= EPS) {
+      // A chord symbol with no note after it (the end of a bar or line).
+      flush();
+      if (e.chord) out.push(`[${e.chord}]`);
+      continue;
+    }
+    if (!group.length && atBeat(t)) {
+      const run = tupletRun(evs, k, t, atBeat);
+      if (run) {
+        out.push(groupText(run, opts));
+        t += run.reduce((a, x) => a + x.beats, 0);
+        k += run.length - 1;
+        continue;
+      }
+    }
+    let left = e.beats;
+    let first = true;
+    while (left > EPS) {
+      if (!group.length && atBeat(t) && left >= 1 - EPS) {
+        // Whole beats: one token, "~" for each beat after the first.
+        const whole = Math.floor(left + EPS);
+        const p = pieceOf(e, whole, first);
+        out.push(withChord(p, eventCore(p, opts) + '~'.repeat(whole - 1)));
+        t += whole;
+        left -= whole;
+      } else {
+        const nextBeat = Math.floor(t - offset + EPS) + 1 + offset;
+        const take = Math.min(left, nextBeat - t);
+        group.push(pieceOf(e, take, first));
+        t += take;
+        left -= take;
+        if (atBeat(t)) flush();
+      }
+      first = false;
+    }
+  }
+  flush();
+  return out;
+}
+
 /** Serializes one line of events (without lyrics). */
 export function eventsText(events: TabEvent[], opts: SerializeOptions = {}): string {
   const out: string[] = [];
-  let i = 0;
-  while (i < events.length) {
-    const e = events[i];
+  let stretch: Sounding[] = [];
+  let lineStart = true;
+  const flush = (beforeBar: boolean) => {
+    if (!stretch.length) return;
+    // The first bar of a line, when it's short, is a pickup: its beats count from its end.
+    out.push(...stretchText(stretch, opts, lineStart && beforeBar));
+    stretch = [];
+    lineStart = false;
+  };
+  for (const e of events) {
     if (e.kind === 'bar') {
+      flush(true);
       out.push(BAR_TEXT[e.style]);
-      i++;
       continue;
     }
-    if (e.kind === 'rest' && e.beats <= EPS) {
-      if (e.chord) out.push(`[${e.chord}]`);
-      i++;
-      continue;
-    }
-    if (isInt(e.beats) && e.beats >= 1) {
-      // A tie is one "~" per beat; a note is one token plus a "~" per extra beat.
-      out.push(withChord(e, eventCore(e, opts) + '~'.repeat(Math.round(e.beats) - 1)));
-      i++;
-      continue;
-    }
-    // Fractional beats: gather events until they add up to whole beats.
-    const group: (NoteEvent | RestEvent)[] = [e];
-    let sum = e.beats;
-    let j = i + 1;
-    while (!isInt(sum) && j < events.length && events[j].kind !== 'bar' && group.length < 24) {
-      const next = events[j] as NoteEvent | RestEvent;
-      group.push(next);
-      sum += next.beats;
-      j++;
-    }
-    out.push(groupText(group, opts));
-    i = j;
+    stretch.push(e);
   }
+  flush(false);
   return out.join(' ');
 }
 
 function lyricsText(line: TabLine): string | null {
-  const notes = line.events.filter((e): e is NoteEvent => e.kind === 'note' && !e.tied);
+  // Every note sung (not tied ones) and every sung rest ("_") takes a syllable.
+  const notes = line.events.filter((e): e is NoteEvent | RestEvent => (e.kind === 'note' && !e.tied) || (e.kind === 'rest' && e.beats > EPS && isSung(e)));
   if (!notes.some((n) => n.lyric)) return null;
   let last = notes.length - 1;
   while (last >= 0 && !notes[last].lyric) last--;

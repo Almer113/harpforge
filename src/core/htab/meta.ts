@@ -27,6 +27,7 @@ function fieldOf(rawKey: string): string {
 export function setMetaFields(text: string, patch: Record<string, string | number | undefined>): string {
   const { bodyStart, headerEnd } = splitHeader(text);
   const remaining = new Map(Object.entries(patch));
+  const done = new Set<string>();
   const out: string[] = [];
 
   if (headerEnd >= 0) {
@@ -45,9 +46,12 @@ export function setMetaFields(text: string, patch: Record<string, string | numbe
         if (remaining.has(field)) {
           const v = remaining.get(field);
           remaining.delete(field);
+          done.add(field);
           if (v !== undefined && v !== '') out.push(`${line.slice(0, colon).trim()}: ${headerValue(v)}`);
           continue;
         }
+        // The same field again under another name ("tempo:" and "bpm:"): the one set above wins.
+        if (done.has(field)) continue;
       }
       out.push(line);
     }

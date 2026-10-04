@@ -44,7 +44,7 @@ Aliases accepted on import: `instrument` = `harmonica`, `bpm` = `tempo`, `meter`
 | `-3'` `-3''` `-3'''` | bend down ½, 1, 1½ steps. `b` and `"` (=2) also accepted |
 | `6o` / `-7o` | overblow / overdraw (`°`, `O` accepted) |
 | `<5` | chromatic: slide button in (`5<`, `5*` accepted) |
-| `C4` `F#5` `Bb3` | a pitch instead of a hole (octave defaults to 4) |
+| `C4` `F#5` `Bb3` | a pitch instead of a hole (octave defaults to 4; lowercase `c4` accepted) |
 | `(4 5 6)` | harmonica chord: sounds played together |
 | `-(1 2 3)` / `+(…)` | chord with a default breath for every hole |
 | `~` | hold: each `~` adds one beat (`4~~` = 3 beats) |
@@ -52,10 +52,11 @@ Aliases accepted on import: `instrument` = `harmonica`, `bpm` = `tempo`, `meter`
 | `{a b}~` | the group lasts 2 beats instead of 1 |
 | `{a}/2`  `{a b~}~~/2` | the group lasts a fraction of a beat: `/2` halves it (`{7}/2` = ½ beat, `{6~ 7}~~/2` = 1½ beats). Used for bars that end on a half beat, as in 7/8 |
 | `.` | rest (one beat, `.~` = two) |
+| `_` | a **sung rest**: the harp rests while a syllable is sung; the `w:` line gives it a syllable like a note (`[N.C.] _ 4 5` + `w: Oh la la`) |
 | `~` (on its own) | **tie**: the previous note keeps sounding for one beat per `~`, e.g. `6~ \| ~~ 5` |
-| `\|` `\|\|` `\|]` `\|:` `:\|` | bar lines: single, double, final, repeat start/end |
-| `[G7]` | chord symbol shown above the next note or rest |
-| `w: Twin-kle twin-kle` | lyrics for the tab line above: one syllable per note; `_` or `*` skips a note; `~` joins words (`Hello~my` is one syllable) |
+| `\|` `\|\|` `\|]` `\|:` `:\|` | bar lines: single, double, final, repeat start/end. Also accepted: `:\|:` (end one repeat, start the next), `\|\|:`, and `:\|` right after a note (`4:\|`) |
+| `[G7]` | chord symbol shown above the next note or rest (right before a bar line: at the end of that bar) |
+| `w: Twin-kle twin-kle` | lyrics for the tab line above: one syllable per note (and per sung rest `_`); `_` or `*` skips a note; `~` joins words (`Hello~my` is one syllable) |
 | `@ Chorus` | section heading |
 | `# text` | comment (at line start or after whitespace) |
 
@@ -77,7 +78,21 @@ MIDI (one long note, split at bar lines on import) and numbered notation
 (a dash after the bar line: `5 - | - 3`).
 
 Rhythm is optional: with no `~` or `{}`, every note is one beat, so tabs copied
-from the internet play back evenly. A beat is a quarter note; `tempo` counts
+from the internet play back evenly.
+
+### How the editor writes rhythm
+
+Lines you change in the visual editor are written beat by beat, so the text reads
+the way you count: whole beats are single tokens (`4`, `4~`), shorter notes share
+one group per beat (`{4 5}`), and a note that runs over a beat continues with a tie
+in the next group. Lines you don't touch keep their own spelling.
+
+```
+{4 5} {~ 6} {~ 7} {~ 8}     eighth, three quarters, eighth (syncopation)
+4 {~ 5} 6~                  dotted quarter, eighth, half
+{4 5 6}~                    quarter-note triplet: tuplets over several beats stay one group
+{4}/2 5 | …                 a pickup (eighth + quarter) is counted from its end
+``` A beat is a quarter note; `tempo` counts
 quarter notes per minute (so a 6/8 bar is 3 beats).
 
 ## Semantics

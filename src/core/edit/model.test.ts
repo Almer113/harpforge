@@ -76,7 +76,7 @@ describe('edit model: notes', () => {
     const s = song('4 5 6 7 | . . . . |');
     expect(body(removeItems(s, [{ m: 0, start: 1 }]))).toBe('4 . 6 7 | .~~~ |');
     expect(body(moveItem(s, { m: 0, start: 0 }, { m: 1, start: 2 }))).toBe('. 5 6 7 | .~ 4 . |');
-    expect(body(moveItem(s, { m: 0, start: 0 }, { m: 1, start: 0.5 }, true))).toBe('4 5 6 7 | {. 4~ .}~ .~ |');
+    expect(body(moveItem(s, { m: 0, start: 0 }, { m: 1, start: 0.5 }, true))).toBe('4 5 6 7 | {. 4} {~ .} .~ |');
   });
 
   it('changes durations (longer overwrites, shorter leaves a rest)', () => {

@@ -281,7 +281,7 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
           <span>Chord</span>
           <LiveInput value={item.chord ?? ''} placeholder="G7" onCommit={(v) => commitSong(updateItem(song, pos, { chord: v.trim() || undefined }), 'typing')} />
         </label>
-        {item.sounds.length > 0 && !item.tied ? (
+        {!item.tied ? (
           <label className="field">
             <span>Lyric</span>
             <LiveInput value={item.lyric ?? ''} placeholder="syl-" onCommit={(v) => commitSong(updateItem(song, pos, { lyric: v || undefined }), 'typing')} />
@@ -289,7 +289,7 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
         ) : (
           <div className="field">
             <span>Lyric</span>
-            <span className="muted small">{item.tied ? 'A tied note isn’t sung again — the syllable goes on the note it continues.' : 'Lyrics go on notes, not rests.'}</span>
+            <span className="muted small">A tied note isn’t sung again — the syllable goes on the note it continues.</span>
           </div>
         )}
       </div>
