@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { CodeEditor, type CodeEditorHandle } from '../components/CodeEditor';
 import { PlayStop, Transport } from '../components/Controls';
+import { SplitIcon, TextIcon, VisualIcon } from '../components/icons';
 import { SongLine } from '../components/editor/SongDetails';
 import { UndoRedo, VisualEditor, VisualToolbar } from '../components/editor/VisualEditor';
 import { Sheet } from '../components/Sheet';
 import { selectEvent } from '../state/playback';
 import { useApp, useParsed, type EditorMode } from '../state/store';
 
-const MODES: { id: EditorMode; label: string; hint: string }[] = [
-  { id: 'visual', label: 'Visual', hint: 'Drag-and-drop editor: measures, slots and note cards' },
-  { id: 'text', label: 'Text', hint: 'Edit the HarpTab text directly' },
-  { id: 'split', label: 'Split', hint: 'Text and a live preview side by side' },
+const MODES: { id: EditorMode; label: string; icon: React.ReactNode; hint: string }[] = [
+  { id: 'visual', label: 'Visual', icon: VisualIcon, hint: 'Drag-and-drop editor: measures, slots and note cards' },
+  { id: 'text', label: 'Text', icon: TextIcon, hint: 'Edit the HarpTab text directly' },
+  { id: 'split', label: 'Split', icon: SplitIcon, hint: 'Text and a live preview side by side' },
 ];
 
 export function EditorPage() {
@@ -37,10 +38,10 @@ export function EditorPage() {
         <div className="editor-bar">
           <PlayStop />
           <span className="tb-sep" />
-          <div className="seg" role="radiogroup" aria-label="Editor mode">
+          <div className="seg icons" role="radiogroup" aria-label="Editor mode">
             {MODES.map((m) => (
-              <button key={m.id} role="radio" aria-checked={mode === m.id} className={mode === m.id ? 'on' : ''} title={m.hint} onClick={() => useApp.setState({ editorMode: m.id })}>
-                {m.label}
+              <button key={m.id} role="radio" aria-checked={mode === m.id} aria-label={m.label} className={mode === m.id ? 'on' : ''} title={`${m.label}: ${m.hint}`} onClick={() => useApp.setState({ editorMode: m.id })}>
+                {m.icon}
               </button>
             ))}
           </div>

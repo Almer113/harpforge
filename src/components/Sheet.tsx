@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { Popover } from './Popover';
+import { HolesIcon, NotesIcon } from './icons';
 import type { NoteEvent, RestEvent } from '../core/htab/types';
 import { useApp, type Parsed, type ReadAs, type SheetShow } from '../state/store';
 import { doPitchClass } from '../core/formats/jianpu';
@@ -104,17 +105,18 @@ export function Sheet({
 }
 
 /** Holes | Notes: whether the tab reads as holes (4 -4) or as notes (C5 D5). Remembered. */
-export function ReadAsSwitch({ className = '' }: { className?: string }) {
+export function ReadAsSwitch({ className = '', icons = false }: { className?: string; icons?: boolean }) {
   const readAs = useApp((s) => s.readAs);
-  const opt = (id: ReadAs, label: string, title: string) => (
-    <button role="radio" aria-checked={readAs === id} className={readAs === id ? 'on' : ''} onClick={() => useApp.setState({ readAs: id })} title={title}>
-      {label}
+  // `icons` (the editor bar): an icon each, named in the hover text ("Holes: …").
+  const opt = (id: ReadAs, label: string, icon: React.ReactNode, title: string) => (
+    <button role="radio" aria-checked={readAs === id} aria-label={icons ? label : undefined} className={readAs === id ? 'on' : ''} onClick={() => useApp.setState({ readAs: id })} title={icons ? `${label}: ${title}` : title}>
+      {icons ? icon : label}
     </button>
   );
   return (
-    <div className={`seg read-as ${className}`} role="radiogroup" aria-label="Read as">
-      {opt('holes', 'Holes', 'Read the tab as holes: 4 -4 5')}
-      {opt('notes', 'Notes', 'Read the tab as notes: C5 D5 E5, with the holes small underneath')}
+    <div className={`seg read-as ${icons ? 'icons' : ''} ${className}`} role="radiogroup" aria-label="Read as">
+      {opt('holes', 'Holes', HolesIcon, 'Read the tab as holes: 4 -4 5')}
+      {opt('notes', 'Notes', NotesIcon, 'Read the tab as notes: C5 D5 E5, with the holes small underneath')}
     </div>
   );
 }

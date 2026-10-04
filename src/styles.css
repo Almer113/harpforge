@@ -1182,3 +1182,25 @@ html { scrollbar-gutter: stable; }
 .pb-check > span { display: flex; flex-direction: column; gap: 1px; }
 /* The song line's title and artist are as wide as their text. */
 .song-line.editable .sl-title, .song-line.editable .sl-artist { field-sizing: content; min-width: 4ch; width: auto; }
+
+/* ---------- Icon switches in the editor bar ---------- */
+.seg.icons button { display: inline-flex; align-items: center; justify-content: center; padding: 4px 8px; min-width: 32px; }
+.seg.icons svg { display: block; }
+
+/* ---------- The song line: the editor's fields read as text until hovered (same spacing as Play) ---------- */
+.song-line.editable .meta-input, .song-line.editable select, .song-line.editable .sl-tempo {
+  field-sizing: content; appearance: none; -moz-appearance: textfield; margin: 0 -7px; padding: 3px 6px;
+  border: 1px solid transparent; background: transparent; color: inherit; font: inherit; border-radius: 6px;
+}
+.song-line.editable .sl-title { font-size: 22px; font-weight: 800; }
+.song-line.editable .sl-artist { color: var(--muted); font-size: 14px; }
+.song-line.editable .sl-tempo { width: auto; min-width: 2ch; }
+.song-line.editable .sl-tempo::-webkit-inner-spin-button, .song-line.editable .sl-tempo::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.song-line.editable :is(.meta-input, select, .sl-tempo):is(:hover, :focus) { border-color: var(--border-2); background-color: var(--bg); }
+.song-line.editable select { cursor: pointer; }
+.song-line.editable .sl-item:first-of-type { margin-left: 0; }
+.song-line .sl-item { gap: 6px; }
+
+/* The play triangle the same size on both pages (no padding squeezing it). */
+.transport .t-btn.primary, .editor-bar .play-stop .t-btn { padding: 0; }
+.t-btn svg { flex: none; }

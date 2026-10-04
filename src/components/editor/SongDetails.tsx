@@ -89,7 +89,7 @@ export function SongLine({ editable }: { editable: boolean }) {
             s.setText(setMetaFields(s.text, { key: e.target.value || undefined }));
           }}
         >
-          <option value="">{detected ? `— (sounds like ${detected})` : '—'}</option>
+          <option value="">{detected ? `sounds like ${detected}` : '—'}</option>
           {KEYS.includes(meta.key ?? '') || !meta.key ? null : <option value={meta.key}>{meta.key}</option>}
           {KEYS.map((k) => (
             <option key={k} value={k}>{k}</option>

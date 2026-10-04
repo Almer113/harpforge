@@ -499,7 +499,7 @@ function Toolbar({ song }: { song: Song }) {
       >
         {ve.insert ? 'Insert' : 'Overwrite'}
       </button>
-      <ReadAsSwitch />
+      <ReadAsSwitch icons />
       <Popover label="⋯" buttonClass="icon-btn more-btn" title="More tools" ariaLabel="More tools" kind="panel" panelClass="menu more-menu" panelLabel="More tools">
         {(close) => {
           const run = (f: () => void) => () => {
