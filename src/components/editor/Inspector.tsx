@@ -281,7 +281,7 @@ function MultiPanel({ song, sel }: { song: Song; sel: Pos[] }) {
   return (
     <section className="insp-card">
       <h3>{sel.length} notes selected</h3>
-      <p className="muted small">Use the length buttons in the toolbar to change them all. Ctrl+C copies them; Ctrl+V pastes at the caret.</p>
+      <p className="muted small">Use the length buttons in the toolbar to change them all. Ctrl+C / Ctrl+X copy or cut them as tab text; Ctrl+V pastes at the caret. Drag one to move them all.</p>
       <div className="row">
         <button className="btn small" onClick={() => step(1)}>Pitch ▲</button>
         <button className="btn small" onClick={() => step(-1)}>Pitch ▼</button>

@@ -44,7 +44,8 @@ import { getParsed, useApp, useParsed, type VisualState } from '../../state/stor
 import { Harmonica } from '../Harmonica';
 import { Glyph } from '../TabView';
 import { Inspector } from './Inspector';
-import { keysTaken } from '../../live/focus';
+import { isTyping, keysTaken, overlayOpen } from '../../live/focus';
+import { copyText, pasteText } from '../../core/edit/clipboard';
 import { openShortcuts } from '../Shortcuts';
 
 // ---- Helpers shared with the inspector ------------------------------------------------
@@ -70,7 +71,6 @@ export function apply(song: Song, patch: Partial<VisualState> = {}) {
   useApp.getState().setVe(patch);
 }
 
-let clipboard: { rel: number; item: Item }[] = [];
 
 const getHarp = () => getParsed(useApp.getState().text).harp;
 
@@ -142,6 +142,53 @@ export function VisualEditor() {
     [setVe],
   );
 
+  // ---- Copy, cut and paste: the system clipboard, as tab text ----
+  useEffect(() => {
+    // Only for the visual editor, and not while typing or when page text is selected.
+    const ours = (e: ClipboardEvent) => {
+      const st = useApp.getState();
+      if (st.page !== 'editor' || st.editorMode !== 'visual') return false;
+      if (isTyping(e.target) || overlayOpen()) return false;
+      return !window.getSelection()?.toString();
+    };
+    const copyOut = (e: ClipboardEvent, cut: boolean) => {
+      if (!ours(e)) return;
+      const st = useApp.getState();
+      const sel = st.ve.selection;
+      if (!sel.length) return;
+      const s = fromDoc(getParsed(st.text).doc);
+      const text = copyText(s, sel);
+      if (!text) return;
+      e.clipboardData?.setData('text/plain', text);
+      e.preventDefault();
+      if (cut) apply(removeChains(s, sel), { selection: [], caret: sel[0] });
+      st.notify(`${cut ? 'Cut' : 'Copied'} ${sel.length} note${sel.length === 1 ? '' : 's'} — paste them here or anywhere as text`);
+    };
+    const onCopy = (e: ClipboardEvent) => copyOut(e, false);
+    const onCut = (e: ClipboardEvent) => copyOut(e, true);
+    const onPaste = (e: ClipboardEvent) => {
+      if (!ours(e)) return;
+      const text = e.clipboardData?.getData('text/plain') ?? '';
+      const st = useApp.getState();
+      const s = fromDoc(getParsed(st.text).doc);
+      const r = pasteText(s, text, st.ve.caret);
+      e.preventDefault();
+      if (!r) {
+        st.notify('The clipboard doesn’t hold tab or notes to paste.');
+        return;
+      }
+      apply(r.song, { selection: r.placed, anchor: r.placed[0], caret: r.end, measure: r.placed[0]?.m ?? st.ve.caret.m });
+    };
+    window.addEventListener('copy', onCopy);
+    window.addEventListener('cut', onCut);
+    window.addEventListener('paste', onPaste);
+    return () => {
+      window.removeEventListener('copy', onCopy);
+      window.removeEventListener('cut', onCut);
+      window.removeEventListener('paste', onPaste);
+    };
+  }, []);
+
   // ---- Keyboard shortcuts ----
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -152,34 +199,6 @@ export function VisualEditor() {
       const sel = v.selection;
       const ctrl = e.ctrlKey || e.metaKey;
 
-      // Copy notes only when no page text is selected (then it's an ordinary copy).
-      if (ctrl && e.key.toLowerCase() === 'c' && sel.length && !window.getSelection()?.toString()) {
-        const abs = (p: Pos) => absBeat(s, p);
-        const items = sel.map((p) => ({ p, it: s.measures[p.m]?.items.find((x) => Math.abs(x.start - p.start) < EPS) })).filter((x) => x.it);
-        const base = Math.min(...items.map((x) => abs(x.p)));
-        clipboard = items.map((x) => ({ rel: abs(x.p) - base, item: { ...x.it! } }));
-        st.notify(`Copied ${clipboard.length} note${clipboard.length === 1 ? '' : 's'}`);
-        e.preventDefault();
-        return;
-      }
-      if (ctrl && e.key.toLowerCase() === 'v' && clipboard.length) {
-        let next = s;
-        const caretAbs = v.caret.m * s.cap + v.caret.start;
-        const placed: Pos[] = [];
-        let end = caretAbs;
-        for (const c of clipboard) {
-          const abs = caretAbs + c.rel;
-          const m = Math.floor(abs / s.cap + EPS);
-          const start = abs - m * s.cap;
-          next = placeItem(next, m, { ...c.item, start });
-          placed.push({ m, start });
-          end = Math.max(end, abs + c.item.dur);
-        }
-        const em = Math.floor(end / s.cap + EPS);
-        apply(next, { selection: placed, caret: { m: em, start: end - em * s.cap } });
-        e.preventDefault();
-        return;
-      }
       if (ctrl && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         const all = allPositions(s);

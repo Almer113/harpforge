@@ -36,8 +36,10 @@ const GROUPS: { title: string; rows: [string, string][] }[] = [
       ['← →', 'Previous / next note'],
       ['↑ ↓', 'Next note up / down (Shift: by semitone)'],
       ['Del', 'Delete the selection'],
-      ['Ctrl+C  Ctrl+V', 'Copy / paste notes'],
-      ['Shift+click', 'Add a note to the selection'],
+      ['Ctrl+C  Ctrl+X  Ctrl+V', 'Copy, cut, paste notes (as tab text, also to and from other apps)'],
+      ['Ctrl+A', 'Select everything'],
+      ['Shift+click', 'Select from the last note clicked to this one'],
+      ['Ctrl+click', 'Add or remove a note from the selection'],
     ],
   },
 ];

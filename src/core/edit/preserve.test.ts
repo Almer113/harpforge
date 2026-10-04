@@ -9,6 +9,7 @@ import { holeSound } from '../types';
 import { retab } from '../convert';
 import { getHarmonica } from '../instruments';
 import { deleteMeasure, duplicateMeasure, findItem, fromDoc, moveItems, positionsBetween, setLengths, setTimeSignature, toDoc, updateItem, type Song } from './model';
+import { copyText, pasteText } from './clipboard';
 import { replaceLines, spliceBody } from './splice';
 
 const doc = (body: string, time = '4/4') => `---\ntime: ${time}\n---\n${body}\n`;
@@ -153,5 +154,32 @@ describe('selections', () => {
   it('selects everything between two notes', () => {
     const s = fromDoc(parseHtab(doc('4 5 6 7 | 8 9 10 9 |')).doc);
     expect(positionsBetween(s, { m: 1, start: 1 }, { m: 0, start: 2 }).map((p) => `${p.m}:${p.start}`)).toEqual(['0:2', '0:3', '1:0', '1:1']);
+  });
+});
+
+describe('clipboard', () => {
+  it('copies selected notes as tab text with their rhythm', () => {
+    const s = fromDoc(parseHtab(doc('4 -4 5 -5 | 6~ . 7 |')).doc);
+    expect(copyText(s, [{ m: 0, start: 1 }, { m: 0, start: 3 }, { m: 1, start: 0 }])).toBe('-4 . -5 | 6~');
+    expect(copyText(s, [{ m: 0, start: 1 }, { m: 0, start: 3 }])).toBe('-4 . -5');
+  });
+
+  it('pastes copied notes or tab text from anywhere at the caret', () => {
+    const text = doc('4 4 4 4 | 4 4 4 4 |');
+    const s = fromDoc(parseHtab(text).doc);
+    const r = pasteText(s, '-4 5 -5 6', { m: 0, start: 2 })!;
+    expect(spliceBody(text, r.song)).toBe('4 4 -4 5 | -5 6 4 4 |');
+    expect(r.end).toEqual({ m: 1, start: 2 });
+    expect(pasteText(s, 'hello there', { m: 0, start: 0 })).toBeNull();
+  });
+});
+
+describe('copy then paste', () => {
+  it('puts notes back with the same rhythm and bar lines', () => {
+    const src = fromDoc(parseHtab(doc('4 -4 5 -5 | 6~ . 7 |')).doc);
+    const clip = copyText(src, [{ m: 0, start: 1 }, { m: 0, start: 3 }, { m: 1, start: 0 }]);
+    const text = doc('. . . . | . . . . |');
+    const r = pasteText(fromDoc(parseHtab(text).doc), clip, { m: 0, start: 1 })!;
+    expect(spliceBody(text, r.song)).toBe('. -4 . -5 | 6~ .~ |');
   });
 });
