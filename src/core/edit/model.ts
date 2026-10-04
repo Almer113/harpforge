@@ -408,6 +408,40 @@ function advanceAbs(s: Song, h: { pos: Pos; chain: Pos[] }): number {
   return end >= measureSpan(s, s.measures[last.m]) - EPS ? (last.m + 1) * s.cap : last.m * s.cap + end;
 }
 
+/**
+ * Moves (or copies) several notes together by `delta` beats, keeping their spacing.
+ * Tied notes move whole. Returns the new song and where the moved notes start.
+ */
+export function moveItems(song: Song, positions: Pos[], delta: number, copy = false): { song: Song; moved: Pos[] } {
+  const heads: { pos: Pos; item: Item; len: number }[] = [];
+  for (const p of positions) {
+    const chain = chainAt(song, p);
+    if (!chain.length || heads.some((h) => samePos(h.pos, chain[0]))) continue;
+    heads.push({ pos: chain[0], item: findItem(song, chain[0])!, len: chainLength(song, chain) });
+  }
+  if (!heads.length) return { song, moved: [] };
+  // Nothing moves before the start of the song.
+  const first = Math.min(...heads.map((h) => absBeat(song, h.pos)));
+  const d = Math.max(delta, -first);
+  let next = copy ? song : removeChains(song, heads.map((h) => h.pos));
+  const moved: Pos[] = [];
+  for (const h of heads) {
+    const to = posAt(next, absBeat(song, h.pos) + d);
+    const placed = { ...h.item, start: to.start, dur: h.len };
+    delete placed.tied;
+    next = placeItem(next, to.m, placed);
+    moved.push(to);
+  }
+  return { song: next, moved };
+}
+
+/** Every note and rest from `a` to `b` (either order), in reading order. */
+export function positionsBetween(song: Song, a: Pos, b: Pos): Pos[] {
+  const all = allPositions(song);
+  const [lo, hi] = absBeat(song, a) <= absBeat(song, b) ? [a, b] : [b, a];
+  return all.filter((p) => absBeat(song, p) >= absBeat(song, lo) - EPS && absBeat(song, p) <= absBeat(song, hi) + EPS);
+}
+
 // ---- Ties ----------------------------------------------------------------------------------
 
 /** Absolute beat of a position (measures are `cap` long). */

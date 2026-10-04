@@ -20,6 +20,8 @@ import {
   measureLength,
   measureSpan,
   moveItem,
+  moveItems,
+  positionsBetween,
   placeItem,
   removeChains,
   samePos,
@@ -176,6 +178,12 @@ export function VisualEditor() {
         const em = Math.floor(end / s.cap + EPS);
         apply(next, { selection: placed, caret: { m: em, start: end - em * s.cap } });
         e.preventDefault();
+        return;
+      }
+      if (ctrl && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        const all = allPositions(s);
+        setVe({ selection: all, anchor: all[0] });
         return;
       }
       if (ctrl) return;
@@ -444,6 +452,10 @@ interface Drag {
   /** Beats from the start of the (tied) note to the grabbed piece, and the note's whole length. */
   offset: number;
   total: number;
+  /** Dragging one of several selected notes moves them all: their starts and lengths. */
+  group: { pos: Pos; abs: number; len: number }[];
+  /** A click (no drag) on a note inside a selection selects just that note. */
+  collapse: boolean;
 }
 
 /**
@@ -475,7 +487,7 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
   const zoom = ve.zoom;
   const drag = useRef<Drag | null>(null);
   // Move preview: where the grabbed piece lands (m/start) and the whole note's span (abs/dur).
-  const [ghost, setGhost] = useState<{ m: number; start: number; abs: number; dur: number; copy: boolean } | null>(null);
+  const [ghost, setGhost] = useState<{ m: number; start: number; abs: number; dur: number; copy: boolean; others: { abs: number; dur: number }[] } | null>(null);
   const [resizeDur, setResizeDur] = useState<{ pos: Pos; dur: number } | null>(null);
   // Latest previews, read when the drag ends.
   const ghostRef = useRef(ghost);
@@ -512,7 +524,10 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
       const r = lane.el.getBoundingClientRect();
       const start = Math.max(0, Math.min(song.cap - snap, snapTo((e.clientX - r.left) / zoom - d.grab, snap)));
       const head = Math.max(0, lane.m * song.cap + start - d.offset);
-      ghostRef.current = { m: lane.m, start, abs: head, dur: d.total, copy: e.altKey };
+      // The other selected notes follow at the same distance.
+      const grabbedHead = absBeat(song, d.pos) - d.offset;
+      const others = d.group.filter((g) => !samePos(g.pos, chainAt(song, d.pos)[0])).map((g) => ({ abs: Math.max(0, g.abs + head - grabbedHead), dur: g.len }));
+      ghostRef.current = { m: lane.m, start, abs: head, dur: d.total, copy: e.altKey, others };
       setGhost(ghostRef.current);
     };
     const up = () => {
@@ -534,10 +549,23 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
       }
       const g = ghostRef.current;
       setGhost(null);
-      if (g && d.moved) {
+      if (!d.moved) {
+        if (d.collapse) setVe({ selection: [d.pos], anchor: d.pos, measure: d.pos.m, caret: advance(s, d.pos, d.item.dur) });
+        return;
+      }
+      if (g) {
         const to = { m: g.m, start: g.start };
+        if (d.group.length > 1) {
+          // Several notes: all move by the same amount (Alt copies).
+          const delta = g.abs - (absBeat(s, d.pos) - d.offset);
+          if (Math.abs(delta) > EPS || g.copy) {
+            const { song: next, moved } = moveItems(s, d.group.map((x) => x.pos), delta, g.copy);
+            apply(next, { selection: moved, anchor: moved[0], measure: moved[0]?.m ?? to.m });
+          }
+          return;
+        }
         // Copy or move as the preview showed it (Alt when the pointer last moved).
-        if (!samePos(to, d.pos) || g.copy) apply(moveItem(s, d.pos, to, g.copy), { selection: [to], measure: to.m, caret: advance(s, to, d.item.dur) });
+        if (!samePos(to, d.pos) || g.copy) apply(moveItem(s, d.pos, to, g.copy), { selection: [to], anchor: to, measure: to.m, caret: advance(s, to, d.item.dur) });
       }
     };
     window.addEventListener('pointermove', move);
@@ -546,7 +574,7 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
     };
-  }, [zoom, song.cap]);
+  }, [zoom, song, setVe]);
 
   const onItemDown = (e: React.PointerEvent, pos: Pos, item: Item) => {
     if (e.button !== 0) return;
@@ -555,6 +583,25 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
     const resize = (e.target as HTMLElement).classList.contains('ve-resize');
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const chain = chainAt(song, pos);
+    const v = useApp.getState().ve;
+    const sel = v.selection;
+    const inSelection = sel.some((p) => samePos(p, pos));
+    // Selecting: Ctrl/⌘ adds or removes one note; Shift selects everything from the anchor.
+    let selection = sel;
+    if (e.ctrlKey || e.metaKey) {
+      selection = inSelection ? sel.filter((p) => !samePos(p, pos)) : [...sel, pos];
+      setVe({ selection, anchor: pos, measure: pos.m });
+    } else if (e.shiftKey) {
+      selection = positionsBetween(song, v.anchor ?? sel[0] ?? pos, pos);
+      setVe({ selection, measure: pos.m });
+    } else if (!inSelection) {
+      selection = [pos];
+      setVe({ selection, anchor: pos, measure: pos.m, caret: advance(song, pos, item.dur) });
+    }
+    const group =
+      !resize && selection.length > 1 && selection.some((p) => samePos(p, pos))
+        ? selection.map((p) => chainAt(song, p)[0] ?? p).filter((p, i, all) => all.findIndex((q) => samePos(q, p)) === i).map((p) => ({ pos: p, abs: absBeat(song, p), len: chainLength(song, chainAt(song, p)) }))
+        : [];
     drag.current = {
       pos,
       item,
@@ -565,14 +612,9 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
       mode: resize ? 'resize' : 'move',
       offset: absBeat(song, pos) - absBeat(song, chain[0] ?? pos),
       total: chainLength(song, chain),
+      group,
+      collapse: !e.ctrlKey && !e.metaKey && !e.shiftKey && inSelection && sel.length > 1,
     };
-    const sel = useApp.getState().ve.selection;
-    if (e.shiftKey || e.ctrlKey || e.metaKey) {
-      const has = sel.some((p) => samePos(p, pos));
-      setVe({ selection: has ? sel.filter((p) => !samePos(p, pos)) : [...sel, pos], measure: pos.m });
-    } else if (!sel.some((p) => samePos(p, pos)) || sel.length > 1) {
-      setVe({ selection: [pos], measure: pos.m, caret: advance(song, pos, item.dur) });
-    }
     if (item.sounds.length && !resize) playSounds(item.sounds, chainLength(song, chainAt(song, pos)));
   };
 
@@ -609,7 +651,19 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
             meas.lineBreak && mi > 0 && (!fit || meas.section !== undefined) ? <div key={`br${mi}`} className="ve-break" /> : null,
             <div key={mi} className={`ve-measure ${ve.measure === mi ? 'current' : ''} ${over ? 'overfull' : ''}`}>
               <div className="ve-mhead">
-                <span className="ve-mnum">{mi + 1}</span>
+                <button
+                  className="ve-mnum"
+                  title="Select this measure (Shift: up to here)"
+                  onClick={(e) => {
+                    const v = useApp.getState().ve;
+                    const from = e.shiftKey ? Math.min(v.anchor?.m ?? mi, mi) : mi;
+                    const to = e.shiftKey ? Math.max(v.anchor?.m ?? mi, mi) : mi;
+                    const selection = allPositions(song).filter((p) => p.m >= from && p.m <= to);
+                    setVe({ selection, anchor: e.shiftKey ? v.anchor : { m: mi, start: 0 }, measure: mi });
+                  }}
+                >
+                  {mi + 1}
+                </button>
                 {meas.section !== undefined && <span className="ve-section">{meas.section}</span>}
                 {fit && meas.lineBreak && mi > 0 && meas.section === undefined && (
                   <span className="ve-linemark" title="Starts a new line in the tab">↵</span>
@@ -660,6 +714,12 @@ function Score({ song, starts, playingAt, flats, showNames }: { song: Song; star
                   );
                 })}
                 {ve.caret.m === mi && <span className="ve-caret" style={{ left: ve.caret.start * zoom }} />}
+                {ghost &&
+                  ghost.others.flatMap((o) => segments(song.cap, o.abs, o.dur))
+                    .filter((g) => g.m === mi)
+                    .map((g) => (
+                      <span key={`o${g.start}`} className={`ve-ghost ${ghost.copy ? 'copy' : ''}`} style={{ left: g.start * zoom, width: Math.max(g.len * zoom, 22) - 3 }} />
+                    ))}
                 {ghost &&
                   segments(song.cap, ghost.abs, ghost.dur)
                     .filter((g) => g.m === mi)

@@ -8,7 +8,7 @@ import { buildScore, harmonicaFromMeta } from '../score';
 import { holeSound } from '../types';
 import { retab } from '../convert';
 import { getHarmonica } from '../instruments';
-import { deleteMeasure, duplicateMeasure, findItem, fromDoc, setLengths, setTimeSignature, toDoc, updateItem, type Song } from './model';
+import { deleteMeasure, duplicateMeasure, findItem, fromDoc, moveItems, positionsBetween, setLengths, setTimeSignature, toDoc, updateItem, type Song } from './model';
 import { replaceLines, spliceBody } from './splice';
 
 const doc = (body: string, time = '4/4') => `---\ntime: ${time}\n---\n${body}\n`;
@@ -135,5 +135,23 @@ describe('re-tabbing keeps the text and the notes', () => {
     const odd = retab(parseHtab('---\n---\n-3\' |\n').doc, from, to); // A#4: not on this tremolo
     expect(odd.stats.unplayable).toBe(1);
     expect(odd.doc.lines[0].events[0]).toMatchObject({ kind: 'note', sounds: [{ type: 'pitch', midi: 70 }] });
+  });
+});
+
+describe('selections', () => {
+  it('moves several notes together, keeping their spacing', () => {
+    const text = doc('4 5 6 7 | . . . . |');
+    const s = fromDoc(parseHtab(text).doc);
+    const { song, moved } = moveItems(s, [{ m: 0, start: 1 }, { m: 0, start: 2 }], 4);
+    expect(spliceBody(text, song)).toBe('4 .~ 7 | . 5 6 . |');
+    expect(moved).toEqual([{ m: 1, start: 1 }, { m: 1, start: 2 }]);
+    // Copy leaves the originals; a move can't go before the start.
+    expect(spliceBody(text, moveItems(s, [{ m: 0, start: 2 }], 4, true).song)).toBe('4 5 6 7 | .~ 6 . |');
+    expect(moveItems(s, [{ m: 0, start: 1 }], -3).moved).toEqual([{ m: 0, start: 0 }]);
+  });
+
+  it('selects everything between two notes', () => {
+    const s = fromDoc(parseHtab(doc('4 5 6 7 | 8 9 10 9 |')).doc);
+    expect(positionsBetween(s, { m: 1, start: 1 }, { m: 0, start: 2 }).map((p) => `${p.m}:${p.start}`)).toEqual(['0:2', '0:3', '1:0', '1:1']);
   });
 });

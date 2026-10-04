@@ -934,3 +934,5 @@ html { scroll-padding-top: calc(var(--topbar-h) + var(--edit-head-h, 64px) + 14p
 .text-options p { margin: 0; }
 .text-checks { display: flex; flex-direction: column; gap: 6px; }
 .text-preview { margin: 0; padding: 12px 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; font-size: 13px; line-height: 1.45; max-height: 60vh; overflow: auto; white-space: pre; }
+button.ve-mnum { border: 0; background: transparent; padding: 0 3px; border-radius: 4px; cursor: pointer; font: inherit; font-weight: 700; color: var(--faint); }
+button.ve-mnum:hover { color: var(--brass-2); background: var(--panel-2); }

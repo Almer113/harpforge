@@ -60,6 +60,8 @@ export type EditorMode = 'visual' | 'text' | 'split';
 /** Visual editor UI state. Positions are (measure index, start beat). */
 export interface VisualState {
   selection: import('../core/edit/model').Pos[];
+  /** Where a Shift-click range starts (the last note clicked without Shift). */
+  anchor?: import('../core/edit/model').Pos;
   caret: import('../core/edit/model').Pos;
   /** Measure shown in the inspector when no note is selected. */
   measure: number;
