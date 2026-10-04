@@ -47,7 +47,14 @@ export function pause() {
   useApp.setState({ play: 'paused', activeEvents: [] });
 }
 
+/** Called before playback stops (the recorder finishes a recording, keeping what was played). */
+let beforeStop: (() => void) | null = null;
+export function onBeforeStop(fn: () => void) {
+  beforeStop = fn;
+}
+
 export function stop() {
+  beforeStop?.();
   generation++;
   engine.stopPlayback();
   useApp.setState({ play: 'stopped', activeEvents: [] });

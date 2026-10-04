@@ -6,7 +6,8 @@ import { midiToName, prefersFlats } from '../core/pitch';
 import { holeSoundText } from '../core/htab/serializer';
 import type { HoleSound } from '../core/types';
 import { getParsed, useApp } from '../state/store';
-import { press, pressPitch, release } from './livePlayer';
+import { press, pressPitch, release, releaseAll } from './livePlayer';
+import * as engine from '../audio/engine';
 
 /** The easiest way to play a (possibly fractional) pitch on the harmonica, if any. */
 export function soundForPitch(harp: Harmonica, midi: number): { sound: HoleSound; midi: number } | null {
@@ -66,6 +67,8 @@ export const MIC_ID = 'mic';
 
 const tracker = new NoteTracker({
   on: (note) => {
+    // The app's own sound coming back through the microphone isn't you playing.
+    if (engine.appSounding()) return;
     const found = soundForPitch(harp(), note);
     if (found) press(MIC_ID, found.sound, { silent: true });
   },
@@ -102,30 +105,48 @@ function analyse(buf: Float32Array, sampleRate: number) {
   }
 }
 
+/** Counts starts and stops: a start that was stopped (or overtaken) while it waited gives up. */
+let micTicket = 0;
+
 export async function startMic(): Promise<void> {
   if (mic) return;
+  const ticket = ++micTicket;
+  const current = () => ticket === micTicket;
   useApp.setState({ mic: { status: 'starting', level: 0, reading: null } });
+  let stream: MediaStream | null = null;
+  let ctx: AudioContext | null = null;
+  // Gives back whatever this start had opened (the browser's recording light goes off).
+  const release = () => {
+    stream?.getTracks().forEach((t) => t.stop());
+    if (ctx && ctx.state !== 'closed') void ctx.close();
+  };
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
+    stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     });
+    if (!current()) return release();
     // A separate context just for listening; it never plays anything.
-    const ctx = new AudioContext();
+    ctx = new AudioContext();
     await ctx.resume();
+    if (!current()) return release();
     const url = URL.createObjectURL(new Blob([TAP_WORKLET], { type: 'text/javascript' }));
     await ctx.audioWorklet.addModule(url);
     URL.revokeObjectURL(url);
+    if (!current()) return release();
     const source = ctx.createMediaStreamSource(stream);
     const tap = new AudioWorkletNode(ctx, 'harpforge-tap', { numberOfOutputs: 1, outputChannelCount: [1] });
     const mute = ctx.createGain();
     mute.gain.value = 0;
     source.connect(tap).connect(mute).connect(ctx.destination); // silent: keeps the graph running, no feedback
+    const rate = ctx.sampleRate;
     tap.port.onmessage = (e: MessageEvent<Float32Array>) => {
-      if (mic) analyse(e.data, ctx.sampleRate);
+      if (mic) analyse(e.data, rate);
     };
     mic = { ctx, stream, source, tap };
     useApp.setState({ mic: { status: 'on', level: 0, reading: null } });
   } catch (e) {
+    release();
+    if (!current()) return;
     const err = e as Error;
     const message =
       err.name === 'NotAllowedError'
@@ -138,6 +159,7 @@ export async function startMic(): Promise<void> {
 }
 
 export function stopMic() {
+  micTicket++; // a start still waiting (e.g. for the permission prompt) gives up
   if (!mic) {
     useApp.setState({ mic: { status: 'off', level: 0, reading: null } });
     return;
@@ -182,6 +204,8 @@ function refreshMidiDevices() {
     input.onmidimessage = onMidiMessage;
     devices.push(input.name || 'MIDI input');
   });
+  // A keyboard unplugged mid-note never sends the note-off.
+  if (devices.length < useApp.getState().midi.devices.length) releaseAll('midi:');
   useApp.setState({ midi: { status: 'on', devices } });
 }
 
@@ -200,6 +224,8 @@ export async function startMidi(): Promise<void> {
 }
 
 export function stopMidi() {
+  // Notes held on the keyboard would otherwise keep sounding.
+  releaseAll('midi:');
   midiAccess?.inputs.forEach((input) => (input.onmidimessage = null));
   if (midiAccess) midiAccess.onstatechange = null;
   midiAccess = null;

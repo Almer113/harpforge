@@ -107,6 +107,11 @@ export function Harmonica() {
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current;
     if (!d || d.pointerId !== e.pointerId) return;
+    // The button was let go somewhere we didn't hear about (e.g. in another window).
+    if (e.pointerType === 'mouse' && e.buttons === 0) {
+      endDrag();
+      return;
+    }
     const hole = holeAt(e.clientX);
     if (hole !== d.hole) {
       release(MOUSE_ID);
@@ -124,10 +129,14 @@ export function Harmonica() {
     if (base !== null) change(MOUSE_ID, sound, base - amount);
   };
 
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (!drag.current || drag.current.pointerId !== e.pointerId) return;
+  const endDrag = () => {
+    if (!drag.current) return;
     drag.current = null;
     release(MOUSE_ID);
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (!drag.current || drag.current.pointerId !== e.pointerId) return;
+    endDrag();
   };
 
   // Fit the holes to the available width (container query units, see .harp-wrap).
@@ -169,6 +178,7 @@ export function Harmonica() {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onLostPointerCapture={onPointerUp}
         onContextMenu={(e) => e.preventDefault()}
       >
         <div className="harp-plate top">

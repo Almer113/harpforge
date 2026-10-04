@@ -34,6 +34,24 @@ export function noteOff(id: string) {
   if (!v) return;
   v.stop(Tone.immediate());
   live.delete(id);
+  soundingFor(0);
+}
+
+// ---- Is the app itself making sound? ---------------------------------------------
+// The microphone hears the speakers too: notes it picks up while the app is playing
+// (a song, a note preview, a key you pressed) aren't yours, so they're ignored.
+
+/** How long a note can still be heard after it stops (release and room). */
+const TAIL_MS = 300;
+let quietAt = 0;
+
+function soundingFor(seconds: number) {
+  quietAt = Math.max(quietAt, performance.now() + seconds * 1000 + TAIL_MS);
+}
+
+/** Whether the app is making a note (or just did), so a microphone note now may be the app's own. */
+export function appSounding(): boolean {
+  return live.size > 0 || scheduledVoices.size > 0 || performance.now() < quietAt;
 }
 
 export function allNotesOff() {
@@ -165,7 +183,10 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
           scheduledVoices.add(v);
           v.start(m, time, glide);
           v.stop(time + soundDur - soundGap);
-          setTimeout(() => scheduledVoices.delete(v), (soundDur + 1) * 1000);
+          setTimeout(() => {
+            scheduledVoices.delete(v);
+            soundingFor(0);
+          }, (soundDur + 1) * 1000);
         });
         Tone.getDraw().schedule(() => opts.onEvent?.(ev.index, true), time);
         Tone.getDraw().schedule(() => opts.onEvent?.(ev.index, false), time + dur - (ev.soundBeats > ev.beats ? 0 : gap));
@@ -197,6 +218,7 @@ export function pausePlayback() {
   transport().pause();
   Tone.getDraw().cancel(0);
   for (const v of scheduledVoices) v.stop(Tone.immediate());
+  if (scheduledVoices.size) soundingFor(0);
   scheduledVoices.clear();
 }
 
@@ -218,6 +240,7 @@ export function stopPlayback() {
   t.loop = false;
   metronomeId = null;
   for (const v of scheduledVoices) v.stop(Tone.immediate());
+  if (scheduledVoices.size) soundingFor(0);
   scheduledVoices.clear();
 }
 
@@ -237,6 +260,7 @@ export function isTransportRunning(): boolean {
 /** Plays one event right away (clicking a tab card). */
 export function previewMidis(midis: number[], seconds = 0.5, glides: (number | undefined)[] = []) {
   const now = Tone.immediate();
+  if (midis.length) soundingFor(seconds);
   midis.forEach((m, k) => {
     const v = createVoice(midis.length > 1 ? 0.7 : 1);
     v.start(m, now, glides[k]);

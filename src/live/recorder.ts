@@ -10,7 +10,7 @@ import { beatsPerBar, type TabEvent } from '../core/htab/types';
 import { sameHoleSound, type HoleSound } from '../core/types';
 import { clustersToEvents, quantize } from '../core/timeline';
 import { getParsed, useApp } from '../state/store';
-import { stop as stopPlayback } from '../state/playback';
+import { onBeforeStop, stop as stopPlayback } from '../state/playback';
 
 interface Take {
   id: string;
@@ -106,6 +106,21 @@ function buildTimed(list: Take[], grid: number, bpb: number, endBeat: number): T
   for (const c of clusters) c.sounds = uniqueSounds(c.sounds as HoleSound[]);
   return clustersToEvents(clusters, bpb);
 }
+
+/**
+ * Ends a recording that something else is taking over from (another tab opened, the
+ * harmonica changed, leaving the Play page): what was played is written into the tab it
+ * was recorded in, as with Stop.
+ */
+export function finishRecording() {
+  if (useApp.getState().recording) stopRecording();
+}
+// Stopping playback (which also stops the metronome) ends the recording too.
+onBeforeStop(finishRecording);
+// Recording is controlled from the Play page; leaving it ends the recording.
+useApp.subscribe((s, prev) => {
+  if (s.page !== prev.page && prev.page === 'play' && s.recording) stopRecording();
+});
 
 export function stopRecording() {
   const s = useApp.getState();

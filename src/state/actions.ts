@@ -11,6 +11,7 @@ import { isChordSheet, octaveOptions } from '../core/convert';
 import { decodeText, detectKind, exportDoc, FORMAT_NAMES, importBytes, IMPORT_ACCEPT, importText, sniffText, type ExportKind, type Imported } from '../core/formats';
 import { persistStorage, saveTab } from '../storage/library';
 import { stop } from './playback';
+import { finishRecording } from '../live/recorder';
 import { getParsed, isDirty, useApp } from './store';
 
 /** Whether switching to `spec` is only a key change (same holes, other pitches), so the user can choose. */
@@ -33,6 +34,8 @@ export function keyDistance(from: HarmonicaSpec, to: HarmonicaSpec): number {
  * Changing family or tuning always keeps the notes.
  */
 export function setHarmonica(spec: HarmonicaSpec, keep: 'holes' | 'notes' = 'notes') {
+  // A recording in progress goes into the tab first, so it's re-tabbed with the rest.
+  finishRecording();
   const s = useApp.getState();
   const p = getParsed(s.text);
   const to = getHarmonica(spec);
@@ -70,6 +73,7 @@ export function setHarmonica(spec: HarmonicaSpec, keep: 'holes' | 'notes' = 'not
 
 /** Moves the whole tab an octave up (+12) or down (−12) on the same harmonica, if it fits. */
 export function shiftOctave(shift: 12 | -12) {
+  finishRecording();
   const s = useApp.getState();
   const p = getParsed(s.text);
   const opt = octaveOptions(p.doc, p.harp).find((o) => o.shift === shift);
@@ -92,6 +96,8 @@ function withKept(report: SpliceReport): string {
 }
 
 export function confirmDiscard(): boolean {
+  // A recording in progress is written into the current tab first, so the question covers it.
+  finishRecording();
   const s = useApp.getState();
   if (!isDirty(s) || s.text.trim() === BLANK.trim()) return true;
   return window.confirm('Your current tab has unsaved changes. Discard them?');

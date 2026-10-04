@@ -105,6 +105,7 @@ export function release(id: string) {
   for (const fn of liveListeners) fn({ type: 'release', id });
 }
 
-export function releaseAll() {
-  for (const id of Object.keys(useApp.getState().held)) release(id);
+/** Releases every held note (or those whose id starts with `prefix`, e.g. "midi:"), on or off the harp. */
+export function releaseAll(prefix = '') {
+  for (const id of [...Object.keys(useApp.getState().held), ...pitchIds]) if (id.startsWith(prefix)) release(id);
 }

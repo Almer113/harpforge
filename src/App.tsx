@@ -14,6 +14,7 @@ import { startRouter } from './state/router';
 import { copyShareLink } from './state/share';
 import { isDirty, useApp, useParsed, type Page } from './state/store';
 import { seedDemos } from './storage/library';
+import { isTyping } from './live/focus';
 import { openSharedFromUrl } from './state/share';
 
 const NAV: { id: Page; label: string }[] = [
@@ -150,7 +151,7 @@ export function App() {
       }
       // Undo / redo for every edit (visual and text). Plain inputs keep their own undo.
       const el = e.target as HTMLElement;
-      const plainInput = (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && !el.closest('.code-editor');
+      const plainInput = isTyping(el) && el.tagName !== 'SELECT' && !el.closest('.code-editor');
       if ((e.ctrlKey || e.metaKey) && !plainInput) {
         const k = e.key.toLowerCase();
         if (k === 'z' && !e.shiftKey) {

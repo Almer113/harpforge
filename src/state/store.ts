@@ -403,7 +403,7 @@ useApp.subscribe((s, prev) => {
 });
 // A duplicated browser tab starts with the same id: it moves to a new one (keeping its text).
 if (typeof window !== 'undefined') {
-  watchForClash(
+  const stopWatching = watchForClash(
     () => tabId,
     () => {
       tabId = newSessionId();
@@ -411,6 +411,8 @@ if (typeof window !== 'undefined') {
       saveWorking();
     },
   );
+  // A hot reload (development) replaces this module: the old copy mustn't answer the new one.
+  (import.meta as ImportMeta & { hot?: { dispose(fn: () => void): void } }).hot?.dispose(stopWatching);
 }
 
 // Don't lose the last keystrokes when the tab is closed or hidden.
@@ -428,3 +430,16 @@ export function useParsed(): Parsed {
 export function isDirty(s: Pick<AppState, 'text' | 'savedText'>): boolean {
   return s.text !== s.savedText;
 }
+
+// The keyboard's position along a long harmonica (← →) belongs to that harmonica: it
+// starts over whenever the harmonica changes (picker, another tab, undo).
+let harpId = '';
+useApp.subscribe((s, prev) => {
+  if (s.text === prev.text) return;
+  const { spec, holes } = getParsed(s.text).harp;
+  const id = `${spec.family}/${spec.tuning}/${spec.key}/${holes.length}`;
+  if (id === harpId) return;
+  const first = harpId === '';
+  harpId = id;
+  if (!first && s.keyOffset) useApp.setState({ keyOffset: 0 });
+});
