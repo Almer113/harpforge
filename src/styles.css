@@ -579,7 +579,7 @@ select:focus, .search:focus { border-color: var(--brass); }
 .ve-score { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 14px 10px; overflow-x: auto; }
 .ve-measures { display: flex; flex-wrap: wrap; row-gap: 16px; align-items: flex-end; }
 .ve-break { flex-basis: 100%; height: 0; }
-.ve-measure { padding: 0 4px 0 6px; border-left: 2px solid var(--border-2); }
+.ve-measure { padding: 0 6px 0 4px; border-left: 2px solid var(--border-2); }
 .ve-mhead { height: 20px; display: flex; align-items: center; gap: 8px; font-size: 11px; }
 .ve-mnum { color: var(--faint); font-weight: 700; font-variant-numeric: tabular-nums; }
 .ve-measure.current .ve-mnum { color: var(--brass-2); }
@@ -1257,3 +1257,6 @@ html { scrollbar-gutter: stable; }
 .ve-zoom button:hover:not(:disabled) { background: var(--panel-2); color: var(--text); }
 .ve-zoom button:disabled { opacity: 0.35; cursor: default; }
 .ve-zoom .ve-zoom-val { min-width: 46px; color: var(--text); border-left: 1px solid var(--border); border-right: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+/* The music and the side panel 10px apart (as the bar and the content are), which leaves the music
+   1072px at the widest: four 4/4 measures at 100% zoom (4 × (4 beats × 64px + 12px)). */
+.ve-main { gap: 10px; }
