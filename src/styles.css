@@ -1234,7 +1234,9 @@ html { scrollbar-gutter: stable; }
 .ve-item.lod-small, .ve-item.lod-bar { padding: 2px 1px; border-radius: 5px; }
 .ve-item.lod-small .ve-glyphs .glyph { font-size: 11px; }
 .ve-item.lod-small .ve-glyphs.stack .glyph { font-size: 9px; }
-.ve-item.lod-small :is(.g-sign, .n-oct, .g-slide), .ve-item:is(.lod-small, .lod-bar) .ve-name { display: none; }
+.ve-item.lod-small :is(.g-sign, .n-oct, .g-slide) { display: none; }
+/* Hidden, not removed: every row keeps its height, so the text sits at the same heights at every zoom. */
+.ve-item:is(.lod-small, .lod-bar) .ve-name { visibility: hidden; }
 .ve-item.lod-bar .ve-glyphs { visibility: hidden; }
 .ve-item:is(.lod-small, .lod-bar) .ve-resize { width: 4px; }
 /* Chords and lyrics run on past their card (to the next chord or lyric), above the cards after it. */
