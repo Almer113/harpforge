@@ -1011,3 +1011,87 @@ button.ve-mnum:hover { color: var(--brass-2); background: var(--panel-2); }
 .slim-slide { flex: none; width: 46px; border: 1px solid var(--border-2); border-radius: 8px; background: var(--panel-2); color: var(--muted); font-size: 11px; font-weight: 700; }
 .slim-slide.on { border-color: var(--brass); color: var(--brass-2); background: rgba(227, 169, 72, 0.12); }
 .slim-note { margin: 6px 0 0; }
+
+/* ---------- Editor (6b): one bar, inspector tabs, docked harmonica, status line ---------- */
+.edit-sticky { padding: 6px 10px; gap: 0; }
+.edit-sticky .editor-bar { justify-content: flex-start; padding-top: 0; border-top: 0; gap: 8px; }
+.edit-sticky .ve-toolbar { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; flex-wrap: wrap; }
+.tb-sep { width: 1px; height: 22px; background: var(--border); margin: 0 2px; flex: none; }
+.bar-spacer { flex: 1 1 0; min-width: 8px; }
+.pal { display: inline-flex; gap: 2px; }
+.pal-btn {
+  min-width: 30px; height: 30px; padding: 0 4px; border-radius: 7px; border: 1px solid transparent; background: transparent;
+  color: var(--muted); font-size: 17px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.pal-btn:hover:not(:disabled) { background: var(--panel-2); color: var(--text); }
+.pal-btn:disabled { opacity: 0.35; cursor: default; }
+.pal-btn.mod { font-size: 14px; font-weight: 800; }
+.pal-btn.on { border-color: var(--brass); color: var(--brass-2); background: rgba(227, 169, 72, 0.12); }
+/* In step entry the palette shows the next note's length: a dashed outline. */
+.pal-btn.next { border: 1px dashed var(--brass); color: var(--brass-2); }
+.more-btn { font-size: 16px; letter-spacing: 1px; }
+.more-menu { min-width: 300px; }
+.mi-label { padding: 8px 10px 3px; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint); }
+.pb-row { display: flex; align-items: center; gap: 10px; padding: 6px 10px; font-size: 13px; flex-wrap: wrap; }
+.pb-row > span:first-child { min-width: 46px; color: var(--muted); }
+.pb-row input[type='range'] { width: 120px; accent-color: var(--brass); }
+.pb-row .mi-hint { flex-basis: 100%; margin-left: 24px; }
+.transport.compact { display: flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; box-shadow: none; position: static; }
+.transport.compact .t-btn { width: 34px; height: 32px; }
+.pb-btn { position: relative; }
+.pb-dot { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--brass-2); }
+.pb-menu { min-width: 280px; }
+.pb-settings { display: flex; flex-direction: column; padding: 4px 0; }
+.pb-settings .check { padding: 6px 10px; }
+.song-pop { width: 320px; padding: 12px; }
+.song-title-line { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 14px 2px 6px; }
+.song-title-line .meta-input { border-color: transparent; background: transparent; padding: 2px 6px; }
+.song-title-line .meta-input:hover, .song-title-line .meta-input:focus { border-color: var(--border-2); background: var(--bg); }
+.song-title-line .meta-input:first-child { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; min-width: 0; width: min(100%, 26ch); }
+.song-title-line .meta-input:last-child { color: var(--muted); width: 18ch; }
+.song-fields { display: flex; flex-direction: column; gap: 10px; }
+.song-fields .field-row { display: flex; gap: 10px; align-items: flex-end; }
+.song-fields .field-row .field { flex: 1; }
+.song-fields .reflow { font-size: 12.5px; margin-bottom: 7px; }
+.song-fields select, .song-fields .meta-input { width: 100%; }
+
+/* Inspector tabs */
+.ve-inspector { gap: 0; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden auto; }
+.ve-inspector { max-height: calc(100vh - var(--topbar-h) - var(--edit-head-h, 50px) - var(--dock-h, 0px) - 28px); }
+.insp-tabs { display: flex; position: sticky; top: 0; z-index: 2; background: var(--bg-2); border-bottom: 1px solid var(--border); }
+.insp-tabs button { flex: 1; border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 10px 6px 8px; color: var(--muted); font-weight: 700; font-size: 12.5px; cursor: pointer; }
+.insp-tabs button:hover { color: var(--text); }
+.insp-tabs button.on { color: var(--brass-2); border-bottom-color: var(--brass); }
+.insp-body { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+.insp-body > .insp-card { border: 0; padding: 0; background: transparent; }
+.insp-empty { margin: 4px 2px; }
+
+/* The note step entry just wrote: outlined, not selected. */
+.ve-item.just { box-shadow: 0 0 0 1px rgba(245, 196, 108, 0.65); }
+.ve-add-measure { position: relative; }
+.ve-add-measure.caret-here { border-color: var(--brass); color: var(--brass-2); }
+
+/* Docked harmonica + status line */
+.ve-dock {
+  position: sticky; bottom: 0; z-index: 12; margin: 0 -24px; padding: 0 24px;
+  background: linear-gradient(180deg, rgba(29, 25, 21, 0.98), #171410); border-top: 1px solid var(--border-2);
+  box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.35);
+}
+.dock-head { display: flex; align-items: center; gap: 8px; padding: 6px 0; flex-wrap: wrap; font-size: 12px; }
+.dock-head > b { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); }
+.dock-head .t-btn { height: 30px; }
+.ve-dock .harp-slim { padding-bottom: 8px; }
+.ve-status { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 5px 0 7px; border-top: 1px solid var(--border); font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.ve-status b { color: var(--text); font-weight: 600; }
+.ve-status .live { color: var(--danger); }
+.ve-status-hint { margin-left: auto; font-family: inherit; font-size: 12px; color: var(--faint); font-family: Inter, system-ui, sans-serif; }
+.ve-status-hint .link-btn { font-size: 12px; }
+/* The editor uses the window's width: one bar of tools, and more of the music per row. */
+.page.editor-page { max-width: 1440px; gap: 10px; }
+.editor-bar > .seg button { padding: 5px 11px; }
+.editor-page .song-title-line { margin: 6px 2px 0; }
+.edit-sticky .editor-bar { gap: 6px; }
+.edit-sticky .ve-toolbar { gap: 6px; }
+.edit-sticky .bar-spacer { min-width: 0; }
+/* If the window is too narrow for one row, play and the harmonica wrap to the right. */
+.edit-sticky .transport.compact { margin-left: auto; }

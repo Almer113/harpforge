@@ -88,7 +88,7 @@ function RecordControl() {
   );
 }
 
-function MicControl() {
+export function MicControl() {
   const mic = useApp((s) => s.mic);
   const sensitivity = useApp((s) => s.micSensitivity);
   const on = mic.status === 'on';
@@ -135,7 +135,7 @@ function Tuner() {
   );
 }
 
-function MidiControl() {
+export function MidiControl() {
   const midi = useApp((s) => s.midi);
   const on = midi.status === 'on';
   const [miss, setMiss] = useState<string | undefined>();

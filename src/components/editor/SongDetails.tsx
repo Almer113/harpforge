@@ -1,4 +1,5 @@
-// Song details: title, artist, key, time signature, tempo and harmonica.
+// Song details: title and artist above the music; key, time signature and tempo in the
+// inspector's Song tab (and "Song ▾" in Text mode).
 
 import { useEffect, useMemo, useState } from 'react';
 import { guessTonic } from '../../core/convert';
@@ -12,7 +13,7 @@ const TIMES = ['2/4', '3/4', '4/4', '5/4', '6/4', '2/2', '3/8', '6/8', '7/8', '9
 const KEYS = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'Db', 'Ab', 'Eb', 'Bb', 'F', 'Am', 'Em', 'Bm', 'F#m', 'C#m', 'G#m', 'Ebm', 'Bbm', 'Fm', 'Cm', 'Gm', 'Dm'];
 
 /** A text field that edits a header field, recording one undo step per burst of typing. */
-function MetaInput({ field, value, placeholder, width }: { field: string; value: string; placeholder: string; width?: number }) {
+function MetaInput({ field, value, placeholder, width, label }: { field: string; value: string; placeholder: string; width?: number; label?: string }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   return (
@@ -21,6 +22,7 @@ function MetaInput({ field, value, placeholder, width }: { field: string; value:
       style={width ? { width } : undefined}
       value={draft}
       placeholder={placeholder}
+      aria-label={label}
       onChange={(e) => {
         setDraft(e.target.value);
         const s = useApp.getState();
@@ -30,7 +32,19 @@ function MetaInput({ field, value, placeholder, width }: { field: string; value:
   );
 }
 
-export function SongDetails() {
+/** The song's title and artist, edited in place (above the music in the editor). */
+export function SongTitle() {
+  const { meta } = useParsed().doc;
+  return (
+    <div className="song-title-line">
+      <MetaInput field="title" value={meta.title ?? ''} placeholder="Untitled" label="Title" />
+      <MetaInput field="artist" value={meta.artist ?? ''} placeholder="Artist" label="Artist" />
+    </div>
+  );
+}
+
+/** Key, time signature and tempo (the inspector's Song tab, and "Song ▾" in Text mode). */
+export function SongFields() {
   const { doc, harp } = useParsed();
   // With no key set, show what the song's notes suggest (its last note's pitch).
   const tonic = useMemo(() => guessTonic(doc, harp), [doc, harp]);
@@ -55,12 +69,16 @@ export function SongDetails() {
   };
 
   return (
-    <div className="song-details">
-      <div className="sd-title">
+    <div className="song-fields">
+      <label className="field">
+        <span>Title</span>
         <MetaInput field="title" value={meta.title ?? ''} placeholder="Untitled" />
+      </label>
+      <label className="field">
+        <span>Artist</span>
         <MetaInput field="artist" value={meta.artist ?? ''} placeholder="Artist" />
-      </div>
-      <div className="sd-fields">
+      </label>
+      <div className="field-row">
         <label className="field">
           <span>Song key</span>
           <select
@@ -78,19 +96,6 @@ export function SongDetails() {
           </select>
         </label>
         <label className="field">
-          <span>Time</span>
-          <select value={meta.time} onChange={(e) => changeTime(e.target.value)}>
-            {!TIMES.includes(meta.time) && <option value={meta.time}>{meta.time}</option>}
-            {TIMES.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-        </label>
-        <label className="check reflow" title="When the time signature changes, re-bar the notes (notes crossing a new bar line are split). Off: keep the bars as they are.">
-          <input type="checkbox" checked={reflow} onChange={(e) => setReflow(e.target.checked)} />
-          Re-bar notes
-        </label>
-        <label className="field">
           <span>Tempo</span>
           <input
             className="meta-input tempo"
@@ -104,6 +109,22 @@ export function SongDetails() {
           />
         </label>
       </div>
+      <div className="field-row">
+        <label className="field">
+          <span>Time</span>
+          <select value={meta.time} onChange={(e) => changeTime(e.target.value)}>
+            {!TIMES.includes(meta.time) && <option value={meta.time}>{meta.time}</option>}
+            {TIMES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </label>
+        <label className="check reflow" title="When the time signature changes, re-bar the notes (notes crossing a new bar line are split). Off: keep the bars as they are.">
+          <input type="checkbox" checked={reflow} onChange={(e) => setReflow(e.target.checked)} />
+          Re-bar notes
+        </label>
+      </div>
+      <p className="muted small">The harmonica is in the chip at the top right.</p>
     </div>
   );
 }

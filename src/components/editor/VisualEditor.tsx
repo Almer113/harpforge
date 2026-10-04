@@ -23,6 +23,7 @@ import {
   moveItems,
   positionsBetween,
   placeItem,
+  previousItem,
   removeChains,
   samePos,
   changeLengths,
@@ -45,8 +46,9 @@ import { onPitchPlayed, onPlayed } from '../../live/livePlayer';
 import { chooseSound, neighbours, offHarp, stepNotes, stepScale } from '../../core/edit/notes';
 import { MIC_ID } from '../../live/inputs';
 import { useHarmonicaKeyboard } from '../../live/useHarmonicaKeyboard';
-import { commitSong, DURATIONS, describeDuration, retabSelection, stepPitch } from '../../state/editor';
-import { Menu } from '../Menu';
+import { commitSong, DURATIONS, describeDuration, durationLabel, retabSelection, stepPitch } from '../../state/editor';
+import { Popover } from '../Popover';
+import { MicControl, MidiControl } from '../InputBar';
 import { getParsed, useApp, useParsed, type VisualState } from '../../state/store';
 import { Harmonica } from '../Harmonica';
 import { Glyph, NoteGlyph } from '../TabView';
@@ -136,11 +138,20 @@ export function VisualEditor() {
         if (at) sound = chooseSound(getHarp(), midi, neighbours(s, at));
       }
       if (v.step) {
-        // Keys pressed together become a chord.
+        // A chord: on the computer keyboard, keys held down together; from MIDI or the
+        // microphone, notes that start together (within 90 ms). Quick single notes stay single.
         const li = lastInsert.current;
-        if (li && now - li.at < 90) {
+        const together = id.startsWith('key:')
+          ? Object.keys(st.held).some((k) => k !== id && k.startsWith('key:'))
+          : !!li && now - li.at < 90 && id !== 'mouse';
+        if (li && together) {
           const it = s.measures[li.pos.m]?.items.find((x) => Math.abs(x.start - li.pos.start) < EPS);
           if (it && !it.sounds.some((x) => JSON.stringify(x) === JSON.stringify(sound))) {
+            // One hole can't blow and draw at once.
+            if (sound.type === 'hole' && it.sounds.some((x) => x.type === 'hole' && x.hole === sound.hole)) {
+              st.notify(`Hole ${sound.hole} can’t blow and draw at the same time, so it wasn’t added to the chord.`);
+              return;
+            }
             apply(updateItem(s, li.pos, { sounds: [...it.sounds, sound].sort((a, b) => (a.type === 'hole' && b.type === 'hole' ? a.hole - b.hole : 0)) }), { lastSounds: [sound] });
           }
           return;
@@ -149,7 +160,8 @@ export function VisualEditor() {
         const pos = v.caret;
         const next = placeItem(makeRoom(s, pos, dur, v.insert), pos.m, { start: pos.start, dur, sounds: [sound] });
         lastInsert.current = { at: now, pos };
-        apply(next, { caret: advance(next, pos, dur), selection: [pos], measure: pos.m, lastSounds: [sound] });
+        // Not selected: the length keys go on setting the next note's length.
+        apply(next, { caret: advance(next, pos, dur), selection: [], justEntered: pos, measure: pos.m, lastSounds: [sound] });
         return;
       }
       if (v.selection.length === 1) {
@@ -219,6 +231,8 @@ export function VisualEditor() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (keysTaken(e)) return;
+      // Alt+arrows belong to the browser (Back / Forward).
+      if (e.altKey && e.key.startsWith('Arrow')) return;
       const st = useApp.getState();
       const v = st.ve;
       const s = fromDoc(getParsed(st.text).doc);
@@ -263,7 +277,23 @@ export function VisualEditor() {
         }
         case 'Delete':
         case 'Backspace':
-          if (!sel.length) return;
+          if (!sel.length) {
+            // Step entry: Backspace takes back the note before the caret.
+            // (A caret after the last measure is at the end of that measure.)
+            const last = s.measures.length - 1;
+            const at = v.caret.m > last && last >= 0 ? { m: last, start: measureSpan(s, s.measures[last]) } : v.caret;
+            const prev = e.key === 'Backspace' && v.step ? previousItem(s, at) : null;
+            if (!prev) return;
+            e.preventDefault();
+            const head = chainAt(s, prev.pos)[0] ?? prev.pos;
+            let next = deleteNotes(s, [prev.pos], v.insert);
+            // Taking back the last notes leaves no empty bars behind at the end.
+            while (next.measures.length > 1 && next.measures.length - 1 >= head.m && !next.measures[next.measures.length - 1].items.length) {
+              next = { ...next, measures: next.measures.slice(0, -1) };
+            }
+            apply(next, { caret: head, justEntered: undefined });
+            return;
+          }
           e.preventDefault();
           apply(deleteNotes(s, sel, v.insert), { selection: [], caret: sel[0] });
           return;
@@ -332,19 +362,7 @@ export function VisualEditor() {
         <Score song={song} starts={starts} playingAt={playingAt} flats={flats} showSecond={showSecond} asNotes={asNotes} />
         <Inspector song={song} />
       </div>
-      <div className="ve-harp">
-        <div className="ve-harp-head">
-          <b>Harmonica</b>
-          <span className="muted">
-            {ve.step
-              ? 'Step entry is on: each hole you play is added at the caret.'
-              : ve.selection.length === 1
-                ? 'Play a hole to change the selected note.'
-                : 'Select a note and play a hole to change it, or turn on step entry to write notes by playing.'}
-          </span>
-        </div>
-        <Harmonica />
-      </div>
+      <Dock />
     </div>
   );
 }
@@ -355,7 +373,8 @@ function setDuration(base: number, dotted: boolean, triplet: boolean) {
   const st = useApp.getState();
   const v = st.ve;
   st.setVe({ dur: base, dotted, triplet });
-  if (!v.selection.length) return;
+  // Step entry: the length is for the next note (the one just written isn't changed).
+  if (v.step || !v.selection.length) return;
   const beats = base * (dotted ? 1.5 : 1) * (triplet ? 2 / 3 : 1);
   const s = fromDoc(getParsed(st.text).doc);
   const { song, selection } = changeLengths(s, v.selection, beats, v.insert);
@@ -403,112 +422,204 @@ function addNoteAtCaret() {
 const UNDO = <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 14L4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" /></svg>;
 const REDO = <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 14l5-5-5-5" /><path d="M20 9H10a6 6 0 0 0 0 12h3" /></svg>;
 
-/** The visual editor's tools, shown in the editor page's sticky header. */
+/** Undo and redo (in the editor bar, in every mode). */
+export function UndoRedo() {
+  const canUndo = useApp((s) => s.history.past.length > 0);
+  const canRedo = useApp((s) => s.history.future.length > 0);
+  return (
+    <div className="tb-group">
+      <button className="icon-btn" disabled={!canUndo} onClick={() => useApp.getState().undo()} title="Undo (Ctrl+Z)" aria-label="Undo">{UNDO}</button>
+      <button className="icon-btn" disabled={!canRedo} onClick={() => useApp.getState().redo()} title="Redo (Ctrl+Y)" aria-label="Redo">{REDO}</button>
+    </div>
+  );
+}
+
+/** The visual editor's tools, in the editor bar. */
 export function VisualToolbar() {
   const parsed = useParsed();
   const song = useMemo(() => fromDoc(parsed.doc), [parsed]);
   return <Toolbar song={song} />;
 }
 
+/** Deletes the selected notes; the caret goes where they were (as with Del). */
+function deleteSelection() {
+  const st = useApp.getState();
+  const sel = st.ve.selection;
+  if (!sel.length) return;
+  apply(deleteNotes(fromDoc(getParsed(st.text).doc), sel, st.ve.insert), { selection: [], caret: sel[0] });
+}
+
 function Toolbar({ song }: { song: Song }) {
   const fit = useApp((s) => s.fitWidth);
   const ve = useApp((s) => s.ve);
   const setVe = useApp((s) => s.setVe);
-  const canUndo = useApp((s) => s.history.past.length > 0);
-  const canRedo = useApp((s) => s.history.future.length > 0);
   const sel = ve.selection;
   const selTied = sel.length === 1 && !!song.measures[sel[0].m]?.items.find((x) => Math.abs(x.start - sel[0].start) < EPS)?.tied;
-  // When notes are selected, the palette shows (and sets) their duration.
+  // The palette shows what a length key sets: the selected notes' length, or (in step entry,
+  // or with nothing selected) the next note's.
+  const forNext = ve.step || !sel.length;
   const shown = useMemo(() => {
-    if (sel.length) {
+    if (!forNext) {
       const it = song.measures[sel[0].m]?.items.find((x) => Math.abs(x.start - sel[0].start) < EPS);
       if (it) return describeDuration(chainLength(song, chainAt(song, sel[0])));
     }
     return { base: ve.dur, dotted: ve.dotted, triplet: ve.triplet };
-  }, [sel, song, ve.dur, ve.dotted, ve.triplet]);
+  }, [forNext, sel, song, ve.dur, ve.dotted, ve.triplet]);
+  const what = ve.step ? ' — the next note' : sel.length ? ` — the selected note${sel.length > 1 ? 's' : ''}` : '';
+  const on = (yes: boolean) => (yes ? (ve.step ? 'next' : 'on') : '');
 
   return (
     <div className="ve-toolbar">
-      <div className="tb-group">
-        <button className="icon-btn" disabled={!canUndo} onClick={() => useApp.getState().undo()} title="Undo (Ctrl+Z)">{UNDO}</button>
-        <button className="icon-btn" disabled={!canRedo} onClick={() => useApp.getState().redo()} title="Redo (Ctrl+Y)">{REDO}</button>
-      </div>
-      <div className="tb-group durations" role="group" aria-label="Note length">
+      <span className="tb-sep" />
+      <div className="pal" role="group" aria-label={ve.step ? 'Length of the next note' : sel.length ? 'Length of the selected notes' : 'Note length'}>
         {DURATIONS.map((d) => (
-          <button
-            key={d.beats}
-            className={`dur-btn ${shown.base === d.beats ? 'on' : ''}`}
-            onClick={() => setDuration(d.beats, shown.dotted, shown.triplet)}
-            title={`${d.name} note (${d.key})${sel.length ? ' — applies to the selection' : ''}`}
-          >
+          <button key={d.beats} className={`pal-btn ${on(shown.base === d.beats)}`} aria-pressed={shown.base === d.beats} onClick={() => setDuration(d.beats, shown.dotted, shown.triplet)} title={`${d.name} (${d.key})${what}`}>
             <span className="dur-sym">{d.symbol}</span>
           </button>
         ))}
-        <button className={`dur-btn mod ${shown.dotted ? 'on' : ''}`} onClick={() => setDuration(shown.base ?? ve.dur, !shown.dotted, false)} title="Dotted: 1½ × as long (N or .)">
-          ·
-        </button>
-        <button className={`dur-btn mod ${shown.triplet ? 'on' : ''}`} onClick={() => setDuration(shown.base ?? ve.dur, false, !shown.triplet)} title="Triplet: three in the time of two (M)">
-          3
+        <button className={`pal-btn mod ${on(shown.dotted)}`} aria-pressed={shown.dotted} onClick={() => setDuration(shown.base ?? ve.dur, !shown.dotted, false)} title={`Dotted: 1½ × as long (N or .)${what}`}>·</button>
+        <button className={`pal-btn mod ${on(shown.triplet)}`} aria-pressed={shown.triplet} onClick={() => setDuration(shown.base ?? ve.dur, false, !shown.triplet)} title={`Triplet: three in the time of two (M)${what}`}>3</button>
+      </div>
+      <div className="pal" role="group" aria-label="Rest and tie">
+        <button className="pal-btn" onClick={insertRest} title="Rest at the caret (/)" aria-label="Rest">𝄽</button>
+        <button className={`pal-btn ${selTied ? 'on' : ''}`} disabled={sel.length !== 1} onClick={toggleTie} aria-pressed={selTied} aria-label="Tie" title="Tie: the selected note continues the note before it, across bar lines too (L)">
+          ⁀
         </button>
       </div>
-      <div className="tb-group">
-        <button className="btn small" onClick={addNoteAtCaret} title="Add a note at the caret (double-click an empty slot also works)">+ Note</button>
-        <button className="btn small ghost" onClick={insertRest} title="Insert a rest at the caret (/)">Rest</button>
-        <button className="btn small ghost" disabled={!sel.length} onClick={() => apply(deleteNotes(fromDoc(getParsed(useApp.getState().text).doc), sel, ve.insert), { selection: [] })} title="Delete selected notes (Del)">
-          Delete
-        </button>
-        <Menu
-          label="Transpose ▾"
-          title={sel.length ? 'Move or re-tab the selected notes' : 'Move or re-tab the whole song (select notes to change only those)'}
-          items={[
-            { label: 'Up a semitone', hint: sel.length ? `${sel.length} selected` : 'Whole song, with its key and chords', onClick: () => retabSelection(1) },
-            { label: 'Down a semitone', onClick: () => retabSelection(-1) },
-            { label: 'Up an octave', onClick: () => retabSelection(12) },
-            { label: 'Down an octave', onClick: () => retabSelection(-12) },
-            { label: 'Make easier', hint: 'Same notes, easier holes: fewer bends and overblows, less jumping', onClick: () => retabSelection(0) },
-          ]}
-        />
-        <button className={`btn small ghost tie-btn ${selTied ? 'on' : ''}`} disabled={sel.length !== 1} onClick={toggleTie} title="Tie: the selected note continues the note before it, across bar lines too (L)">
-          <span className="tie-arc-icon">⁀</span> Tie
+      <span className="tb-sep" />
+      <button className={`btn small step-btn ${ve.step ? 'on' : ''}`} aria-pressed={ve.step} onClick={() => setVe({ step: !ve.step, justEntered: undefined })} title="Step entry: every hole you play (keyboard, mouse, MIDI, mic) is written at the caret">
+        <span className="rec-dot" /> Step entry
+      </button>
+      <button
+        className={`btn small ghost ${ve.insert ? 'on' : ''}`}
+        onClick={() => setVe({ insert: !ve.insert })}
+        title={ve.insert ? 'Insert: new or longer notes push the music after them along; deleting closes the gap (Ins)' : 'Overwrite: new notes replace what’s there (Ins switches to insert)'}
+        aria-pressed={ve.insert}
+      >
+        {ve.insert ? 'Insert' : 'Overwrite'}
+      </button>
+      <ReadAsSwitch />
+      <Popover label="⋯" buttonClass="icon-btn more-btn" title="More tools" ariaLabel="More tools" kind="panel" panelClass="menu more-menu" panelLabel="More tools">
+        {(close) => {
+          const run = (f: () => void) => () => {
+            close();
+            f();
+          };
+          const target = sel.length ? `${sel.length} selected` : 'the whole song';
+          return (
+            <>
+              <div className="mi-label">Notes</div>
+              <button className="menu-item" onClick={run(addNoteAtCaret)}>
+                <span className="mi-name">+ Note at the caret</span>
+                <span className="mi-hint">The last sound you used (double-clicking a slot does the same)</span>
+              </button>
+              <button className="menu-item" disabled={!sel.length} onClick={run(deleteSelection)}>
+                <span className="mi-name">Delete the selection <span className="mi-ext">Del</span></span>
+              </button>
+              <div className="mi-label">Transpose: {target}</div>
+              <button className="menu-item" onClick={run(() => retabSelection(1))}><span className="mi-name">Up a semitone</span>{!sel.length && <span className="mi-hint">With the song’s key and chords</span>}</button>
+              <button className="menu-item" onClick={run(() => retabSelection(-1))}><span className="mi-name">Down a semitone</span></button>
+              <button className="menu-item" onClick={run(() => retabSelection(12))}><span className="mi-name">Up an octave</span></button>
+              <button className="menu-item" onClick={run(() => retabSelection(-12))}><span className="mi-name">Down an octave</span></button>
+              <button className="menu-item" onClick={run(() => retabSelection(0))}>
+                <span className="mi-name">Make easier</span>
+                <span className="mi-hint">Same notes, easier holes: fewer bends and overblows, less jumping</span>
+              </button>
+              <div className="mi-label">Measures</div>
+              <button className="menu-item" onClick={run(() => apply(insertMeasure(song, song.measures.length), { caret: { m: song.measures.length, start: 0 }, measure: song.measures.length }))}>
+                <span className="mi-name">+ Measure at the end</span>
+              </button>
+              <label className="pb-row check">
+                <input type="checkbox" checked={fit} onChange={(e) => useApp.setState({ fitWidth: e.target.checked })} /> Fit measures to the width
+                <span className="mi-hint">Off: rows follow the tab’s lines of text</span>
+              </label>
+              <div className="mi-label">Grid</div>
+              <label className="pb-row">
+                <span>Snap</span>
+                <select value={ve.snap} onChange={(e) => setVe({ snap: parseFloat(e.target.value) })} title="Grid for placing and dragging notes">
+                  <option value={1}>Beat</option>
+                  <option value={0.5}>½ beat</option>
+                  <option value={0.25}>¼ beat</option>
+                  <option value={1 / 3}>Triplet</option>
+                </select>
+              </label>
+              <label className="pb-row">
+                <span>Zoom</span>
+                <input type="range" min={36} max={120} step={4} value={ve.zoom} aria-label="Zoom" onChange={(e) => setVe({ zoom: parseInt(e.target.value, 10) })} />
+              </label>
+            </>
+          );
+        }}
+      </Popover>
+    </div>
+  );
+}
+
+// ---- Dock: the harmonica under the music, and the status line ----------------------------
+
+/** The slim harmonica docked at the bottom of the window (Visual mode), with Mic and MIDI. */
+function Dock() {
+  const open = useApp((s) => s.dockOpen);
+  const name = useParsed().harp.name;
+  // Its height, so the inspector ends above it.
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => document.documentElement.style.setProperty('--dock-h', `${el.offsetHeight}px`));
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty('--dock-h');
+    };
+  }, []);
+  return (
+    <div className="ve-dock" ref={root}>
+      <div className="dock-head">
+        <b>Harmonica</b>
+        <span className="muted small">{name} · the top half of a hole blows, the bottom half draws</span>
+        <span className="bar-spacer" />
+        <MicControl />
+        <MidiControl />
+        <button className="btn small ghost" onClick={() => useApp.setState({ dockOpen: !open })} aria-expanded={open} title={open ? 'Fold the harmonica away (the keyboard still plays)' : 'Show the harmonica'}>
+          {open ? 'Hide ▾' : 'Show ▴'}
         </button>
       </div>
-      <div className="tb-group">
-        <ReadAsSwitch />
-        <button
-          className={`btn small ghost ${ve.insert ? 'on' : ''}`}
-          onClick={() => setVe({ insert: !ve.insert })}
-          title={ve.insert ? 'Insert: new or longer notes push the music after them along; deleting closes the gap (Ins)' : 'Overwrite: new notes replace what’s there (Ins switches to insert)'}
-          aria-pressed={ve.insert}
-        >
-          {ve.insert ? 'Insert' : 'Overwrite'}
+      {open && <Harmonica size="slim" />}
+      <StatusLine />
+    </div>
+  );
+}
+
+/** Where the caret is, what mode the editor is in, and a hint for what to do next. */
+function StatusLine() {
+  const ve = useApp((s) => s.ve);
+  const sel = ve.selection;
+  const at = sel[0] ?? ve.caret;
+  const hint = ve.step
+    ? 'Play the harmonica (keys 1–0, Q–P) to write at the caret · hold keys together for a chord · Backspace takes back the last note'
+    : sel.length === 1
+      ? '↑ ↓ change the note · play a hole to replace it · drag its right edge to change the length'
+      : sel.length > 1
+        ? 'Drag one to move them all · Ctrl+C / X / V copy, cut and paste'
+        : 'Click a slot for the caret · double-click to add a note · drag a note to move it (Alt copies)';
+  return (
+    <div className="ve-status" role="status">
+      <span>
+        Bar <b>{at.m + 1}</b> · beat <b>{+(at.start + 1).toFixed(2)}</b>
+      </span>
+      {sel.length > 0 && <span><b>{sel.length}</b> selected</span>}
+      <span className={ve.step ? 'live' : ''}>{ve.step ? '● Step entry' : 'Step entry off'}</span>
+      <span>{ve.insert ? 'Insert' : 'Overwrite'}</span>
+      <span>
+        Next: <b>{durationLabel(toolDuration(ve)).toLowerCase()}</b>
+      </span>
+      <span className="ve-status-hint">
+        {hint} ·{' '}
+        <button className="link-btn" onClick={openShortcuts}>
+          all shortcuts (?)
         </button>
-        <button className={`btn small step-btn ${ve.step ? 'on' : ''}`} onClick={() => setVe({ step: !ve.step })} title="Step entry: every hole you play (keyboard, mouse, MIDI, mic) is written at the caret">
-          <span className="rec-dot" /> Step entry
-        </button>
-      </div>
-      <div className="tb-group">
-        <span className="t-label">Snap</span>
-        <select value={ve.snap} onChange={(e) => setVe({ snap: parseFloat(e.target.value) })} title="Grid for placing and dragging notes">
-          <option value={1}>Beat</option>
-          <option value={0.5}>½ beat</option>
-          <option value={0.25}>¼ beat</option>
-          <option value={1 / 3}>Triplet</option>
-        </select>
-        <span className="t-label">Zoom</span>
-        <input type="range" min={36} max={120} step={4} value={ve.zoom} onChange={(e) => setVe({ zoom: parseInt(e.target.value, 10) })} />
-      </div>
-      <div className="tb-group">
-        <button className="btn small ghost" onClick={() => apply(insertMeasure(song, song.measures.length), { caret: { m: song.measures.length, start: 0 }, measure: song.measures.length })} title="Add a measure at the end">
-          + Measure
-        </button>
-        <button
-          className={`btn small ghost ${fit ? '' : 'on'}`}
-          onClick={() => useApp.setState({ fitWidth: !fit })}
-          title={fit ? 'Measures fill each row. Click to show the rows as the tab’s lines of text.' : 'Rows follow the tab’s lines of text. Click to fill each row.'}
-        >
-          {fit ? '⇥ Fit width' : '↵ Text lines'}
-        </button>
-      </div>
+      </span>
     </div>
   );
 }
@@ -734,7 +845,7 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
                     const from = e.shiftKey ? Math.min(v.anchor?.m ?? mi, mi) : mi;
                     const to = e.shiftKey ? Math.max(v.anchor?.m ?? mi, mi) : mi;
                     const selection = allPositions(song).filter((p) => p.m >= from && p.m <= to);
-                    setVe({ selection, anchor: e.shiftKey ? v.anchor : { m: mi, start: 0 }, measure: mi });
+                    setVe({ selection, anchor: e.shiftKey ? v.anchor : { m: mi, start: 0 }, measure: mi, panel: 'measure' });
                   }}
                 >
                   {mi + 1}
@@ -764,6 +875,7 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
                 {meas.items.map((it) => {
                   const pos = { m: mi, start: it.start };
                   const selected = ve.selection.some((p) => samePos(p, pos));
+                  const just = !selected && samePos(ve.justEntered, pos);
                   const playing = playingAt.has(+(starts[mi] + it.start).toFixed(4));
                   const dragging = ghost && drag.current && samePos(drag.current.pos, pos) && !ghost.copy;
                   const midis = it.sounds.map((s) => (s.type === 'pitch' ? s.midi : soundPitch(harp, s)));
@@ -772,7 +884,7 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
                   return (
                     <div
                       key={it.start}
-                      className={`ve-item ${breath} ${it.tied ? 'tied' : ''} ${selected ? 'selected' : ''} ${playing ? 'playing' : ''} ${dragging ? 'dragging' : ''} ${it.dur <= EPS ? 'marker' : ''} ${offNote ? 'bad' : ''}`}
+                      className={`ve-item ${breath} ${it.tied ? 'tied' : ''} ${selected ? 'selected' : ''} ${just ? 'just' : ''} ${playing ? 'playing' : ''} ${dragging ? 'dragging' : ''} ${it.dur <= EPS ? 'marker' : ''} ${offNote ? 'bad' : ''}`}
                       style={{ left: it.start * zoom, width: Math.max(it.dur * zoom, 22) - 3 }}
                       onPointerDown={(e) => onItemDown(e, pos, it)}
                       title={midis.map((x) => (x === null ? 'not playable' : midiToName(x, flats))).join(' + ') + (offNote ? ' — not on this harmonica' : '')}
@@ -821,17 +933,12 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
           ];
         })}
         <button
-          className="ve-add-measure"
+          className={`ve-add-measure ${ve.caret.m >= song.measures.length ? 'caret-here' : ''}`}
           onClick={() => apply(insertMeasure(song, song.measures.length), { caret: { m: song.measures.length, start: 0 }, measure: song.measures.length })}
-          title="Add a measure"
+          title={ve.caret.m >= song.measures.length ? 'The caret is after the last measure: a note written now starts a new one. Click to add an empty measure.' : 'Add a measure'}
         >
-          +
+          {ve.caret.m >= song.measures.length && <span className="ve-caret" style={{ left: 8 }} />}+
         </button>
-      </div>
-      {ve.caret.m >= song.measures.length && <p className="muted small">The caret is after the last measure — adding a note there creates a new measure.</p>}
-      <div className="ve-legend muted small">
-        Click a slot for the caret · double-click to add a note · drag to move (Alt = copy) · drag a note's right edge to change its length ·{' '}
-        <button className="link-btn" onClick={openShortcuts}>all shortcuts (?)</button>
       </div>
     </div>
   );

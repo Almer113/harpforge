@@ -44,6 +44,7 @@ const COLUMNS: Group[][] = [
         ['/', 'Rest at the caret'],
         ['↑ ↓', 'Note up / down (Shift: a semitone)'],
         ['Del', 'Delete the selection'],
+        ['Backspace', 'Step entry: take back the last note'],
         ['Ins', 'Insert or overwrite'],
       ],
     },

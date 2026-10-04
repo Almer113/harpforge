@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { CodeEditor, type CodeEditorHandle } from '../components/CodeEditor';
 import { Transport } from '../components/Controls';
-import { SongDetails } from '../components/editor/SongDetails';
-import { VisualEditor, VisualToolbar } from '../components/editor/VisualEditor';
+import { Popover } from '../components/Popover';
+import { SongFields, SongTitle } from '../components/editor/SongDetails';
+import { UndoRedo, VisualEditor, VisualToolbar } from '../components/editor/VisualEditor';
 import { Sheet } from '../components/Sheet';
 import { previewEvent } from '../state/playback';
 import { useApp, useParsed, type EditorMode } from '../state/store';
@@ -31,27 +32,34 @@ export function EditorPage() {
 
   return (
     <section className={`page editor-page mode-${mode}`}>
-      <SongDetails />
-
+      {/* One bar: the mode switch always first, the editor's tools, then play and the harmonica. */}
       <div className="edit-sticky" ref={head}>
-        <Transport />
         <div className="editor-bar">
-          <div className="seg big" role="tablist" aria-label="Editor mode">
+          <div className="seg" role="radiogroup" aria-label="Editor mode">
             {MODES.map((m) => (
-              <button key={m.id} role="tab" aria-selected={mode === m.id} className={mode === m.id ? 'on' : ''} title={m.hint} onClick={() => useApp.setState({ editorMode: m.id })}>
+              <button key={m.id} role="radio" aria-checked={mode === m.id} className={mode === m.id ? 'on' : ''} title={m.hint} onClick={() => useApp.setState({ editorMode: m.id })}>
                 {m.label}
               </button>
             ))}
           </div>
+          <UndoRedo />
           {mode === 'visual' ? (
             <VisualToolbar />
           ) : (
             <div className="tb-group">
-              <button className={`btn small ghost ${showHelp ? 'on' : ''}`} onClick={() => setShowHelp(!showHelp)}>Syntax help</button>
+              <span className="tb-sep" />
+              <button className={`btn small ghost ${showHelp ? 'on' : ''}`} onClick={() => setShowHelp(!showHelp)} aria-pressed={showHelp}>Syntax help</button>
+              <Popover label="Song ▾" title="Title, key, time and tempo" kind="panel" panelClass="menu song-pop" panelLabel="Song">
+                <SongFields />
+              </Popover>
             </div>
           )}
+          <span className="bar-spacer" />
+          <Transport compact />
         </div>
       </div>
+
+      <SongTitle />
 
       {mode === 'visual' ? (
         <VisualEditor />

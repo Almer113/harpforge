@@ -13,7 +13,6 @@ import {
   fromDoc,
   insertMeasure,
   placeItem,
-  changeLengths,
   deleteNotes,
   makeRoom,
   setTie,
@@ -29,11 +28,12 @@ import { canOver, maxBend, soundPitch } from '../../core/instruments';
 import { midiToName } from '../../core/pitch';
 import { flatsFor } from '../../core/edit/splice';
 import type { HoleSound, Sound } from '../../core/types';
-import { commitSong, DURATIONS, describeDuration, durationLabel, mapHoles, parseSoundsInput, stepPitch } from '../../state/editor';
+import { commitSong, durationLabel, mapHoles, parseSoundsInput, stepPitch } from '../../state/editor';
 import { chooseSounds, neighbours, offHarp, parseNotes, pitchOf, stepNotes, stepScale, waysToPlay } from '../../core/edit/notes';
 import { getParsed, useApp, useParsed } from '../../state/store';
 import { Glyph, NoteGlyph } from '../TabView';
 import { apply, playSounds } from './VisualEditor';
+import { SongFields } from './SongDetails';
 
 const soundsText = (sounds: Sound[]) =>
   sounds.length === 0 ? '' : sounds.length === 1 ? soundText(sounds[0]) : '(' + sounds.map((s) => soundText(s)).join(' ') + ')';
@@ -55,30 +55,51 @@ function LiveInput({ value, placeholder, onCommit, className }: { value: string;
   );
 }
 
+type Tab = 'note' | 'measure' | 'song';
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'note', label: 'Note' },
+  { id: 'measure', label: 'Measure' },
+  { id: 'song', label: 'Song' },
+];
+
+/**
+ * Note, Measure and Song tabs. The tab follows what you click (a note: Note; a bar number:
+ * Measure; empty space: Song) until you pick one yourself.
+ */
 export function Inspector({ song }: { song: Song }) {
   const ve = useApp((s) => s.ve);
   const sel = ve.selection;
   const items = sel.map((p) => ({ p, it: findItem(song, p) })).filter((x): x is { p: Pos; it: Item } => !!x.it);
+  const tab: Tab = ve.panel ?? (items.length ? 'note' : 'song');
+  const m = Math.min(sel[0]?.m ?? ve.measure, song.measures.length - 1);
   return (
     <aside className="ve-inspector">
-      {/* One panel per note (keyed), so what's typed in it can only ever go to that note. */}
-      {items.length === 1 ? <NotePanel key={`${items[0].p.m}:${items[0].p.start}`} song={song} pos={items[0].p} item={items[0].it} /> : items.length > 1 ? <MultiPanel song={song} sel={items.map((x) => x.p)} /> : <CaretPanel song={song} />}
-      <MeasurePanel song={song} m={Math.min(ve.measure, song.measures.length - 1)} />
+      <div className="insp-tabs" role="tablist" aria-label="Inspector">
+        {TABS.map((t) => (
+          <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''} onClick={() => useApp.getState().setVe({ panel: t.id })}>
+            {t.label}
+            {t.id === 'note' && items.length > 1 ? ` (${items.length})` : ''}
+          </button>
+        ))}
+      </div>
+      <div className="insp-body" role="tabpanel">
+        {tab === 'note' &&
+          (items.length === 1 ? (
+            // One panel per note (keyed), so what's typed in it can only ever go to that note.
+            <NotePanel key={`${items[0].p.m}:${items[0].p.start}`} song={song} pos={items[0].p} item={items[0].it} />
+          ) : items.length > 1 ? (
+            <MultiPanel song={song} sel={items.map((x) => x.p)} />
+          ) : (
+            <p className="muted small insp-empty">Select a note to see it here, or turn on Step entry and play the harmonica to write notes at the caret.</p>
+          ))}
+        {tab === 'measure' && <MeasurePanel song={song} m={m} />}
+        {tab === 'song' && (
+          <section className="insp-card">
+            <SongFields />
+          </section>
+        )}
+      </div>
     </aside>
-  );
-}
-
-function CaretPanel({ song }: { song: Song }) {
-  const ve = useApp((s) => s.ve);
-  return (
-    <section className="insp-card">
-      <h3>Caret</h3>
-      <p className="muted small">
-        Bar {ve.caret.m + 1}, beat {+(ve.caret.start + 1).toFixed(2)}. Double-click a slot, press <b>+ Note</b>, or turn on <b>Step entry</b> and play
-        the harmonica to add notes here.
-      </p>
-      {song.measures.every((m) => !m.items.length) && <p className="muted small">This tab is empty — start by playing or adding a note.</p>}
-    </section>
   );
 }
 
@@ -134,7 +155,6 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
   // A tied note's length is the whole chain.
   const chain = chainAt(song, pos);
   const total = chainLength(song, chain);
-  const d = describeDuration(total);
   const measuresSpanned = new Set(chain.map((p) => p.m)).size;
 
   const applyInput = () => {
@@ -149,11 +169,6 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
   };
 
   const insert = useApp((s) => s.ve.insert);
-  const setDur = (base: number, dotted: boolean, triplet: boolean) => {
-    const beats = base * (dotted ? 1.5 : 1) * (triplet ? 2 / 3 : 1);
-    if (insert) apply(changeLengths(song, [pos], beats, true).song);
-    else set({ dur: beats });
-  };
 
   return (
     <section className="insp-card">
@@ -251,19 +266,6 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
           )}
         </>
       )}
-
-      <div className="field">
-        <span>Length</span>
-        <div className="seg durations">
-          {DURATIONS.map((x) => (
-            <button key={x.beats} className={d.base === x.beats ? 'on' : ''} onClick={() => setDur(x.beats, d.dotted, d.triplet)} title={x.name}>
-              {x.symbol}
-            </button>
-          ))}
-          <button className={d.dotted ? 'on' : ''} onClick={() => setDur(d.base ?? 1, !d.dotted, false)} title="Dotted">·</button>
-          <button className={d.triplet ? 'on' : ''} onClick={() => setDur(d.base ?? 1, false, !d.triplet)} title="Triplet">3</button>
-        </div>
-      </div>
 
       {item.sounds.length > 0 && (
         <label className="check" title="This note continues the note right before it (also across a bar line) instead of being played again (L)">

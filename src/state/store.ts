@@ -87,6 +87,10 @@ export interface VisualState {
   step: boolean;
   /** Sound used for notes added without the harmonica. */
   lastSounds: import('../core/types').Sound[];
+  /** The inspector tab chosen by hand; otherwise it follows the selection (note, or the song). */
+  panel?: 'note' | 'measure' | 'song';
+  /** The note step entry wrote last (outlined; it isn't selected, so length keys set the next note). */
+  justEntered?: import('../core/edit/model').Pos;
 }
 
 /** A file or pasted text waiting in the import dialog. */
@@ -190,6 +194,8 @@ export interface AppState {
   harpSize: HarpSize;
   /** Visual editor: measures fill each row (true) or follow the text's lines. */
   fitWidth: boolean;
+  /** Editor: the docked harmonica is open (remembered). */
+  dockOpen: boolean;
   editorMode: EditorMode;
   ve: VisualState;
   setVe(patch: Partial<VisualState>): void;
@@ -230,6 +236,7 @@ function loadPrefs(): {
   soundMode?: 'samples' | 'synth';
   harpSize?: HarpSize;
   fitWidth?: boolean;
+  dockOpen?: boolean;
   showNoteNames?: boolean;
   readAs?: ReadAs;
   sheetShow?: { [K in keyof SheetShow]?: Partial<SheetShow[K]> };
@@ -255,6 +262,7 @@ function loadPrefs(): {
     // Before there were sizes, the harmonica was either shown or hidden.
     harpSize: p.harpSize === 'full' || p.harpSize === 'slim' || p.harpSize === 'hidden' ? p.harpSize : p.harpHidden === true ? 'hidden' : undefined,
     fitWidth: bool(p.fitWidth),
+    dockOpen: bool(p.dockOpen),
     showNoteNames: bool(p.showNoteNames),
     readAs: p.readAs === 'notes' ? 'notes' : p.readAs === 'holes' ? 'holes' : undefined,
     sheetShow: { tab: like(sheet.tab, SHOW_ALL.tab), numbers: like(sheet.numbers, SHOW_ALL.numbers), staff: like(sheet.staff, SHOW_ALL.staff) },
@@ -334,6 +342,7 @@ export const useApp = create<AppState>((set) => ({
     staff: { ...SHOW_ALL.staff, ...prefs.sheetShow?.staff },
   },
   fitWidth: prefs.fitWidth !== false,
+  dockOpen: prefs.dockOpen !== false,
   editorMode: 'visual',
   ve: {
     selection: [],
@@ -348,7 +357,8 @@ export const useApp = create<AppState>((set) => ({
     insert: false,
     lastSounds: [{ type: 'hole', hole: 4, breath: 'blow', bend: 0, over: false, slide: false }],
   },
-  setVe: (patch) => set((s) => ({ ve: { ...s.ve, ...patch } })),
+  // A new selection takes the inspector back to following it (unless the patch picks a tab).
+  setVe: (patch) => set((s) => ({ ve: { ...s.ve, ...('selection' in patch && !('panel' in patch) ? { panel: undefined } : {}), ...patch } })),
   samplesStatus: 'idle',
 
   setPage: (page) => set({ page }),
@@ -384,16 +394,16 @@ export const useApp = create<AppState>((set) => ({
   loadSeq: 0,
   loadText: (text, docId = null, saved = false) =>
     // A different tab: the editor's caret and selection start over (they belonged to the old one).
-    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, caret: { m: 0, start: 0 }, measure: 0 }, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
+    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0 }, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
   markSaved: (docId, text) => set((s) => ({ docId, savedText: text ?? s.text })),
   notify: (message) => set({ toast: { message, id: Date.now() } }),
 }));
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps) return;
+  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps }));
   } catch {
     /* storage unavailable */
   }
