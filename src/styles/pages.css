@@ -131,7 +131,7 @@
 .lib-actions { align-items: center; }
 .lib-date { margin-right: auto; }
 .danger-text { color: var(--danger); }
-.lib-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 28px; background: var(--panel); border: 1px dashed var(--border-2); border-radius: var(--radius); }
+.lib-empty { padding: 22px 24px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
 .lib-empty p { margin: 0; max-width: 560px; }
 /* Tabs that survived in the working copies after the browser cleared the library. */
 .lib-recover { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; align-self: stretch; padding: 14px 18px; margin-bottom: 10px; border: 1px solid rgba(227, 169, 72, 0.45); border-radius: var(--radius); background: rgba(227, 169, 72, 0.08); }
@@ -156,22 +156,33 @@ html { scroll-padding-top: calc(var(--topbar-h) + var(--edit-head-h, 64px) + 14p
 .lib-card { overflow: visible; position: relative; }
 .lib-card:has(.menu) { z-index: 30; }
 /* The "+ New tab" card, first in the library: one dashed card in three parts (New tab, and
-   Open a file and Paste or type below it). The part under the mouse fills with brass. */
-.lib-card.lib-new { border: 2px dashed var(--border-2); background: transparent; min-height: 170px; display: grid; grid-template-rows: 1fr 74px; overflow: hidden; }
-.lib-card.lib-new:hover, .lib-card.lib-new:focus-within { border-color: var(--brass); }
-.lib-new-row { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--border-2); }
-.lib-new-row .lib-new-part + .lib-new-part { border-left: 1px solid var(--border-2); }
+   Open a file and Paste or type below it), drawn with the song cards' 1px lines. Its bottom
+   row is as tall as their button row, so the lines meet across the grid. On hover the edge
+   only brightens (a brass edge means "open now"); the part under the mouse turns brass. */
+.lib-card.lib-new { border: 1px dashed var(--border-2); background: transparent; min-height: 170px; display: grid; grid-template-rows: 1fr 53px; overflow: hidden; transition: border-color 0.12s; }
+.lib-card.lib-new:hover, .lib-card.lib-new:focus-within { border-color: var(--faint); }
+.lib-new-row { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--border); }
+.lib-new-row .lib-new-part + .lib-new-part { border-left: 1px solid var(--border); }
 .lib-new-part {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-width: 0; padding: 8px;
-  border: 0; background: transparent; color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; padding: 4px;
+  border: 0; background: transparent; color: var(--text); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
-.lib-new-part svg { width: 19px; height: 19px; color: var(--faint); transition: color 0.12s; }
-.lib-new-part.main { font-size: 16px; }
+.lib-new-part svg { width: 16px; height: 16px; color: var(--faint); transition: color 0.12s; }
+.lib-new-part.main { gap: 5px; font-size: 16px; }
 .lib-new-part.main svg { width: 28px; height: 28px; }
 .lib-new-part:hover { background: rgba(227, 169, 72, 0.12); color: var(--brass-2); }
 .lib-new-part:hover svg { color: var(--brass-2); }
 .lib-new-part:focus-visible { outline: 2px solid var(--focus); outline-offset: -5px; border-radius: 10px; }
+/* The empty library: its words, and the same card beside them (the recovery notice above both). */
+.lib-empty { display: grid; grid-template-columns: minmax(0, 1fr) 230px; align-items: center; gap: 12px 24px; }
+.lib-empty .lib-recover { grid-column: 1 / -1; }
+.lib-empty-text { display: flex; flex-direction: column; gap: 8px; }
+.lib-empty-text h2 { margin: 0; }
+.lib-empty .lib-new { min-height: 180px; }
+@media (max-width: 640px) {
+  .lib-empty { grid-template-columns: 1fr; }
+}
 .lib-open { border-radius: var(--radius) var(--radius) 0 0; }
 
 /* Sheet "Show" checklist */

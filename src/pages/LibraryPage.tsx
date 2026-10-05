@@ -201,13 +201,11 @@ export function LibraryPage() {
               <button className="btn primary" onClick={() => void recover()}>Recover {recoverable} tab{recoverable === 1 ? '' : 's'}</button>
             </div>
           )}
-          <h2>Start your library</h2>
-          <p className="muted">Import a file (PDF, chord sheet, ABC, MusicXML, MIDI…), paste or type a song, or write one from scratch. Saved tabs show up here.</p>
-          <div className="tb-group">
-            <button className="btn primary" onClick={importFile}>Open a file…</button>
-            <button className="btn" onClick={openPasteImport}>Paste or type…</button>
-            <button className="btn ghost" onClick={startNew}>New tab</button>
+          <div className="lib-empty-text">
+            <h2>Start your library</h2>
+            <p className="muted">Write a song from scratch, import a file (PDF, chord sheet, ABC, MusicXML, MIDI…), or paste tab from anywhere. Saved tabs show up here.</p>
           </div>
+          <NewTabCard onNew={startNew} />
         </div>
       ) : filtered.length === 0 ? (
         <div className="tab-empty">
@@ -217,22 +215,7 @@ export function LibraryPage() {
         <div className="lib-grid">
           {/* Always first (whatever the order); not while searching or filtering, where the grid shows only results. */}
           {!q && family === 'all' && (
-            <article className="lib-card lib-new">
-              <button className="lib-new-part main" onClick={startNew} aria-label="New tab: start from scratch in the editor">
-                {NEW_ICONS.plus}
-                <span>New tab</span>
-              </button>
-              <div className="lib-new-row">
-                <button className="lib-new-part" onClick={importFile} title="Import a PDF, chord sheet, ABC, MusicXML, MIDI or tab file">
-                  {NEW_ICONS.file}
-                  <span>Open a file</span>
-                </button>
-                <button className="lib-new-part" onClick={openPasteImport} title="Paste tab, notes or a chord sheet from anywhere, or type a song">
-                  {NEW_ICONS.paste}
-                  <span>Paste or type</span>
-                </button>
-              </div>
-            </article>
+            <NewTabCard onNew={startNew} />
           )}
           {filtered.map((t) => {
             const ti = info.get(t.id);
@@ -283,6 +266,31 @@ export function LibraryPage() {
         </button>
       </div>
     </section>
+  );
+}
+
+/**
+ * The "+ New tab" card: first in the library (and the empty library's way in). New tab on
+ * top, Open a file and Paste or type below, the part under the mouse tinted brass.
+ */
+function NewTabCard({ onNew }: { onNew: () => void }) {
+  return (
+    <article className="lib-card lib-new" role="group" aria-label="Add a tab">
+      <button className="lib-new-part main" onClick={onNew} aria-label="New tab: start from scratch in the editor">
+        {NEW_ICONS.plus}
+        <span>New tab</span>
+      </button>
+      <div className="lib-new-row">
+        <button className="lib-new-part" onClick={importFile} title="Import a PDF, chord sheet, ABC, MusicXML, MIDI or tab file">
+          {NEW_ICONS.file}
+          <span>Open a file</span>
+        </button>
+        <button className="lib-new-part" onClick={openPasteImport} title="Paste tab, notes or a chord sheet from anywhere, or type a song">
+          {NEW_ICONS.paste}
+          <span>Paste or type</span>
+        </button>
+      </div>
+    </article>
   );
 }
 
