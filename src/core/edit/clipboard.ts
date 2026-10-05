@@ -58,7 +58,7 @@ export function copyText(song: Song, positions: Pos[]): string {
     s = placeItem(s, at.m, { ...p.item, start: at.start });
   }
   // Full bars are written as full bars; the last one ends at the copied notes, with no bar line.
-  for (const m of s.measures) if (m.len !== undefined && m.len >= song.cap - EPS) delete m.len;
+  for (const m of s.measures) if (m.len !== undefined && Math.abs(m.len - song.cap) < EPS) delete m.len;
   s.measures[s.measures.length - 1].endBar = 'none';
   return bodyText(toDoc(s).lines).trim();
 }
@@ -70,7 +70,8 @@ export function copyText(song: Song, positions: Pos[]): string {
 export function pasteText(song: Song, text: string, at: Pos): { song: Song; placed: Pos[]; end: Pos } | null {
   const src = text.trim();
   if (!src) return null;
-  const { doc, issues } = parseHtab(src.startsWith('---') ? src : `---\n---\n${src}`);
+  // Text without a header is read in the song's time signature.
+  const { doc, issues } = parseHtab(src.startsWith('---') ? src : `---\ntime: ${song.meta.time}\n---\n${src}`);
   if (issues.some((i) => i.severity === 'error')) return null;
   const from = fromDoc(doc);
   const pieces: Piece[] = [];

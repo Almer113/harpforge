@@ -209,7 +209,8 @@ export interface AppState {
   /** The page before this one (where the print view's Back goes). */
   prevPage: Page;
   /** Changes the tab text and records an undo step ('typing' groups quick keystrokes). */
-  setText(t: string, opts?: { kind?: 'typing' | 'edit' }): void;
+  /** `kind`: 'typing…' edits of the same kind in quick succession make one undo step (typing the title, then the artist, makes two). */
+  setText(t: string, opts?: { kind?: 'typing' | `typing:${string}` | 'edit' }): void;
   undo(): void;
   redo(): void;
   history: { past: HistoryEntry[]; future: HistoryEntry[]; lastKind: string; lastAt: number; groupAt: number };
@@ -379,7 +380,7 @@ export const useApp = create<AppState>((set) => ({
       const now = Date.now();
       const h = s.history;
       // Quick keystrokes make one undo step, but not forever: a step covers at most a few seconds.
-      const merge = kind === 'typing' && h.lastKind === 'typing' && now - h.lastAt < 1200 && now - h.groupAt < 5000;
+      const merge = kind.startsWith('typing') && h.lastKind === kind && now - h.lastAt < 1200 && now - h.groupAt < 5000;
       return {
         text,
         selectedEvent: null,

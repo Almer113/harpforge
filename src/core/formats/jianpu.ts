@@ -93,7 +93,8 @@ export function parseJianpu(text: string): Imported {
   for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
     let line = raw.replace(/\s+$/, '');
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
+    // A comment ("# …"), but not a line starting with a sharp degree ("#1 2 3").
+    if (!trimmed || /^#(?![1-7])/.test(trimmed)) continue;
     if (trimmed === '---') {
       inHeader = !inHeader;
       continue;
@@ -321,7 +322,7 @@ export function durationSpelling(beats: number): { suffix: string; dashes: numbe
 function groupLength(sum: number): string {
   const isInt = (x: number) => Math.abs(x - Math.round(x)) < 1e-6;
   if (isInt(sum) && sum >= 1 - 1e-6) return '~'.repeat(Math.round(sum) - 1);
-  for (const n of [2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 24, 48]) if (isInt(sum * n)) return '~'.repeat(Math.max(0, Math.round(sum * n) - 1)) + '/' + n;
+  for (let n = 2; n < 100; n++) if (isInt(sum * n)) return '~'.repeat(Math.max(0, Math.round(sum * n) - 1)) + '/' + n;
   return '~'.repeat(Math.max(0, Math.round(sum) - 1));
 }
 
@@ -388,8 +389,13 @@ export function writeJianpu(doc: TabDoc, harp?: Harmonica): string {
         sum += g.beats;
         i++;
       }
-      const unit = Math.min(...group.map((g) => g.beats));
-      parts.push('{' + group.map((g) => tokenFor(g, g.beats / unit)).join(' ') + '}' + groupLength(sum));
+      // Each note's share of the group in whole units (⅔ + ⅓ → 2 and 1; 0.4 + 0.6 → 2 and 3).
+      const isInt = (x: number) => Math.abs(x - Math.round(x)) < 1e-6;
+      const d = Array.from({ length: 96 }, (_, k) => k + 1).find((n) => group.every((g) => isInt(g.beats * n)));
+      const units = d ? group.map((g) => Math.max(1, Math.round(g.beats * d))) : group.map((g) => Math.max(1, Math.round((g.beats / sum) * 48)));
+      const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+      const g0 = units.reduce(gcd);
+      parts.push('{' + group.map((g, k) => tokenFor(g, units[k] / g0)).join(' ') + '}' + groupLength(sum));
     }
     out.push(parts.join(' '));
     if (lyrics.some((l) => l !== '*')) {

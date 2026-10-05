@@ -30,8 +30,46 @@ function MetaInput({ field, value, placeholder, label, className = '' }: { field
       onChange={(e) => {
         setDraft(e.target.value);
         const s = useApp.getState();
-        s.setText(setMetaFields(s.text, { [field]: e.target.value.trim() || undefined }), { kind: 'typing' });
+        s.setText(setMetaFields(s.text, { [field]: e.target.value.trim() || undefined }), { kind: `typing:${field}` });
       }}
+    />
+  );
+}
+
+/**
+ * The tempo, set when you press Enter or leave the field (each change its own undo step).
+ * A tempo out of range goes back to the song's.
+ */
+function TempoInput({ tempo }: { tempo: number }) {
+  const [draft, setDraft] = useState(String(tempo));
+  // A new tempo (an undo, another song) replaces the draft, during render rather than in an effect.
+  const [shown, setShown] = useState(tempo);
+  if (tempo !== shown) {
+    setShown(tempo);
+    setDraft(String(tempo));
+  }
+  const commit = () => {
+    const v = parseFloat(draft);
+    if (!(v >= 20 && v <= 400)) {
+      setDraft(String(tempo));
+      return;
+    }
+    setDraft(String(Math.round(v)));
+    const s = useApp.getState();
+    s.setText(setMetaFields(s.text, { tempo: Math.round(v) }));
+  };
+  return (
+    <input
+      className="sl-tempo"
+      type="number"
+      min={20}
+      max={400}
+      value={draft}
+      aria-label="Tempo"
+      title="Tempo in beats per minute (20 to 400; arrow keys step it)"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === 'Enter' && commit()}
     />
   );
 }
@@ -97,11 +135,6 @@ export function SongLine({ editable }: { editable: boolean }) {
       s.setText(setMetaFields(s.text, { time }));
     }
   };
-  const setTempo = (v: number) => {
-    if (!(v >= 20 && v <= 400)) return;
-    const s = useApp.getState();
-    s.setText(setMetaFields(s.text, { tempo: Math.round(v) }), { kind: 'typing' });
-  };
 
   return (
     <header className="song-line editable">
@@ -142,17 +175,7 @@ export function SongLine({ editable }: { editable: boolean }) {
       <label className="sl-item">
         <span className="sl-label">Tempo</span>
         <span className="sl-field">
-          <input
-            className="sl-tempo"
-            type="number"
-            min={20}
-            max={400}
-            defaultValue={meta.tempo}
-            key={meta.tempo}
-            title="Tempo in beats per minute (20 to 400; arrow keys step it)"
-            onBlur={(e) => setTempo(parseFloat(e.target.value))}
-            onKeyDown={(e) => e.key === 'Enter' && setTempo(parseFloat((e.target as HTMLInputElement).value))}
-          />
+          <TempoInput tempo={meta.tempo} />
           <span className="sl-unit">bpm</span>
         </span>
       </label>

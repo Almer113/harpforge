@@ -60,12 +60,14 @@ const EPS = 1e-6;
 const isInt = (x: number) => Math.abs(x - Math.round(x)) < EPS;
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
 // Divisions a beat can be written in (5 and 7 for quintuplets and septuplets).
+// Then any other the text can say ("/15": fifths of a triplet), up to /99.
 const DIVISORS = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 28, 48];
+const ALL_DIVISORS = [...DIVISORS, ...Array.from({ length: 98 }, (_, k) => k + 2).filter((n) => !DIVISORS.includes(n))];
 
 /** A group's length as "~" marks and an optional "/N" divider: 1.5 beats → "~~/2". */
 function groupLength(sum: number): string {
   if (isInt(sum) && sum >= 1 - EPS) return '~'.repeat(Math.round(sum) - 1);
-  for (const n of DIVISORS.slice(1)) {
+  for (const n of ALL_DIVISORS.slice(1)) {
     if (isInt(sum * n) && sum * n >= 1 - EPS) return '~'.repeat(Math.round(sum * n) - 1) + '/' + n;
   }
   return '~'.repeat(Math.max(0, Math.round(sum) - 1));
@@ -74,7 +76,7 @@ function groupLength(sum: number): string {
 function groupText(items: (NoteEvent | RestEvent)[], opts: SerializeOptions): string {
   const sum = items.reduce((a, e) => a + e.beats, 0);
   let ints: number[] | null = null;
-  for (const d of DIVISORS) {
+  for (const d of ALL_DIVISORS) {
     if (items.every((e) => isInt(e.beats * d))) {
       ints = items.map((e) => Math.max(1, Math.round(e.beats * d)));
       break;

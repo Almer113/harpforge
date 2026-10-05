@@ -305,7 +305,8 @@ function harmonyXml(symbol: string): string {
   return `<harmony><root><root-step>${m[1]}</root-step>${alter(m[2])}</root><kind text="${esc(m[3])}">${kind}</kind>${bass}</harmony>`;
 }
 
-type Piece = { beats: number; ev: NoteEvent | RestEvent; tieStart: boolean; tieStop: boolean; first: boolean };
+/** `section`: a section starting inside a bar (the line before ran on without a bar line). */
+type Piece = { beats: number; ev: NoteEvent | RestEvent; tieStart: boolean; tieStop: boolean; first: boolean; section?: string };
 type XmlMeasure = { pieces: Piece[]; endBar?: BarStyle; startBar?: BarStyle; section?: string; newLine?: boolean };
 
 /**
@@ -347,10 +348,6 @@ function measuresOf(doc: TabDoc, bpb: number): XmlMeasure[] {
         cur().newLine = true;
         pendingLine = false;
       }
-      if (pendingSection !== undefined && !cur().pieces.length) {
-        cur().section = pendingSection;
-        pendingSection = undefined;
-      }
       let left = e.beats;
       let first = true;
       while (left > 1e-6) {
@@ -367,6 +364,11 @@ function measuresOf(doc: TabDoc, bpb: number): XmlMeasure[] {
         left -= take;
         room -= take;
         const piece: Piece = { beats: take, ev: e, tieStart: left > 1e-6, tieStop: !first, first };
+        if (pendingSection !== undefined) {
+          if (cur().pieces.length) piece.section = pendingSection;
+          else cur().section = pendingSection;
+          pendingSection = undefined;
+        }
         // A tied note: the previous piece ties into this one.
         if (first && e.kind === 'note' && e.tied && lastPiece) {
           lastPiece.tieStart = true;
@@ -384,7 +386,7 @@ function measuresOf(doc: TabDoc, bpb: number): XmlMeasure[] {
     m.pieces = m.pieces.flatMap((p) => {
       if (p.beats <= 0 || notation(p.beats)) return [p];
       const parts = splitLength(p.beats);
-      return parts.map((b, k) => ({ ...p, beats: b, first: p.first && k === 0, tieStop: k > 0 || p.tieStop, tieStart: k < parts.length - 1 || p.tieStart }));
+      return parts.map((b, k) => ({ ...p, beats: b, first: p.first && k === 0, tieStop: k > 0 || p.tieStop, tieStart: k < parts.length - 1 || p.tieStart, section: k === 0 ? p.section : undefined }));
     });
   }
   return measures;
@@ -428,6 +430,7 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
     if (m.startBar === 'repeat-start') out.push('<barline location="left"><bar-style>heavy-light</bar-style><repeat direction="forward"/></barline>');
     if (m.section) out.push(`<direction placement="above"><direction-type><rehearsal>${esc(m.section)}</rehearsal></direction-type></direction>`);
     for (const n of m.pieces) {
+      if (n.section) out.push(`<direction placement="above"><direction-type><rehearsal>${esc(n.section)}</rehearsal></direction-type></direction>`);
       if (n.first && n.ev.chord) out.push(harmonyXml(n.ev.chord));
       if (n.beats <= 0) continue;
       const dur = Math.round(n.beats * DIVISIONS);

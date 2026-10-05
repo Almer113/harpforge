@@ -4,9 +4,10 @@
 import { describe, expect, it } from 'vitest';
 import { parseChordPro } from '../formats/chordpro';
 import { parseHtab } from '../htab/parser';
-import { bodyText } from '../htab/serializer';
+import { bodyText, serializeHtab } from '../htab/serializer';
 import { copyText, pasteText } from './clipboard';
-import { changeLengths, deleteNotes, fromDoc, setTimeSignature, toDoc, type Song } from './model';
+import { changeLengths, deleteNotes, fromDoc, setTimeSignature, toDoc, updateItem, type Song } from './model';
+import { holeSound } from '../types';
 
 const song = (b: string, time = '4/4') => fromDoc(parseHtab(`---\ntime: ${time}\n---\n${b}`).doc);
 const body = (s: Song) => bodyText(toDoc(s).lines);
@@ -59,4 +60,36 @@ describe('ChordPro', () => {
     const beats = r.doc.lines[0].events.reduce((a, e) => a + (e.kind === 'bar' ? 0 : e.beats), 0);
     expect(beats % 3.5).toBeCloseTo(0);
   });
+});
+
+describe('bars longer than the time signature', () => {
+  it('a long rest in a tab without bar lines keeps its length through an edit', () => {
+    const s = song('4 .~~~~~ 5 6');
+    expect(body(s)).toBe('4 .~~~~~ 5 6');
+    expect(body(updateItem(s, { m: 1, start: 0 }, { sounds: [holeSound(7, 'blow')] }))).toBe('4 .~~~~~ 7 6');
+  });
+
+  it('notes placed and lengthened in a longer bar (time changed without re-barring) keep its length', () => {
+    const s = song('4 4 4 . | 5 5 5 5 |', '3/4');
+    expect(body(updateItem(s, { m: 0, start: 2 }, { dur: 2 }))).toBe('4 4 4~ | 5 5 5 5 |');
+    expect(copyText(s, [{ m: 0, start: 0 }, { m: 1, start: 0 }])).toBe('4 .~~ | 5');
+  });
+
+  it('pasted text without a header is read in the song’s time signature', () => {
+    const r = pasteText(song('4 4 4 | 5 5 5 |', '3/4'), '6 6 6 | 7', { m: 0, start: 0 });
+    expect(r && body(r.song)).toBe('6 6 6 | 7 5 5 |');
+  });
+});
+
+it('lengths in fifteenths and thirtieths of a beat are written exactly', () => {
+  const doc = parseHtab('---\n---\n{4 5 6 7 8}/3 {4 5}~~/2 |').doc;
+  const ev = doc.lines[0].events.filter((e) => e.kind !== 'bar');
+  // A fifth of a third of a beat, and its half.
+  const text = serializeHtab({ ...doc, lines: [{ events: [{ ...ev[0], beats: 1 / 15 }, { ...ev[1], beats: 14 / 15 }, { ...ev[2], beats: 1 / 30 }, { ...ev[3], beats: 29 / 30 + 2 }] }] });
+  const back = parseHtab(text).doc.lines[0].events.filter((e) => e.kind !== 'bar').map((e) => e.beats);
+  expect(back.map((b) => Math.round(b * 30))).toEqual([2, 28, 1, 89]);
+});
+
+it('re-barring keeps a repeat sign that only rests follow', () => {
+  expect(body(setTimeSignature(song('4 4 4 4 :| . . . . |]'), '3/4', true))).toBe('4 4 4 | 4 :|');
 });

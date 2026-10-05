@@ -94,8 +94,9 @@ export function fromDoc(doc: TabDoc): Song {
   // A tab without bar lines is cut into measures for the editor, but none are written back.
   const close = (endBar: Measure['endBar'] = hasBars ? 'single' : 'none') => {
     cur.endBar = endBar;
-    // Pickups and other short bars (and a line of an unbarred tab) keep their length instead of being filled with rests.
-    if (t < cap - EPS) cur.len = t;
+    // Pickups and other short bars (and a line of an unbarred tab) keep their length instead of
+    // being filled with rests; so does a bar made longer by rests (nothing written is lost).
+    if (Math.abs(t - cap) > EPS && t > EPS) cur.len = t;
     measures.push(cur);
     cur = emptyMeasure(false);
     t = 0;
@@ -268,7 +269,7 @@ export function findItem(song: Song, pos: Pos): Item | undefined {
 export function placeItem(song: Song, m: number, item: Item): Song {
   if (item.dur <= EPS) return placeOne(song, m, item);
   let s = song;
-  let at = { m, start: Math.max(0, Math.min(item.start, song.cap - EPS)) };
+  let at = { m, start: Math.max(0, Math.min(item.start, roomOf(song, m) - EPS)) };
   let left = Math.min(item.dur, song.cap * 64);
   let first = true;
   while (left > EPS) {
@@ -295,9 +296,20 @@ export function placeItem(song: Song, m: number, item: Item): Song {
 function roomEnd(song: Song, m: number, start: number): number {
   const meas = song.measures[m];
   // The last bar (a short last bar, the end of an unbarred tab) just grows: there's no next one.
-  if (!meas || m >= song.measures.length - 1) return song.cap;
-  const end = Math.min(song.cap, measureSpan(song, meas));
-  return start < end - EPS ? end : song.cap;
+  if (!meas || m >= song.measures.length - 1) {
+    const end = roomOf(song, m);
+    return start < end - EPS ? end : start + song.cap;
+  }
+  // (A bar longer than the time signature, e.g. after the time changed without re-barring,
+  // has its whole length.)
+  const end = measureSpan(song, meas);
+  return start < end - EPS ? end : Math.max(song.cap, start + 1);
+}
+
+/** How far into a measure notes can go: the time signature, or more in a longer bar. */
+function roomOf(song: Song, m: number): number {
+  const meas = song.measures[m];
+  return Math.max(song.cap, meas ? measureSpan(song, meas) : 0);
 }
 
 /** A tab written without bar lines (every measure runs on). */
@@ -311,7 +323,7 @@ function placeOne(song: Song, m: number, item: Item): Song {
   const noBars = unbarred(s);
   while (s.measures.length <= m) s.measures.push({ ...emptyMeasure(false), endBar: noBars ? 'none' : 'single' });
   const meas = s.measures[m];
-  const start = Math.max(0, Math.min(item.start, s.cap - EPS));
+  const start = Math.max(0, Math.min(item.start, roomOf(s, m) - EPS));
   const dur = item.dur <= EPS ? 0 : Math.min(item.dur, roomEnd(s, m, start) - start);
   const end = start + dur;
   meas.items = meas.items.flatMap((o) => {
@@ -709,7 +721,10 @@ function rebar(
     if (mk.m.startBar && near(startOf(mi), mk.at)) nm.startBar = mk.m.startBar;
     if (mk.m.endBar !== 'single' && mk.m.endBar !== 'none' && !opts.noBars) {
       const ei = Math.max(0, Math.min(count - 1, indexAt(mk.end - 1e-3)));
-      if (near(startOf(ei) + spanOf(ei), mk.end) || ei === count - 1) measures[ei].endBar = mk.m.endBar;
+      // A bar line past the end of the music (after trailing rests) goes on the last bar,
+      // unless that already ends with its own sign (a repeat before the rests stays).
+      const onLast = ei === count - 1 && (measures[ei].endBar === 'single' || measures[ei].endBar === 'none');
+      if (near(startOf(ei) + spanOf(ei), mk.end) || onLast) measures[ei].endBar = mk.m.endBar;
     }
   }
   // A short last bar stays short; so does the last bar after a bar was shortened for a repeat
