@@ -7,6 +7,7 @@ import { parseHtab } from '../core/htab/parser';
 import { harmonicaName } from '../core/instruments';
 import { specFromMeta } from '../core/score';
 import { DEMOS, DEMO_VERSION } from '../demo/songs';
+import { savedCopies } from '../state/working';
 
 export interface SavedTab {
   id: string;
@@ -56,6 +57,60 @@ export async function saveTab(text: string, id?: string | null): Promise<string>
 
 export async function deleteTab(id: string): Promise<void> {
   await db.tabs.delete(id);
+  // Remembered, so recovering from working copies doesn't bring it back.
+  try {
+    const gone = deletedIds();
+    gone.add(id);
+    localStorage.setItem(DELETED_KEY, JSON.stringify([...gone].slice(-500)));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+// ---- Recovering after the browser cleared the library ------------------------------
+// Browsers may clear a site's database (low disk space) while keeping its smaller saved
+// data, where each opened tab's working copy holds its last saved text.
+
+const DELETED_KEY = 'harpforge:deleted';
+
+function deletedIds(): Set<string> {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(DELETED_KEY) ?? '[]');
+    return new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/** Saved tabs the working copies still hold that aren't in the library (and weren't deleted). */
+export async function recoverableTabs(): Promise<{ docId: string; text: string; at: number }[]> {
+  let copies: { docId: string; text: string; at: number }[];
+  try {
+    copies = savedCopies(localStorage);
+  } catch {
+    return [];
+  }
+  const gone = deletedIds();
+  const have = await db.tabs.toArray();
+  const ids = new Set(have.map((t) => t.id));
+  const texts = new Set(have.map((t) => t.text));
+  return copies.filter((c) => !gone.has(c.docId) && !ids.has(c.docId) && !texts.has(c.text));
+}
+
+/** Puts those tabs back under their own ids (so an open one saves to the same entry), and the demos. */
+export async function recoverTabs(): Promise<number> {
+  const found = await recoverableTabs();
+  await db.transaction('rw', db.tabs, async () => {
+    for (const c of found) await db.tabs.put({ id: c.docId, ...describe(c.text), text: c.text, createdAt: c.at, updatedAt: c.at });
+  });
+  try {
+    localStorage.removeItem(SEEDED_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+  seeding = null;
+  await seedDemos().catch(() => undefined);
+  return found.length;
 }
 
 /** Asks the browser not to clear the library when space runs low (granted silently or not at all). */

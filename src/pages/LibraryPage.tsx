@@ -9,7 +9,7 @@ import { specFromMeta } from '../core/score';
 import { confirmDiscard, downloadData, importFile, newTab, openPasteImport } from '../state/actions';
 import { stop } from '../state/playback';
 import { useApp } from '../state/store';
-import { copyText, deleteTab, exportLibrary, importLibrary, listTabs, persistStorage, readBackup, saveTab, seedDemos, type SavedTab } from '../storage/library';
+import { copyText, deleteTab, exportLibrary, importLibrary, listTabs, persistStorage, readBackup, recoverableTabs, recoverTabs, saveTab, seedDemos, type SavedTab } from '../storage/library';
 
 export function LibraryPage() {
   const [tabs, setTabs] = useState<SavedTab[] | null>(null);
@@ -46,6 +46,30 @@ export function LibraryPage() {
       .catch((e: Error) => setLoadError(e?.message || 'storage unavailable'));
   }, []);
   useEffect(refresh, [refresh, docId, savedText]);
+
+  // An empty library whose tabs are still in the working copies: the browser cleared it.
+  const [recoverable, setRecoverable] = useState(0);
+  const empty = tabs?.length === 0;
+  useEffect(() => {
+    if (!empty) return;
+    let live = true;
+    recoverableTabs()
+      .then((found) => live && setRecoverable(found.length))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [empty]);
+  const recover = async () => {
+    try {
+      const n = await recoverTabs();
+      setRecoverable(0);
+      useApp.getState().notify(`Recovered ${n} tab${n === 1 ? '' : 's'} ✓`);
+    } catch (e) {
+      useApp.getState().notify(`Couldn’t recover: ${(e as Error).message}`);
+    }
+    refresh();
+  };
 
   const open = (t: SavedTab, page: 'play' | 'editor' = 'play') => {
     const s = useApp.getState();
@@ -164,6 +188,15 @@ export function LibraryPage() {
         !loadError && <p className="muted">Loading…</p>
       ) : tabs.length === 0 ? (
         <div className="lib-empty">
+          {recoverable > 0 && (
+            <div className="lib-recover" role="status">
+              <p>
+                <b>Your library was cleared</b>, but {recoverable} saved tab{recoverable === 1 ? ' is' : 's are'} still in this browser. Browsers sometimes clear a
+                site’s storage when the disk is nearly full.
+              </p>
+              <button className="btn primary" onClick={() => void recover()}>Recover {recoverable} tab{recoverable === 1 ? '' : 's'}</button>
+            </div>
+          )}
           <h2>Start your library</h2>
           <p className="muted">Import a file (PDF, chord sheet, ABC, MusicXML, MIDI…), paste or type a song, or write one from scratch. Saved tabs show up here.</p>
           <div className="tb-group">

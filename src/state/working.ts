@@ -81,6 +81,25 @@ export function readWorking(store: Store, id: string): WorkingCopy | null {
   }
 }
 
+/**
+ * The last saved text of each library tab that has a working copy (the newest copy per tab).
+ * If the browser clears the library's storage, these survive in the working copies.
+ */
+export function savedCopies(store: Store): { docId: string; text: string; at: number }[] {
+  const latest = new Map<string, { docId: string; text: string; at: number }>();
+  try {
+    for (const k of keys(store)) {
+      const c = parse(store.getItem(k));
+      if (!c?.docId || !c.savedText) continue;
+      const prev = latest.get(c.docId);
+      if (!prev || c.at > prev.at) latest.set(c.docId, { docId: c.docId, text: c.savedText, at: c.at });
+    }
+  } catch {
+    /* storage unavailable */
+  }
+  return [...latest.values()];
+}
+
 let pruned = false;
 
 /** Writes this tab's working copy (and, once a session, forgets long-unused copies). Throws if storage is full. */

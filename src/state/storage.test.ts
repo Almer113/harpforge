@@ -14,7 +14,7 @@ vi.mock('../storage/library', () => ({
   seedDemos: async () => undefined,
 }));
 
-import { pruneWorking, readWorking, writeWorking } from './working';
+import { pruneWorking, readWorking, savedCopies, writeWorking } from './working';
 import { decodeTab, encodeTab, MAX_SHARED_BYTES, SharedTooLarge } from './share';
 import { saveCurrent } from './actions';
 import { useApp } from './store';
@@ -87,6 +87,18 @@ describe('working copies', () => {
     };
   };
   const copy = (text: string) => ({ text, docId: null, savedText: null });
+
+  it('hold the last saved text of each library tab (to recover a cleared library)', () => {
+    const store = memory();
+    writeWorking(store, 'a', { text: 'edited', docId: 'd1', savedText: 'saved 1' }, 1000);
+    writeWorking(store, 'b', { text: 'x', docId: 'd1', savedText: 'saved 1 later' }, 2000);
+    writeWorking(store, 'c', { text: 'draft', docId: null, savedText: null }, 3000);
+    writeWorking(store, 'd', { text: 'y', docId: 'd2', savedText: 'saved 2' }, 1500);
+    expect(savedCopies(store).sort((x, y) => x.docId.localeCompare(y.docId))).toEqual([
+      { docId: 'd1', text: 'saved 1 later', at: 2000 },
+      { docId: 'd2', text: 'saved 2', at: 1500 },
+    ]);
+  });
 
   it('each tab keeps its own copy', () => {
     const store = memory();
