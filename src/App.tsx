@@ -24,8 +24,26 @@ const NAV: { id: Page; label: string }[] = [
 
 startRouter();
 
-// The import dialog (with every format reader) loads when it's first opened.
-const ImportDialog = lazy(() => import('./components/ImportDialog').then((m) => ({ default: m.ImportDialog })));
+// The import dialog (with every format reader) loads when it's first opened. If its code
+// can't be downloaded, it closes with a message, and opening it again tries again.
+function lazyImportDialog() {
+  return lazy(() =>
+    import('./components/ImportDialog').then(
+      (m) => ({ default: m.ImportDialog }),
+      () => {
+        LazyImportDialog = lazyImportDialog();
+        useApp.setState({ importDraft: null });
+        useApp.getState().notify('The import window couldn’t be loaded. Check your connection, then try again.');
+        return { default: () => null };
+      },
+    ),
+  );
+}
+let LazyImportDialog = lazyImportDialog();
+function ImportDialog() {
+  const Loaded = LazyImportDialog;
+  return <Loaded />;
+}
 const PrintPage = lazy(() => import('./pages/PrintPage').then((m) => ({ default: m.PrintPage })));
 
 // The editor is the biggest page: it loads the first time it's opened.
@@ -227,7 +245,7 @@ export function App() {
         </div>
       )}
       {importOpen && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<div className="modal-backdrop"><p className="modal muted" role="status">Loading the import window…</p></div>}>
           <ImportDialog />
         </Suspense>
       )}

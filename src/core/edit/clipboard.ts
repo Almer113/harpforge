@@ -3,7 +3,7 @@
 
 import { parseHtab } from '../htab/parser';
 import { bodyText } from '../htab/serializer';
-import { chainAt, chainLength, clearSpan, EPS, findItem, fromDoc, measureSpan, placeItem, posAtReal, realBeat, samePos, toDoc, type Item, type Measure, type Pos, type Song } from './model';
+import { chainAt, clearSpan, EPS, findItem, fromDoc, measureSpan, placeItem, posAtReal, realBeat, samePos, toDoc, type Item, type Measure, type Pos, type Song } from './model';
 
 interface Piece {
   rel: number;
@@ -19,13 +19,22 @@ function piecesOf(song: Song, positions: Pos[]): Piece[] {
   }
   if (!heads.length) return [];
   const base = Math.min(...heads.map((h) => realBeat(song, h)));
-  return heads
-    .map((h) => {
-      const item = { ...findItem(song, h)!, dur: chainLength(song, chainAt(song, h)) };
-      delete item.tied;
-      return { rel: realBeat(song, h) - base, item };
-    })
-    .sort((a, b) => a.rel - b.rel);
+  const pieces: Piece[] = [];
+  for (const h of heads) {
+    // A tied note is copied whole, except that a tie carrying a chord symbol stays its own
+    // (tied) piece, so the chord keeps its place.
+    for (const p of chainAt(song, h)) {
+      const it = findItem(song, p)!;
+      const last = pieces[pieces.length - 1];
+      if (!samePos(p, h) && !it.chord) last.item.dur += it.dur;
+      else {
+        const item = { ...it };
+        if (samePos(p, h)) delete item.tied;
+        pieces.push({ rel: realBeat(song, p) - base, item });
+      }
+    }
+  }
+  return pieces.sort((a, b) => a.rel - b.rel);
 }
 
 /** Tab text for the selected notes, keeping their rhythm and the rests between them. */
@@ -70,8 +79,10 @@ export function pasteText(song: Song, text: string, at: Pos): { song: Song; plac
     for (const it of m.items) {
       // Ties inside the pasted text join up again; a tie at its very start has nothing to continue.
       const prev = pieces[pieces.length - 1];
-      if (it.tied && prev && Math.abs(prev.rel + prev.item.dur - (t + it.start)) < EPS) prev.item.dur += it.dur;
-      else pieces.push({ rel: t + it.start, item: { ...it, tied: undefined } });
+      // (A tie carrying a chord symbol stays its own tied piece, so the chord keeps its place.)
+      const joins = !!it.tied && !!prev && Math.abs(prev.rel + prev.item.dur - (t + it.start)) < EPS;
+      if (joins && !it.chord) prev.item.dur += it.dur;
+      else pieces.push({ rel: t + it.start, item: { ...it, tied: joins || undefined } });
     }
     t += measureSpan(from, m);
   }

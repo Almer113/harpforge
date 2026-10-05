@@ -162,7 +162,10 @@ const getHarp = () => getParsed(useApp.getState().text).harp;
 export function playSounds(sounds: Sound[], beats = 0.6) {
   const harp = getHarp();
   const midis = sounds.map((s) => (s.type === 'pitch' ? s.midi : soundPitch(harp, s))).filter((m): m is number => m !== null);
-  void engine.ensureAudio().then(() => engine.previewMidis(midis, Math.min(1, beats)));
+  engine
+    .ensureAudio()
+    .then(() => engine.previewMidis(midis, Math.min(1, beats)))
+    .catch(() => {});
 }
 
 // ---- Component -------------------------------------------------------------------------------

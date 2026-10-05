@@ -604,7 +604,8 @@ function flatten(song: Song, measures: Measure[]): { abs: AbsItem[]; marks: Mark
       const at = t + it.start;
       const last = abs[abs.length - 1];
       // Tied pieces merge back into one note; a tie at the very start continues a note before it.
-      if (it.tied && last && near(last.at + last.dur, at) && sameSounds(last.sounds, it.sounds)) last.dur += it.dur;
+      // (A tie carrying a chord symbol stays its own piece, so the chord keeps its place.)
+      if (it.tied && !it.chord && last && near(last.at + last.dur, at) && sameSounds(last.sounds, it.sounds)) last.dur += it.dur;
       else abs.push({ ...it, at, tied: it.tied && (!last || near(last.at + last.dur, at)) ? true : undefined });
     }
     const span = measureSpan(song, m);
@@ -776,25 +777,32 @@ export function posAtReal(song: Song, beat: number): Pos {
  */
 export function ripple(song: Song, at: Pos, delta: number): Song {
   if (Math.abs(delta) < EPS || at.m >= song.measures.length) return song;
+  // Closing a gap starts in the bar where the gap starts (it may be the bar before `at`'s).
+  const real = realBeat(song, at);
+  let k = delta < 0 ? Math.min(at.m, posAtReal(song, Math.max(0, real + delta)).m) : at.m;
   // Start at the real start of the bar: a bar split over two lines of text starts on the line before.
-  let k = at.m;
-  let from = at.start;
-  while (k > 0 && song.measures[k - 1].endBar === 'none' && song.measures[k - 1].len !== undefined) {
-    k--;
-    from += measureSpan(song, song.measures[k]);
-  }
+  while (k > 0 && song.measures[k - 1].endBar === 'none' && song.measures[k - 1].len !== undefined) k--;
   const noBars = unbarred(song);
-  if (noBars) {
-    from = realBeat(song, at);
-    k = 0;
-  }
+  if (noBars) k = 0;
+  const from = real - realBeat(song, { m: k, start: 0 });
   const tail = song.measures.slice(k);
   const { abs, marks, t } = flatten(song, tail);
   const moved = abs
     // Closing a gap: whatever is still in it goes (callers clear it first).
     .filter((it) => !(delta < 0 && it.at >= from + delta - EPS && it.at < from - EPS))
     .map((it) => (it.at >= from - EPS ? { ...it, at: it.at + delta } : it));
-  const shifted = marks.map((mk) => ({ ...mk, at: mk.at > from + EPS ? mk.at + delta : mk.at, end: mk.end > from + EPS ? mk.end + delta : mk.end }));
+  // Making room at a line start puts the new note on that line (the mark stays); closing a gap
+  // moves a mark at its end back with the music after it, and one inside it to its start.
+  const shift = (x: number) => (delta > 0 ? (x > from + EPS ? x + delta : x) : x >= from - EPS ? x + delta : Math.min(x, from + delta));
+  const shifted = marks.map((mk, i) => {
+    const prev = marks[i - 1]?.m;
+    // A line starting at a plain bar line stays at that bar line (the music flows across it,
+    // the bars stay put); one starting inside a bar starts after the same note as before, and
+    // repeat signs and double bars keep the music they hold.
+    const structural = (mk.m.startBar && mk.m.startBar !== 'single') || (prev && prev.endBar !== 'single' && prev.endBar !== 'none' && prev.endBar !== 'final');
+    const stays = mk.at <= EPS || (prev?.endBar !== 'none' && !structural);
+    return { ...mk, at: stays ? mk.at : shift(mk.at), end: shift(mk.end) };
+  });
   const lastNoteEnd = moved.reduce((a, it) => Math.max(a, it.at + it.dur), 0);
   const total = Math.max(lastNoteEnd, t + delta, EPS);
   const last = tail[tail.length - 1];
@@ -829,7 +837,9 @@ export function deleteNotes(song: Song, positions: Pos[], insert: boolean): Song
   // Last first, so earlier positions stay valid.
   chains.sort((a, b) => realBeat(song, b[0]) - realBeat(song, a[0]));
   let s = song;
-  for (const c of chains) {
+  for (const c0 of chains) {
+    const c = chainAt(s, c0[0]);
+    if (!c.length) continue;
     const end = afterChain(s, c);
     const len = chainLength(s, c);
     s = ripple(removeChains(s, [c[0]]), end, -len);
@@ -853,7 +863,9 @@ export function changeLengths(song: Song, sel: Pos[], beats: number, insert: boo
   for (const h of heads) {
     const d = beats - h.len;
     if (Math.abs(d) < EPS) continue;
-    const end = afterChain(s, chainAt(s, h.pos));
+    const chain = chainAt(s, h.pos);
+    if (!chain.length) continue;
+    const end = afterChain(s, chain);
     if (d > 0) s = updateItem(ripple(s, end, d), h.pos, { dur: beats });
     else s = ripple(updateItem(s, h.pos, { dur: beats }), end, d);
   }

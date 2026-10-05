@@ -11,8 +11,24 @@ import { isChordSheet, octaveOptions } from '../core/convert';
 import type { Imported } from '../core/formats';
 import { FORMAT_NAMES, IMPORT_ACCEPT, type ExportKind } from '../core/formats/catalog';
 
-/** The format readers and writers, loaded the first time they're needed. */
-const formats = () => import('../core/formats');
+/**
+ * The format readers and writers, loaded the first time they're needed (or in the
+ * background soon after the page opens: see preloadFormats). Null, with a message, when
+ * they can't be downloaded; the next try downloads again.
+ */
+const formats = () =>
+  import('../core/formats').catch(() => {
+    useApp.getState().notify('The file readers couldn’t be loaded. Check your connection, then try again.');
+    return null;
+  });
+
+/**
+ * Fetches the format readers in the background, so an export's download starts right
+ * from the click (Safari blocks downloads started too long after one).
+ */
+export function preloadFormats(): void {
+  import('../core/formats').catch(() => {});
+}
 import { persistStorage, saveTab } from '../storage/library';
 import { stop } from './playback';
 import { finishRecording } from '../live/recorder';
@@ -165,8 +181,9 @@ export function downloadData(filename: string, data: string | Uint8Array, type =
 export async function exportAs(kind: ExportKind, text = useApp.getState().text) {
   const p = getParsed(text);
   try {
-    const { exportDoc } = await formats();
-    const { filename, data, mime } = exportDoc(kind, p.doc, p.harp, text);
+    const f = await formats();
+    if (!f) return;
+    const { filename, data, mime } = f.exportDoc(kind, p.doc, p.harp, text);
     downloadData(filename, data, mime);
   } catch (e) {
     useApp.getState().notify(`Export failed: ${(e as Error).message}`);
@@ -189,7 +206,9 @@ function isPitchOnly(imported: Imported): boolean {
 /** Imports a file: tabs load directly, everything else goes through the import dialog. */
 export async function importFromFile(file: File) {
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const { decodeText, detectKind, importBytes } = await formats();
+  const f = await formats();
+  if (!f) return;
+  const { decodeText, detectKind, importBytes } = f;
   if (detectKind(file.name, bytes) === 'pdf') {
     await importPdfFile(file.name, bytes);
     return;
@@ -223,7 +242,9 @@ export function importFile() {
 let pdfRuns = 0;
 
 async function importPdfFile(name: string, bytes: Uint8Array) {
-  const { importText, sniffText } = await formats();
+  const f = await formats();
+  if (!f) return;
+  const { importText, sniffText } = f;
   // Each reading has its own number: after a cancel, a new import (even of a file with the
   // same name) never shows the old reading's progress or result.
   const run = ++pdfRuns;

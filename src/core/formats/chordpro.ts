@@ -38,9 +38,11 @@ export function parseChordPro(text: string): Imported {
     if (segs.every((sg) => sg.chars === 0)) return segs.map(() => bpb);
     const total = segs.reduce((a, sg) => a + Math.max(1, sg.chars), 0);
     const chordCount = segs.filter((sg) => sg.isChord).length;
-    const nBars = Math.max(Math.min(4, Math.max(1, Math.round(total / 22))), Math.ceil(chordCount / 2));
-    const totalBeats = nBars * bpb;
-    const mins = segs.map((sg) => (sg.isChord ? Math.min(2, bpb) : 1));
+    const mins = segs.map((sg) => (sg.isChord ? Math.min(2, Math.floor(bpb)) || 1 : 1));
+    const nBars = Math.max(Math.min(4, Math.max(1, Math.round(total / 22))), Math.ceil(chordCount / 2), Math.ceil(mins.reduce((a, b) => a + b, 0) / bpb - 1e-6));
+    // Whole beats are shared out; a bar ending on a half beat (7/8) gives its fraction to the last part.
+    const totalBeats = Math.floor(nBars * bpb + 1e-6);
+    const frac = nBars * bpb - totalBeats;
     const beats = segs.map((sg, k) => Math.max(mins[k], Math.round((totalBeats * Math.max(1, sg.chars)) / total)));
     let diff = totalBeats - beats.reduce((a, b) => a + b, 0);
     while (diff !== 0) {
@@ -50,6 +52,7 @@ export function parseChordPro(text: string): Imported {
       beats[k] += diff > 0 ? 1 : -1;
       diff += diff > 0 ? -1 : 1;
     }
+    if (frac > 1e-6) beats[beats.length - 1] += frac;
     return beats;
   };
 

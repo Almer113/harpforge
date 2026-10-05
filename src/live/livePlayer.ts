@@ -48,10 +48,13 @@ export function press(id: string, sound: HoleSound, opts: { silent?: boolean } =
   if (opts.silent) silentIds.add(id);
   else {
     silentIds.delete(id);
-    void engine.ensureAudio().then(() => {
-      // Only start if still held (key may have been released while audio was starting).
-      if (useApp.getState().held[id]) engine.noteOn(id, midi, sound.bend > 0 ? midi + sound.bend : undefined);
-    });
+    engine
+      .ensureAudio()
+      .then(() => {
+        // Only start if still held (key may have been released while audio was starting).
+        if (useApp.getState().held[id]) engine.noteOn(id, midi, sound.bend > 0 ? midi + sound.bend : undefined);
+      })
+      .catch(() => {}); // (the failure was reported)
   }
   setHeld(id, sound);
   recordPress(id, sound);
@@ -94,7 +97,10 @@ export function heldPitchIds(): string[] {
 /** Plays a note that isn't on the harmonica (released with `release`). */
 export function pressPitch(id: string, midi: number) {
   pitchIds.add(id);
-  void engine.ensureAudio().then(() => pitchIds.has(id) && engine.noteOn(id, midi));
+  engine
+    .ensureAudio()
+    .then(() => pitchIds.has(id) && engine.noteOn(id, midi))
+    .catch(() => {});
   for (const fn of pitchListeners) fn(midi, id);
 }
 

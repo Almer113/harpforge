@@ -18,20 +18,35 @@ let loading: Promise<Impl> | null = null;
 // Settings made before the engine arrived, handed over when it does.
 let soundMode: SoundMode | null = null;
 let voicing: Voicing | null = null;
+let onLoadFailed: ((e: unknown) => void) | null = null;
+const ignore = () => {};
 
-function load(): Promise<Impl> {
-  loading ??= import('./engineImpl').then((m) => {
-    impl = m;
-    if (voicing) m.setVoicing(voicing);
-    if (soundMode) m.setSoundMode(soundMode);
-    return m;
-  });
+/** Called when the engine can't be downloaded (offline, or the app was updated). */
+export function setAudioLoadFailed(fn: (e: unknown) => void): void {
+  onLoadFailed = fn;
+}
+
+/** Loads the engine; after a failed download the next call tries again. */
+function load(quiet = false): Promise<Impl> {
+  loading ??= import('./engineImpl').then(
+    (m) => {
+      impl = m;
+      if (voicing) m.setVoicing(voicing);
+      if (soundMode) m.setSoundMode(soundMode);
+      return m;
+    },
+    (e: unknown) => {
+      loading = null;
+      if (!quiet) onLoadFailed?.(e);
+      throw e;
+    },
+  );
   return loading;
 }
 
 /** Fetches the engine in the background (so the first note or Play is instant). */
 export function preloadAudio(): void {
-  void load();
+  load(true).catch(ignore);
 }
 
 export async function ensureAudio(): Promise<void> {
@@ -46,11 +61,13 @@ const waiting = new Map<string, { midi: number; glideFrom?: number }>();
 export function noteOn(id: string, midi: number, glideFrom?: number) {
   if (impl) return impl.noteOn(id, midi, glideFrom);
   waiting.set(id, { midi, glideFrom });
-  void load().then((m) => {
-    const w = waiting.get(id);
-    waiting.delete(id);
-    if (w) m.noteOn(id, w.midi, w.glideFrom);
-  });
+  load()
+    .then((m) => {
+      const w = waiting.get(id);
+      waiting.delete(id);
+      if (w) m.noteOn(id, w.midi, w.glideFrom);
+    })
+    .catch(() => waiting.delete(id));
 }
 
 export function setPitch(id: string, midi: number) {
@@ -71,7 +88,9 @@ export function appSounding(): boolean {
 /** Plays one event right away (clicking a tab card). */
 export function previewMidis(midis: number[], seconds?: number, glides?: (number | undefined)[]) {
   if (impl) return impl.previewMidis(midis, seconds, glides);
-  void load().then((m) => m.previewMidis(midis, seconds, glides));
+  load()
+    .then((m) => m.previewMidis(midis, seconds, glides))
+    .catch(ignore);
 }
 
 // ---- Sound ----------------------------------------------------------------------
@@ -87,7 +106,11 @@ export function setSoundMode(m: SoundMode) {
 }
 
 export async function loadSamples(): Promise<boolean> {
-  return (await load()).loadSamples();
+  try {
+    return await (await load()).loadSamples();
+  } catch {
+    return false;
+  }
 }
 
 export function samplesReady(): boolean {
@@ -99,7 +122,9 @@ export function samplesReady(): boolean {
 
 export function playScore(score: Score | null, opts: PlaybackOptions) {
   if (impl) return impl.playScore(score, opts);
-  void load().then((m) => m.playScore(score, opts));
+  load()
+    .then((m) => m.playScore(score, opts))
+    .catch(ignore);
 }
 
 export function pausePlayback() {

@@ -115,6 +115,9 @@ if (typeof document !== 'undefined') {
   });
 }
 
+// Sound that can't start because the engine couldn't be downloaded says so (the next note tries again).
+engine.setAudioLoadFailed(() => useApp.getState().notify('The sound couldn’t be loaded. Check your connection; it tries again at the next note.'));
+
 // The sound follows the current harmonica (single reed, tremolo, octave).
 engine.setVoicing(getParsed(useApp.getState().text).harp.voicing);
 

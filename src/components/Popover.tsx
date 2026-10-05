@@ -49,10 +49,13 @@ export function Popover({ label, buttonClass = 'btn small ghost', title, ariaLab
     const items = () => [...(panel()?.querySelectorAll<HTMLElement>(kind === 'menu' ? '[role=menuitem]' : FOCUSABLE) ?? [])];
     // The keyboard goes to the first item (a menu) or field (a panel).
     items()[0]?.focus({ preventScroll: true });
-    const onDown = (e: MouseEvent) => !root.current?.contains(e.target as Node) && close(false);
+    // A dialog opened over the popover (e.g. the shortcut list from the keyboard help) has the
+    // keyboard and the mouse; the popover waits underneath.
+    const underDialog = () => !!document.querySelector('.modal-backdrop') && !root.current?.closest('.modal');
+    const onDown = (e: MouseEvent) => !underDialog() && !root.current?.contains(e.target as Node) && close(false);
     const onKey = (e: KeyboardEvent) => {
       // Something inside the panel handled it (e.g. the harmonica's key question).
-      if (e.defaultPrevented) return;
+      if (e.defaultPrevented || underDialog()) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         close();
