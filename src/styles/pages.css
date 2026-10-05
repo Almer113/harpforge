@@ -155,6 +155,17 @@ html { scroll-padding-top: calc(var(--topbar-h) + var(--edit-head-h, 64px) + 14p
 /* Library cards: menus may reach outside the card */
 .lib-card { overflow: visible; position: relative; }
 .lib-card:has(.menu) { z-index: 30; }
+/* The "+ New tab" card, first in the library: a dashed tile like the editor's "add measure". */
+.lib-card.lib-new { border: 2px dashed var(--border-2); background: transparent; min-height: 170px; }
+.lib-card.lib-new:hover, .lib-card.lib-new:focus-within { border-color: var(--brass); }
+.lib-new-main {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 18px;
+  border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; border-radius: var(--radius) var(--radius) 0 0;
+}
+.lib-new-main b { font-size: 16px; }
+.lib-new-plus { font-size: 34px; line-height: 1; color: var(--faint); font-weight: 300; }
+.lib-new-main:hover .lib-new-plus, .lib-new-main:hover b { color: var(--brass-2); }
+.lib-new-more { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px dashed var(--border-2); color: var(--faint); }
 .lib-open { border-radius: var(--radius) var(--radius) 0 0; }
 
 /* Sheet "Show" checklist */

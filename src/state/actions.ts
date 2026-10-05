@@ -123,10 +123,12 @@ export function confirmDiscard(): boolean {
   return window.confirm('Your current tab has unsaved changes. Discard them?');
 }
 
-export function newTab() {
-  if (!confirmDiscard()) return;
+/** Opens a blank tab (after asking about unsaved changes). False if you kept the open one. */
+export function newTab(): boolean {
+  if (!confirmDiscard()) return false;
   stop();
   useApp.getState().loadText(BLANK);
+  return true;
 }
 
 // Saves run one after another, so two quick saves of a new tab make one library entry.

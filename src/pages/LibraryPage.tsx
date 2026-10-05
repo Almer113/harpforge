@@ -84,6 +84,10 @@ export function LibraryPage() {
     s.setPage(page);
   };
 
+  const startNew = () => {
+    if (newTab()) useApp.getState().setPage('editor');
+  };
+
   const remove = async (t: SavedTab) => {
     if (!window.confirm(`Delete "${t.title}" from your library? This can't be undone.`)) return;
     try {
@@ -202,7 +206,7 @@ export function LibraryPage() {
           <div className="tb-group">
             <button className="btn primary" onClick={importFile}>Open a file…</button>
             <button className="btn" onClick={openPasteImport}>Paste or type…</button>
-            <button className="btn ghost" onClick={() => { newTab(); useApp.getState().setPage('editor'); }}>New tab</button>
+            <button className="btn ghost" onClick={startNew}>New tab</button>
           </div>
         </div>
       ) : filtered.length === 0 ? (
@@ -211,6 +215,21 @@ export function LibraryPage() {
         </div>
       ) : (
         <div className="lib-grid">
+          {/* Always first (whatever the order); not while searching or filtering, where the grid shows only results. */}
+          {!q && family === 'all' && (
+            <article className="lib-card lib-new">
+              <button className="lib-new-main" onClick={startNew} aria-label="New tab: start from scratch in the editor">
+                <span className="lib-new-plus" aria-hidden>+</span>
+                <b>New tab</b>
+                <span className="muted small">Start from scratch in the editor</span>
+              </button>
+              <div className="lib-new-more small">
+                <button className="link-btn" onClick={importFile}>Open a file…</button>
+                <span aria-hidden>·</span>
+                <button className="link-btn" onClick={openPasteImport}>Paste or type…</button>
+              </div>
+            </article>
+          )}
           {filtered.map((t) => {
             const ti = info.get(t.id);
             return (
