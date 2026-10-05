@@ -24,6 +24,8 @@ export function parseChordPro(text: string): Imported {
   let pendingSection: string | undefined;
   let seenChord = false;
   let orphanLyric = ''; // lyrics before the very first chord: sung over it
+  // Lyric lines before any chord, as written (a file with no chords at all keeps them).
+  const lyricLines: { text: string; section?: string }[] = [];
   let inTab = false;
   const bars = () => beatsPerBar(meta);
 
@@ -92,16 +94,24 @@ export function parseChordPro(text: string): Imported {
 
     if (!seenChord) {
       // Lyrics before the first chord of the song are sung over that first chord.
-      if (lead) orphanLyric = orphanLyric ? `${orphanLyric} ${lead}` : lead;
+      if (lead) {
+        orphanLyric = orphanLyric ? `${orphanLyric} ${lead}` : lead;
+        lyricLines.push({ text: lead, section: pendingSection });
+        pendingSection = undefined;
+      }
       if (!chordParts.length) continue;
-      chordParts[0].text = orphanLyric + (orphanLyric ? ' ' : '') + chordParts[0].text.trim();
+      chordParts[0].text = orphanLyric + (orphanLyric ? ' ' : '') + chordParts[0].text.trimStart();
       orphanLyric = '';
     }
     // A lead-in (or a whole line without chords) continues the previous chord.
-    const segs: { sym?: string; text: string }[] = [];
-    if (seenChord && lead) segs.push({ text: lead });
-    for (const cp of chordParts) segs.push({ sym: cp.sym, text: cp.text.trim().replace(/\s+/g, ' ') });
+    const segs: { sym?: string; text: string; raw: string }[] = [];
+    if (seenChord && lead) segs.push({ text: lead, raw: parts[0].text });
+    for (const cp of chordParts) segs.push({ sym: cp.sym, text: cp.text.trim().replace(/\s+/g, ' '), raw: cp.text });
     if (!segs.length) continue;
+    // A chord inside a word ("a[F]bove") splits it into syllables: "a-" "bove".
+    for (let k = 0; k + 1 < segs.length; k++) {
+      if (segs[k].text && segs[k + 1].text && !/\s$/.test(segs[k].raw) && !/^\s/.test(segs[k + 1].raw)) segs[k].text += '-';
+    }
     seenChord = true;
 
     const beats = allocate(segs.map((sg) => ({ chars: sg.text.length, isChord: !!sg.sym })));
@@ -126,7 +136,16 @@ export function parseChordPro(text: string): Imported {
     lines.push(tl);
   }
   if (capo) warnings.push(`Capo ${capo}: chords were transposed up ${capo} semitone${capo > 1 ? 's' : ''} to sounding pitch.`);
-  if (!lines.length) warnings.push('No chords found in this file.');
+  if (!seenChord && lyricLines.length) {
+    // No chords at all: the lyrics come in line by line, as words over rests.
+    for (const l of lyricLines) {
+      const [beats] = allocate([{ chars: l.text.length, isChord: false }]);
+      const tl: TabLine = { events: [{ kind: 'rest', beats, lyric: l.text }, { kind: 'bar', style: 'single' }] };
+      if (l.section !== undefined) tl.section = l.section;
+      lines.push(tl);
+    }
+    warnings.push('No chords in this file: the lyrics came in as words over rests.');
+  } else if (!lines.length) warnings.push('No chords found in this file.');
   return { doc: { meta, lines }, warnings, format: 'ChordPro' };
 }
 

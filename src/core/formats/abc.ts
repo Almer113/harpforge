@@ -495,6 +495,8 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
   out.push(`M:${meta.time}`, 'L:1/8', ...(withHeader ? [`Q:1/4=${Math.round(meta.tempo)}`] : []), `K:${keyText}`);
   const order: [number, number][] = [];
   let lastTieable: number | null = null;
+  // The previous line's notes, and where it is in `out`: a tie from its last note is marked there.
+  let prevLine: { parts: string[]; at: number; tieable: number | null } | null = null;
 
   doc.lines.forEach((line, li) => {
     if (line.section) out.push(`P:${line.section}`);
@@ -502,7 +504,7 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
     let barAcc: Record<string, number> = {};
     const sig = keySignature(fifths);
     const parts: string[] = [];
-    lastTieable = null; // a tie from the end of the previous line is written as a plain repeated note
+    lastTieable = null;
     const lyr: string[] = [];
     const tabs: string[] = [];
 
@@ -569,6 +571,12 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
       }
       const body = midis.length === 1 ? noteText(midis[0]) : `[${midis.map(noteText).join('')}]`;
       if (ev.tied && lastTieable !== null) parts[lastTieable] += '-';
+      else if (ev.tied && lastTieable === null && !parts.some((p) => /[A-Ga-gz]/.test(p)) && prevLine?.tieable != null) {
+        // A tie over the line break: the "-" goes on the last note of the line before.
+        prevLine.parts[prevLine.tieable] += '-';
+        out[prevLine.at] = prevLine.parts.join(' ');
+        prevLine.tieable = null;
+      }
       parts.push(`${prefix}${chord}${body}${len}`);
       lastTieable = parts.length - 1;
       if (ev.tied) {
@@ -582,6 +590,7 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
     }
 
     out.push(parts.join(' '));
+    prevLine = { parts, at: out.length - 1, tieable: lastTieable };
     if (tabLine && tabs.some((t) => t !== '*')) out.push('w: ' + tabs.join(' '));
     if (withLyrics && lyr.some((t) => t !== '*')) {
       let text = '';

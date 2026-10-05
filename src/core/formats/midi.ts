@@ -10,6 +10,9 @@ import { eventMidis, keyFifths, notesMeta, type Imported } from './common';
 
 // ---- Reading -------------------------------------------------------------------
 
+/** Grids a beat can be read in, simplest first. */
+const BEAT_GRIDS = [1 / 2, 1 / 4, 1 / 3, 1 / 6, 1 / 8, 1 / 5, 1 / 7, 1 / 12];
+
 interface RawNote {
   start: number;
   end: number;
@@ -188,8 +191,22 @@ export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Impor
     return a + Math.abs(b - Math.round(b / grid) * grid);
   }, 0);
   const grid = err(1 / 3) < err(1 / 4) * 0.6 ? 1 / 3 : 1 / 4;
+  // Each beat takes the simplest grid its notes start on (eighths, sixteenths, triplets,
+  // quintuplets …), so exact files come back exact; beats that fit none use the song's grid.
+  const byBeat = new Map<number, number[]>();
+  for (const n of chosen.notes) {
+    const b = toBeats(n.start);
+    const k = Math.floor(b + 1e-6);
+    byBeat.set(k, [...(byBeat.get(k) ?? []), b - k]);
+  }
+  const beatGrid = new Map<number, number>();
+  for (const [k, offs] of byBeat) {
+    const g = BEAT_GRIDS.find((c) => offs.every((o) => Math.abs(o - Math.round(o / c) * c) < 0.03));
+    if (g !== undefined) beatGrid.set(k, g);
+  }
+  const gridAt = (at: number) => beatGrid.get(Math.floor(at + 1e-6)) ?? grid;
   const notes = chosen.notes.map((n) => ({ start: toBeats(n.start), end: toBeats(n.end), sound: { type: 'pitch', midi: n.midi } as Sound }));
-  const clusters = quantize(notes, grid, (a, b) => a.type === 'pitch' && b.type === 'pitch' && a.midi === b.midi);
+  const clusters = quantize(notes, gridAt, (a, b) => a.type === 'pitch' && b.type === 'pitch' && a.midi === b.midi);
   for (const c of clusters) c.sounds.sort((a, b) => (a.type === 'pitch' && b.type === 'pitch' ? a.midi - b.midi : 0));
   const events = clustersToEvents(clusters, beatsPerBar(meta));
   const parts = candidates.length > 1 ? candidates.map((c) => ({ id: c.id, label: c.label })) : undefined;

@@ -111,7 +111,7 @@ export type ExportKind = 'htab' | 'notes' | 'abc' | 'musicxml' | 'midi' | 'chord
 export const EXPORTS: { id: ExportKind; name: string; ext: string; mime: string; hint: string; loses?: string }[] = [
   { id: 'htab', name: 'HarpTab', ext: 'htab', mime: 'text/plain', hint: 'Full tab, re-importable' },
   { id: 'notes', name: 'Notes (no holes)', ext: 'htab', mime: 'text/plain', hint: 'Pitch names instead of holes — re-import for any harmonica', loses: 'Which holes and bends were used' },
-  { id: 'abc', name: 'ABC notation', ext: 'abc', mime: 'text/vnd.abc', hint: 'Notes + tab line + lyrics', loses: 'Bends show as pitches; a tie at the end of a line becomes a repeated note' },
+  { id: 'abc', name: 'ABC notation', ext: 'abc', mime: 'text/vnd.abc', hint: 'Notes + tab line + lyrics', loses: 'Bends show as pitches' },
   { id: 'musicxml', name: 'MusicXML', ext: 'musicxml', mime: 'application/vnd.recordare.musicxml+xml', hint: 'For MuseScore, Finale, Sibelius…', loses: 'The tab is a second lyric line; comments are left out' },
   { id: 'midi', name: 'MIDI', ext: 'mid', mime: 'audio/midi', hint: 'Plays in any MIDI app', loses: 'Notes only: no tab, lyrics, chord symbols or sections' },
   { id: 'chordpro', name: 'ChordPro', ext: 'cho', mime: 'text/plain', hint: 'Chords + lyrics only', loses: 'No melody or tab' },
