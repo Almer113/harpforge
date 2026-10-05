@@ -73,7 +73,8 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `src/core/chords.ts` | Chord symbols and the harmonica chord finder |
 | `src/core/formats` | ABC, ChordPro / chord sheets, guitar tab, MusicXML, MIDI readers & writers |
 | `src/core/formats/pdf*.ts` | PDF text layer / OCR → positioned words → column-aligned chord sheet |
-| `src/audio/engine.ts` | Live voices and transport playback |
+| `src/audio/engine.ts` | What the app calls for sound; loads `engineImpl.ts` in the background |
+| `src/audio/engineImpl.ts` | Live voices and transport playback (Tone.js) |
 | `src/audio/voices.ts` | Sample player (VCSL harmonica) and synthesized reed |
 | `src/audio/pitch.ts` | Pitch detection (YIN) for the microphone |
 | `scripts/prepare-samples.py` | Turns the VCSL recordings into web-ready, looped samples |

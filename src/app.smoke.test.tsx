@@ -132,7 +132,8 @@ describe('dialogs open without errors', () => {
   it('Import (paste), with a pasted tab', async () => {
     await page('play');
     await act(async () => openPasteImport());
-    await settle();
+    // (The dialog loads the first time it opens.)
+    await until('.import-modal');
     healthy(/Import or convert/);
     await set({ importDraft: null });
   });

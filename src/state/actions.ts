@@ -8,7 +8,11 @@ import { keyUsesFlats } from '../core/pitch';
 import { getHarmonica, specId, type HarmonicaSpec } from '../core/instruments';
 import { BLANK } from '../demo/songs';
 import { isChordSheet, octaveOptions } from '../core/convert';
-import { decodeText, detectKind, exportDoc, FORMAT_NAMES, importBytes, IMPORT_ACCEPT, importText, sniffText, type ExportKind, type Imported } from '../core/formats';
+import type { Imported } from '../core/formats';
+import { FORMAT_NAMES, IMPORT_ACCEPT, type ExportKind } from '../core/formats/catalog';
+
+/** The format readers and writers, loaded the first time they're needed. */
+const formats = () => import('../core/formats');
 import { persistStorage, saveTab } from '../storage/library';
 import { stop } from './playback';
 import { finishRecording } from '../live/recorder';
@@ -158,9 +162,10 @@ export function downloadData(filename: string, data: string | Uint8Array, type =
 }
 
 /** Exports a tab (the current one by default) in any supported format. */
-export function exportAs(kind: ExportKind, text = useApp.getState().text) {
+export async function exportAs(kind: ExportKind, text = useApp.getState().text) {
   const p = getParsed(text);
   try {
+    const { exportDoc } = await formats();
     const { filename, data, mime } = exportDoc(kind, p.doc, p.harp, text);
     downloadData(filename, data, mime);
   } catch (e) {
@@ -184,6 +189,7 @@ function isPitchOnly(imported: Imported): boolean {
 /** Imports a file: tabs load directly, everything else goes through the import dialog. */
 export async function importFromFile(file: File) {
   const bytes = new Uint8Array(await file.arrayBuffer());
+  const { decodeText, detectKind, importBytes } = await formats();
   if (detectKind(file.name, bytes) === 'pdf') {
     await importPdfFile(file.name, bytes);
     return;
@@ -217,6 +223,7 @@ export function importFile() {
 let pdfRuns = 0;
 
 async function importPdfFile(name: string, bytes: Uint8Array) {
+  const { importText, sniffText } = await formats();
   // Each reading has its own number: after a cancel, a new import (even of a file with the
   // same name) never shows the old reading's progress or result.
   const run = ++pdfRuns;

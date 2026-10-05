@@ -75,6 +75,9 @@ function TextEditor({ split }: { split: boolean }) {
   const text = useApp((s) => s.text);
   const setText = useApp((s) => s.setText);
   const parsed = useParsed();
+  // The preview follows the text when typing pauses, so each key stays quick (the staff
+  // in particular takes a while to draw).
+  const preview = useSettled(parsed, split ? 200 : 0);
   const editor = useRef<CodeEditorHandle>(null);
   const lineOf = (offset: number) => text.slice(0, offset).split('\n').length;
   const problems = parsed.issues.filter((i) => i.severity !== 'info').length;
@@ -101,7 +104,7 @@ function TextEditor({ split }: { split: boolean }) {
       {editorPane}
       <div className="preview-pane">
         <Sheet
-          parsed={parsed}
+          parsed={preview}
           title="Preview"
           onSelect={(i, ev) => {
             selectEvent(i);
@@ -149,4 +152,15 @@ function SyntaxHelp() {
       </div>
     </div>
   );
+}
+
+/** `value`, once it has stayed the same for `ms` (0: right away). */
+function useSettled<T>(value: T, ms: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    if (ms <= 0) return;
+    const t = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return ms <= 0 ? value : settled;
 }

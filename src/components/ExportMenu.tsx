@@ -1,4 +1,4 @@
-import { EXPORTS } from '../core/formats';
+import { EXPORTS } from '../core/formats/catalog';
 import { exportAs } from '../state/actions';
 import { useApp } from '../state/store';
 import { Popover } from './Popover';

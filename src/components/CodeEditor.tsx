@@ -1,7 +1,7 @@
 // A lightweight .htab editor: a transparent textarea over a syntax-highlighted
 // mirror, with error squiggles. Long lines wrap; line numbers sit beside each line.
 
-import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef } from 'react';
+import { forwardRef, memo, useImperativeHandle, useLayoutEffect, useMemo, useRef } from 'react';
 import type { ParseIssue } from '../core/htab/types';
 
 export interface CodeEditorHandle {
@@ -18,20 +18,24 @@ const TOKEN_RE =
   /(\[[^\]]*\])|(\|\]|\|\||\|:|:\|\|?|\|)|(-?\(|[(){}])|(<?-<?\d{1,2}[^\s|[\](){}~]*~*)|(<?\+?<?\d{1,2}[^\s|[\](){}~]*~*)|([A-G][#b]{0,2}-?\d?~*)|((?<=\s|^)\.~*)|(~+)/g;
 const TOKEN_CLASSES = ['hl-chord', 'hl-bar', 'hl-group', 'hl-draw', 'hl-blow', 'hl-pitch', 'hl-rest', 'hl-hold'];
 
-function classify(text: string, issues: ParseIssue[]): string[] {
-  const cls: string[] = Array.from({ length: text.length }, () => '');
-  const mark = (a: number, b: number, c: string) => {
-    for (let i = a; i < b && i < text.length; i++) cls[i] = cls[i] ? cls[i] + ' ' + c : c;
-  };
-  let offset = 0;
+/** One line's highlighting: [start, end, classes] within the line. */
+type Span = [number, number, string];
+
+/**
+ * Highlighting, line by line (the header's state carries from line to line). Issues are
+ * moved onto the lines they fall in, so a line's spans only change when the line does.
+ */
+function classifyLines(text: string, issues: ParseIssue[]): { text: string; spans: Span[] }[] {
+  const lines = text.split('\n');
+  const out: { text: string; spans: Span[] }[] = [];
   let inHeader = false;
   let headerDone = false;
-  for (const line of text.split('\n')) {
-    const start = offset;
-    offset += line.length + 1;
+  for (const line of lines) {
+    const spans: Span[] = [];
+    out.push({ text: line, spans });
     const t = line.trim();
     if (!headerDone && t === '---') {
-      mark(start, start + line.length, 'hl-fence');
+      spans.push([0, line.length, 'hl-fence']);
       if (inHeader) headerDone = true;
       inHeader = !inHeader;
       continue;
@@ -40,40 +44,72 @@ function classify(text: string, issues: ParseIssue[]): string[] {
     if (inHeader) {
       const colon = line.indexOf(':');
       if (colon > 0) {
-        mark(start, start + colon + 1, 'hl-key');
-        mark(start + colon + 1, start + line.length, 'hl-value');
+        spans.push([0, colon + 1, 'hl-key']);
+        spans.push([colon + 1, line.length, 'hl-value']);
       }
       continue;
     }
     if (t.startsWith('#')) {
-      mark(start, start + line.length, 'hl-comment');
+      spans.push([0, line.length, 'hl-comment']);
       continue;
     }
     if (t.startsWith('@')) {
-      mark(start, start + line.length, 'hl-section');
+      spans.push([0, line.length, 'hl-section']);
       continue;
     }
     if (/^w:/i.test(t)) {
-      mark(start, start + line.length, 'hl-lyric');
+      spans.push([0, line.length, 'hl-lyric']);
       continue;
     }
     let body = line;
     const hash = line.search(/(^|\s)#/);
     if (hash >= 0) {
-      mark(start + hash, start + line.length, 'hl-comment');
+      spans.push([hash, line.length, 'hl-comment']);
       body = line.slice(0, hash);
     }
     TOKEN_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = TOKEN_RE.exec(body))) {
       const g = m.slice(1).findIndex((x) => x !== undefined);
-      if (g >= 0) mark(start + m.index, start + m.index + m[0].length, TOKEN_CLASSES[g]);
+      if (g >= 0) spans.push([m.index, m.index + m[0].length, TOKEN_CLASSES[g]]);
       if (m[0].length === 0) TOKEN_RE.lastIndex++;
     }
   }
-  for (const is of issues) if (is.severity !== 'info') mark(is.span.start, is.span.end, is.severity === 'error' ? 'hl-err' : 'hl-warn');
-  return cls;
+  // Issues (which can span lines) onto the lines they touch.
+  const starts: number[] = [];
+  let at = 0;
+  for (const l of lines) {
+    starts.push(at);
+    at += l.length + 1;
+  }
+  for (const is of issues) {
+    if (is.severity === 'info') continue;
+    const c = is.severity === 'error' ? 'hl-err' : 'hl-warn';
+    for (let li = 0; li < lines.length; li++) {
+      const a = Math.max(is.span.start, starts[li]) - starts[li];
+      const b = Math.min(is.span.end, starts[li] + lines[li].length) - starts[li];
+      if (b > a) out[li].spans.push([a, b, c]);
+    }
+  }
+  return out;
 }
+
+/** One highlighted line (redrawn only when its text or highlighting changes). */
+const CodeLine = memo(function CodeLine({ text, spans }: { text: string; spans: string }) {
+  if (!text) return <div className="cl">{'\u200b'}</div>;
+  const list: Span[] = spans ? JSON.parse(spans) : [];
+  // Classes per character, then runs of the same classes.
+  const cls: string[] = Array.from({ length: text.length }, () => '');
+  for (const [a, b, c] of list) for (let i = a; i < b && i < text.length; i++) cls[i] = cls[i] ? cls[i] + ' ' + c : c;
+  const parts: React.ReactNode[] = [];
+  for (let k = 0; k < text.length; ) {
+    let j = k + 1;
+    while (j < text.length && cls[j] === cls[k]) j++;
+    parts.push(cls[k] ? <span key={k} className={cls[k]}>{text.slice(k, j)}</span> : text.slice(k, j));
+    k = j;
+  }
+  return <div className="cl">{parts}</div>;
+});
 
 export const CodeEditor = forwardRef<CodeEditorHandle, Props>(function CodeEditor({ value, onChange, issues }, ref) {
   const ta = useRef<HTMLTextAreaElement>(null);
@@ -107,32 +143,17 @@ export const CodeEditor = forwardRef<CodeEditorHandle, Props>(function CodeEdito
     el.setSelectionRange(p, p);
   }, [value]);
 
-  // One block per line, so long lines can wrap and line numbers stay beside their line.
-  const highlighted = useMemo(() => {
-    const cls = classify(value, issues);
-    const lines: React.ReactNode[] = [];
-    let i = 0;
-    for (const line of value.split('\n')) {
-      const parts: React.ReactNode[] = [];
-      const end = i + line.length;
-      let k = i;
-      while (k < end) {
-        let j = k + 1;
-        while (j < end && cls[j] === cls[k]) j++;
-        parts.push(cls[k] ? <span key={k} className={cls[k]}>{value.slice(k, j)}</span> : value.slice(k, j));
-        k = j;
-      }
-      lines.push(<div key={i} className="cl">{parts.length ? parts : '​'}</div>);
-      i = end + 1;
-    }
-    return lines;
-  }, [value, issues]);
+  // One block per line, so long lines can wrap and line numbers stay beside their line. Lines
+  // are keyed by their number and memoised: typing redraws only the line being typed in.
+  const lines = useMemo(() => classifyLines(value, issues), [value, issues]);
 
   return (
     <div className="code-editor">
       <div className="code-area">
         <div ref={mirror} className="code-mirror" aria-hidden>
-          {highlighted}
+          {lines.map((l, i) => (
+            <CodeLine key={i} text={l.text} spans={l.spans.length ? JSON.stringify(l.spans) : ''} />
+          ))}
         </div>
         <textarea
           ref={ta}

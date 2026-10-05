@@ -2,13 +2,12 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Toast } from './components/Controls';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ExportMenu } from './components/ExportMenu';
-import { ImportDialog } from './components/ImportDialog';
 import { Menu } from './components/Menu';
 import { PlainTextDialog } from './components/PlainTextDialog';
 import { openShortcuts, Shortcuts } from './components/Shortcuts';
 import { LibraryPage } from './pages/LibraryPage';
 import { PlayPage } from './pages/PlayPage';
-import { EXPORTS } from './core/formats';
+import { EXPORTS } from './core/formats/catalog';
 import { exportAs, importFile, importFromFile, newTab, openPasteImport, saveCurrent } from './state/actions';
 import { startRouter } from './state/router';
 import { copyShareLink } from './state/share';
@@ -25,6 +24,8 @@ const NAV: { id: Page; label: string }[] = [
 
 startRouter();
 
+// The import dialog (with every format reader) loads when it's first opened.
+const ImportDialog = lazy(() => import('./components/ImportDialog').then((m) => ({ default: m.ImportDialog })));
 const PrintPage = lazy(() => import('./pages/PrintPage').then((m) => ({ default: m.PrintPage })));
 
 // The editor is the biggest page: it loads the first time it's opened.
@@ -78,6 +79,7 @@ function TabActions() {
 }
 
 export function App() {
+  const importOpen = useApp((s) => !!s.importDraft);
   const page = useApp((s) => s.page);
   const setPage = useApp((s) => s.setPage);
   const dirty = useApp(isDirty);
@@ -224,7 +226,11 @@ export function App() {
           </div>
         </div>
       )}
-      <ImportDialog />
+      {importOpen && (
+        <Suspense fallback={null}>
+          <ImportDialog />
+        </Suspense>
+      )}
       <PlainTextDialog />
       <Shortcuts />
       <Toast />

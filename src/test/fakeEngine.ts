@@ -26,7 +26,6 @@ export function fakeEngine(overrides: Record<string, unknown> = {}): Record<stri
     ...mocks,
     samplesReady: () => true,
     transportBeats: () => 0,
-    isTransportRunning: () => false,
     appSounding: () => false,
     ...overrides,
   };
