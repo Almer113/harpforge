@@ -4,15 +4,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 const playScore = vi.fn();
-vi.mock('../audio/engine', () => {
-  const names = ['ensureAudio', 'stopPlayback', 'previewMidis', 'setVoicing', 'setSoundMode', 'loadSamples', 'noteOn', 'noteOff', 'setPitch', 'pausePlayback', 'resumePlayback', 'setTempo', 'setMetronome', 'setLoop', 'allNotesOff'];
-  const m: Record<string, unknown> = Object.fromEntries(names.map((n) => [n, vi.fn(async () => true)]));
-  m.playScore = (...a: unknown[]) => playScore(...a);
-  m.samplesReady = () => true;
-  m.transportBeats = () => 0;
-  m.appSounding = () => false;
-  return m;
-});
+vi.mock('../audio/engine', async () => (await import('../test/fakeEngine')).fakeEngine({ playScore: (...a: unknown[]) => playScore(...a) }));
 
 import { play, selectEvent } from './playback';
 import { useApp } from './store';
@@ -37,6 +29,6 @@ describe('clicking a card', () => {
     await settle();
     expect(useApp.getState().play).toBe('stopped');
     await play();
-    expect((playScore.mock.calls.at(-1)?.[1] as { startBeat: number }).startBeat).toBe(2);
+    expect((playScore.mock.calls.at(-1)![1] as { startBeat: number }).startBeat).toBe(2);
   });
 });

@@ -748,6 +748,12 @@ function peekText(it: Item, midis: (number | null)[], flats: boolean): string {
   return [holes ? `${holes}  ${notes}` : notes, it.chord, it.lyric && `“${it.lyric}”`].filter(Boolean).join(' · ');
 }
 
+/** The measure lane under the pointer. */
+function laneAt(x: number, y: number) {
+  const el = document.elementFromPoint(x, y)?.closest('.ve-lane') as HTMLElement | null;
+  return el ? { el, m: parseInt(el.dataset.m!, 10) } : null;
+}
+
 /**
  * Splits a span (absolute start + length) into one segment per measure, so previews
  * line up with the lanes — measures are separated by gaps and can wrap onto new lines.
@@ -778,21 +784,15 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
   const zoom = ve.zoom;
   const drag = useRef<Drag | null>(null);
   // Move preview: where the grabbed piece lands (m/start) and the whole note's span (abs/dur).
-  const [ghost, setGhost] = useState<{ m: number; start: number; abs: number; dur: number; copy: boolean; others: { abs: number; dur: number }[] } | null>(null);
+  // (`from`: the note being dragged, shown faded while its preview moves.)
+  const [ghost, setGhost] = useState<{ from: Pos; m: number; start: number; abs: number; dur: number; copy: boolean; others: { abs: number; dur: number }[] } | null>(null);
   const [resizeDur, setResizeDur] = useState<{ pos: Pos; dur: number } | null>(null);
   // The grid shown while dragging (auto snap follows the dragged note).
   const [dragGrid, setDragGrid] = useState<number | null>(null);
   // Latest previews, read when the drag ends.
   const ghostRef = useRef(ghost);
   const resizeRef = useRef(resizeDur);
-  ghostRef.current = ghost;
-  resizeRef.current = resizeDur;
   const root = useRef<HTMLDivElement>(null);
-
-  const laneAt = (x: number, y: number) => {
-    const el = document.elementFromPoint(x, y)?.closest('.ve-lane') as HTMLElement | null;
-    return el ? { el, m: parseInt(el.dataset.m!, 10) } : null;
-  };
 
   useEffect(() => {
     const move = (e: PointerEvent) => {
@@ -821,7 +821,7 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
       // The other selected notes follow at the same distance.
       const grabbedHead = realBeat(song, d.pos) - d.offset;
       const others = d.group.filter((g) => !samePos(g.pos, chainAt(song, d.pos)[0])).map((g) => ({ abs: Math.max(0, g.abs + head - grabbedHead), dur: g.len }));
-      ghostRef.current = { m: lane.m, start, abs: head, dur: d.total, copy: e.altKey, others };
+      ghostRef.current = { from: d.pos, m: lane.m, start, abs: head, dur: d.total, copy: e.altKey, others };
       setGhost(ghostRef.current);
     };
     const up = () => {
@@ -833,6 +833,7 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
       // Edits happen here, not inside state updaters (React may run those twice).
       if (d.mode === 'resize') {
         const rd = resizeRef.current;
+        resizeRef.current = null;
         setResizeDur(null);
         if (rd && d.moved && Math.abs(rd.dur - d.item.dur) > EPS) {
           // The dragged piece changes length; the whole (tied) note follows.
@@ -844,6 +845,7 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
         return;
       }
       const g = ghostRef.current;
+      ghostRef.current = null;
       setGhost(null);
       if (!d.moved) {
         if (d.collapse) setVe({ selection: [d.pos], anchor: d.pos, measure: d.pos.m, caret: advance(s, d.pos, d.item.dur) });
@@ -1031,7 +1033,7 @@ function Score({ song, starts, playingAt, flats, showSecond, asNotes }: { song: 
                   const selected = ve.selection.some((p) => samePos(p, pos));
                   const just = !selected && samePos(ve.justEntered, pos);
                   const playing = playingAt.has(+(starts[mi] + it.start).toFixed(4));
-                  const dragging = ghost && drag.current && samePos(drag.current.pos, pos) && !ghost.copy;
+                  const dragging = ghost && samePos(ghost.from, pos) && !ghost.copy;
                   const midis = it.sounds.map((s) => (s.type === 'pitch' ? s.midi : soundPitch(harp, s)));
                   const offNote = it.sounds.some((s) => offHarp(harp, s));
                   const breath = it.sounds.length ? (it.sounds.every((s) => s.type === 'hole' && s.breath === 'draw') ? 'draw' : it.sounds.every((s) => s.type === 'hole' && s.breath === 'blow') ? 'blow' : 'mixed') : 'rest';

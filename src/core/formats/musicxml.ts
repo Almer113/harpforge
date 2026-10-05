@@ -73,7 +73,7 @@ export function parseMusicXml(xml: string): Imported {
     }
   };
 
-  for (const measure of [...part.getElementsByTagName('measure')]) {
+  for (const measure of part.getElementsByTagName('measure')) {
     pos = 0;
     end = 0;
     const print = child(measure, 'print');
@@ -82,7 +82,7 @@ export function parseMusicXml(xml: string): Imported {
       events = [];
       measuresInLine = 0;
     }
-    for (const el of [...measure.children]) {
+    for (const el of measure.children) {
       switch (el.nodeName) {
         case 'attributes': {
           const div = text(el, 'divisions');

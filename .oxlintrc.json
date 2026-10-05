@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "unicorn", "oxc", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "warn",
+
+    "react/react-in-jsx-scope": "off",
+    "unicorn/consistent-function-scoping": "off",
+    "unicorn/no-array-sort": "off",
+    "unicorn/no-array-reverse": "off",
+    "unicorn/prefer-add-event-listener": "off",
+    "unicorn/require-post-message-target-origin": "off",
+    "eslint/no-shadow": "off",
+    "vitest/require-mock-type-parameters": "off",
+    "vitest/valid-title": ["error", { "allowArguments": true }],
+    "vitest/valid-expect": ["error", { "maxArgs": 2 }],
+    "vitest/expect-expect": ["error", { "assertFunctionNames": ["expect", "healthy", "until"] }]
+  },
+  "ignorePatterns": ["dist/**", "public/**", "node_modules/**"]
+}

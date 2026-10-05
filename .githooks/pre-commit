@@ -1,0 +1,10 @@
+#!/bin/sh
+# Before each commit: type-check, lint and run the tests. A failure stops the commit
+# (skip once with: git commit --no-verify).
+echo "pre-commit: type-check, lint, tests…"
+npm run --silent typecheck && npm run --silent lint && npm test --silent -- --reporter=dot
+status=$?
+if [ $status -ne 0 ]; then
+  echo "pre-commit: failed — the commit was stopped. Fix the problem above, or commit with --no-verify to skip once."
+fi
+exit $status

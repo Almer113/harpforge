@@ -227,7 +227,8 @@ export function Transport({ compact = false }: { compact?: boolean }) {
   // Global space-free shortcut: Enter toggles playback (Space belongs to the harmonica slide).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement;
+      // (A key event aimed at the window or document, not an element, counts as the page's.)
+      const el = e.target instanceof Element ? e.target : document.body;
       // Typing, or a dialog/menu is open (Escape closes that instead of stopping the music).
       if (keysTaken(e)) return;
       // Enter on a card in the sheet plays from that note (instead of just sounding it).

@@ -26,7 +26,7 @@ function PlainTextBody({ close }: { close: () => void }) {
   const text = useMemo(() => writePlainText(doc, harp, o), [doc, harp, o]);
   const asNotes = o.spelling === 'notes';
   // Opens in the spelling you're reading in (Holes or Notes).
-  useEffect(() => set({ spelling: useApp.getState().readAs }), []);
+  useEffect(() => useApp.setState((s) => ({ textPrefs: { ...s.textPrefs, spelling: s.readAs } })), []);
 
   const copy = () =>
     navigator.clipboard

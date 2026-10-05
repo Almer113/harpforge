@@ -1,7 +1,7 @@
 // The song's line above the music: title, artist, key, time signature and tempo. The
 // editor's line is editable; the Play page shows the same line, read-only, in the same place.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { guessTonic } from '../../core/convert';
 import { keyUsesFlats, pitchClassName } from '../../core/pitch';
 import { setTimeSignature } from '../../core/edit/model';
@@ -15,7 +15,12 @@ const KEYS = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'Db', 'Ab', 'Eb', 'Bb', 'F', '
 /** A text field that edits a header field, recording one undo step per burst of typing. */
 function MetaInput({ field, value, placeholder, label, className = '' }: { field: string; value: string; placeholder: string; label: string; className?: string }) {
   const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
+  // A new value (an undo, another song) replaces the draft, during render rather than in an effect.
+  const [shown, setShown] = useState(value);
+  if (value !== shown) {
+    setShown(value);
+    setDraft(value);
+  }
   return (
     <input
       className={`meta-input ${className}`}

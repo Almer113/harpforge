@@ -5,11 +5,16 @@ record and edit tabs, auto-play them, and convert between notes and tabs for any
 diatonic or chromatic harmonica.
 
 ```bash
-npm install
+npm install      # also turns on the pre-commit check (.githooks)
 npm run dev      # http://localhost:5173
-npm test         # core unit tests
+npm test         # unit, round-trip and smoke tests
+npm run lint     # oxlint (.oxlintrc.json)
+npm run check    # type-check, lint, tests and a build: everything at once
 npm run build
 ```
+
+Each commit first runs the type-check, the linter and the tests (`.githooks/pre-commit`);
+a failure stops the commit. `git commit --no-verify` skips it once.
 
 ## What's in v0.1
 

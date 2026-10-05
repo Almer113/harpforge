@@ -2,14 +2,16 @@
 // it opens, Tab stays inside it, Escape or a click on the dimmed page closes it, and the
 // keyboard goes back to where it was when it closes.
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function Dialog({ label, className = '', onClose, children }: { label: string; className?: string; onClose: () => void; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  useLayoutEffect(() => {
+    closeRef.current = onClose;
+  });
 
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null;

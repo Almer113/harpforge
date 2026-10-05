@@ -1,6 +1,6 @@
 // Inspector for the visual editor: edits the selected note(s) and the current measure.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   advance,
   chainAt,
@@ -40,7 +40,12 @@ const soundsText = (sounds: Sound[]) =>
 /** A text input that commits as you type (grouped into one undo step). */
 function LiveInput({ value, placeholder, onCommit, className }: { value: string; placeholder?: string; onCommit: (v: string) => void; className?: string }) {
   const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
+  // A new value (another note, an undo) replaces the draft, during render rather than in an effect.
+  const [shown, setShown] = useState(value);
+  if (value !== shown) {
+    setShown(value);
+    setDraft(value);
+  }
   return (
     <input
       className={`meta-input ${className ?? ''}`}
@@ -118,7 +123,9 @@ function applyLater(pos: Pos, text: string, seq: number, toSounds: (song: Song, 
  */
 function useApplyOnLeave(pending: string | null, apply: (text: string) => void) {
   const latest = useRef({ pending, apply });
-  latest.current = { pending, apply };
+  useLayoutEffect(() => {
+    latest.current = { pending, apply };
+  });
   useEffect(
     () => () => {
       const { pending: text, apply: go } = latest.current;
@@ -133,10 +140,13 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
   const flats = flatsFor(text, doc.meta.key ?? harp.spec.key);
   const [input, setInput] = useState(soundsText(item.sounds));
   const [bad, setBad] = useState(false);
-  useEffect(() => {
+  // Another note (or the same one changed elsewhere): its holes replace what was typed.
+  const [shownSounds, setShownSounds] = useState(item.sounds);
+  if (item.sounds !== shownSounds) {
+    setShownSounds(item.sounds);
     setInput(soundsText(item.sounds));
     setBad(false);
-  }, [item.sounds]);
+  }
   const seq = useApp((s) => s.loadSeq);
   useApplyOnLeave(input !== soundsText(item.sounds) ? input : null, (t) => applyLater(pos, t, seq, (_, x) => parseSoundsInput(x)));
 
@@ -325,10 +335,13 @@ function NoteFields({ song, pos, item, flats }: { song: Song; pos: Pos; item: It
   const names = (sounds: Sound[]) => sounds.map((s) => pitchOf(harp, s)).map((m) => (m === null ? '?' : midiToName(m, flats))).join(' ');
   const [input, setInput] = useState(names(item.sounds));
   const [bad, setBad] = useState(false);
-  useEffect(() => {
+  // Another note, or another harmonica: the note names replace what was typed.
+  const [shown, setShown] = useState({ sounds: item.sounds, harp });
+  if (item.sounds !== shown.sounds || harp !== shown.harp) {
+    setShown({ sounds: item.sounds, harp });
     setInput(names(item.sounds));
     setBad(false);
-  }, [item.sounds, harp]);
+  }
   const seq = useApp((s) => s.loadSeq);
   useApplyOnLeave(input !== names(item.sounds) ? input : null, (t) =>
     applyLater(pos, t, seq, (s, x) => {

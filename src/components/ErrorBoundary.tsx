@@ -13,7 +13,8 @@ export class ErrorBoundary extends Component<{ children: ReactNode; resetKey?: u
   }
 
   componentDidUpdate(prev: { resetKey?: unknown }) {
-    // Going to another page tries again.
+    // Going to another page tries again (guarded: it only runs once, after the key changes).
+    // oxlint-disable-next-line react/no-did-update-set-state
     if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null });
   }
 

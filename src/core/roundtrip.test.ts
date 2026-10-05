@@ -51,7 +51,7 @@ function words(d: TabDoc): string[] {
 
 describe('1. text → editor → text', () => {
   for (const s of SONGS) {
-    it(s.name, () => {
+    it(`${s.name}`, () => {
       const doc = parseHtab(s.text).doc;
       const once = toDoc(fromDoc(doc));
       // Same music, the same as text, and stable on a second pass.
@@ -65,7 +65,7 @@ describe('1. text → editor → text', () => {
 
 describe('2. an edit to one note changes only its line', () => {
   for (const s of SONGS) {
-    it(s.name, () => {
+    it(`${s.name}`, () => {
       const doc = parseHtab(s.text).doc;
       const song = fromDoc(doc);
       // A note on the last line of tab.
@@ -81,7 +81,7 @@ describe('2. an edit to one note changes only its line', () => {
       const tabLine = s.text.slice(0, src.start).split('\n').length - 1 - (s.text.slice(0, splitHeader(s.text).bodyStart).split('\n').length - 1);
       const changed = before.map((l, i) => (l !== after[i] ? i : -1)).filter((i) => i >= 0);
       expect(changed).toContain(tabLine);
-      for (const i of changed) expect(i === tabLine || (i === tabLine + 1 && /^w:/.test(before[i]))).toBe(true);
+      for (const i of changed) expect(i === tabLine || (i === tabLine + 1 && before[i].startsWith('w:'))).toBe(true);
     });
   }
 });
@@ -104,6 +104,23 @@ const KEEPS: Record<Exclude<ExportKind, 'htab'>, 'all' | 'top-note' | 'notes-onl
   chordpro: 'chords-and-words',
 };
 
+type Keeps = (typeof KEEPS)[keyof typeof KEEPS];
+
+/** What a format keeps of a song, to compare before and after the round trip. */
+function kept(d: TabDoc, keeps: Keeps) {
+  const title = d.meta.title;
+  if (keeps === 'chords-and-words') return { title, chords: chords(d), words: words(d) };
+  const timing = { title, time: d.meta.time, tempo: d.meta.tempo };
+  const ns = music(d);
+  if (keeps === 'notes-only') return { ...timing, notes: ns.filter((n) => n.pitches !== '.').map(({ at, len, pitches }) => ({ at, len, pitches })) };
+  return {
+    ...timing,
+    key: d.meta.key ?? 'C',
+    sections: sections(d),
+    music: keeps === 'top-note' ? ns.map((n) => ({ ...n, pitches: n.pitches.split('+').pop()! })) : ns,
+  };
+}
+
 function roundTrip(kind: ExportKind, doc: TabDoc, text: string): TabDoc {
   const harp = harmonicaFromMeta(doc.meta);
   const { data } = exportDoc(kind, doc, harp, text);
@@ -118,35 +135,16 @@ describe('3. export and import again', () => {
   });
 
   for (const s of SONGS) {
-    describe(s.name, () => {
+    describe(`${s.name}`, () => {
       const doc = parseHtab(s.text).doc;
-      const want = music(doc);
 
       it('htab: exactly the same text', () => {
         expect(roundTrip('htab', doc, s.text)).toEqual(parseHtab(s.text).doc);
       });
 
-      for (const [kind, keeps] of Object.entries(KEEPS) as [Exclude<ExportKind, 'htab'>, (typeof KEEPS)[keyof typeof KEEPS]][]) {
+      for (const [kind, keeps] of Object.entries(KEEPS) as [Exclude<ExportKind, 'htab'>, Keeps][]) {
         it(kind, () => {
-          const back = roundTrip(kind, doc, s.text);
-          expect(back.meta.title).toBe(doc.meta.title);
-          if (keeps === 'chords-and-words') {
-            expect(chords(back)).toEqual(chords(doc));
-            expect(words(back)).toEqual(words(doc));
-            return;
-          }
-          expect(back.meta.time).toBe(doc.meta.time);
-          expect(back.meta.tempo).toBe(doc.meta.tempo);
-          const got = music(back);
-          if (keeps === 'notes-only') {
-            const notes = (ns: Note[]) => ns.filter((n) => n.pitches !== '.').map(({ at, len, pitches }) => ({ at, len, pitches }));
-            expect(notes(got)).toEqual(notes(want));
-            return;
-          }
-          expect(back.meta.key ?? 'C').toBe(doc.meta.key ?? 'C');
-          expect(sections(back)).toEqual(sections(doc));
-          const expected = keeps === 'top-note' ? want.map((n) => ({ ...n, pitches: n.pitches.split('+').pop()! })) : want;
-          expect(got).toEqual(expected);
+          expect(kept(roundTrip(kind, doc, s.text), keeps)).toEqual(kept(doc, keeps));
         });
       }
     });

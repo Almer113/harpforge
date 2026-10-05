@@ -174,7 +174,7 @@ export function parseAbc(text: string): Imported {
     if (!trimmed) continue;
     // "+:" continues the field above it (most often a long lyrics line).
     const field = /^([A-Za-z+]):(.*)$/.exec(trimmed);
-    if (field && !/^[|[]/.test(trimmed) && !/^\|/.test(field[2])) {
+    if (field && !/^[|[]/.test(trimmed) && !field[2].startsWith('|')) {
       const [, f, v] = field;
       if (f === '+') {
         if (lastField === 'w' && (!currentVoice || currentVoice === firstVoice)) attachLyrics(v, true);

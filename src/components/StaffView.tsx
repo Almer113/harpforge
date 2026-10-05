@@ -3,7 +3,7 @@
 // Notes light up during playback and can be clicked like tab cards.
 
 import abcjs from 'abcjs';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { writeAbc } from '../core/formats/abc';
 import { eventKey } from '../core/score';
 import type { Parsed } from '../state/store';
@@ -24,7 +24,9 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
   // k-th rendered note/rest → its SVG elements and score index.
   const map = useRef<{ elems: SVGElement[][]; scoreIndex: (number | undefined)[]; abcElems: unknown[] }>({ elems: [], scoreIndex: [], abcElems: [] });
   const clickRef = useRef(onNoteClick);
-  clickRef.current = onNoteClick;
+  useLayoutEffect(() => {
+    clickRef.current = onNoteClick;
+  });
 
   const { holes, lyrics, chords, header } = show;
   const abc = useMemo(
@@ -109,6 +111,8 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
       if (on && set[0]) lastActive = set[0];
     });
     followTo(lastActive);
+    // `abc`: after the staff is drawn again, its notes are new elements to highlight.
+    // oxlint-disable-next-line react/exhaustive-deps, react-hooks/exhaustive-deps
   }, [activeEvents, selectedEvent, abc]);
 
   return <div className="staffview" ref={host} />;

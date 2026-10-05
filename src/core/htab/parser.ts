@@ -348,7 +348,9 @@ export function splitLyrics(text: string): string[] {
   for (const word of text.trim().split(/\s+/)) {
     if (!word) continue;
     // "~" joins words into one syllable and "\-" is a literal hyphen, as in ABC.
+    // (U+0001 stands in for "\-" while splitting: it never occurs in typed text.)
     const parts = word.replace(/\\-/g, '\u0001').split(/(?<=-)/);
+    // oxlint-disable-next-line no-control-regex
     for (const p of parts) if (p && p !== '-') out.push(p.replace(/~/g, ' ').replace(/\u0001/g, '-'));
   }
   return out;

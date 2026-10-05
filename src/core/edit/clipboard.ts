@@ -61,7 +61,7 @@ export function copyText(song: Song, positions: Pos[]): string {
 export function pasteText(song: Song, text: string, at: Pos): { song: Song; placed: Pos[]; end: Pos } | null {
   const src = text.trim();
   if (!src) return null;
-  const { doc, issues } = parseHtab(/^---/.test(src) ? src : `---\n---\n${src}`);
+  const { doc, issues } = parseHtab(src.startsWith('---') ? src : `---\n---\n${src}`);
   if (issues.some((i) => i.severity === 'error')) return null;
   const from = fromDoc(doc);
   const pieces: Piece[] = [];

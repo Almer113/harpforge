@@ -19,7 +19,7 @@ export interface Imported {
 }
 
 export function notesMeta(partial: Partial<TabMeta> = {}): TabMeta {
-  const meta = { ...defaultMeta(), ...partial, extra: { ...(partial.extra ?? {}) } };
+  const meta = { ...defaultMeta(), ...partial, extra: { ...partial.extra } };
   meta.tuning = undefined;
   meta.harpKey = undefined;
   return meta;

@@ -54,10 +54,6 @@ export function appSounding(): boolean {
   return live.size > 0 || scheduledVoices.size > 0 || performance.now() < quietAt;
 }
 
-export function allNotesOff() {
-  for (const id of [...live.keys()]) noteOff(id);
-}
-
 // ---- Metronome ----------------------------------------------------------------
 
 let clickSynth: Tone.Synth | null = null;

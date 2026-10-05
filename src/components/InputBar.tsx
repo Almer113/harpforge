@@ -141,6 +141,8 @@ export function MidiControl() {
   const [miss, setMiss] = useState<string | undefined>();
   useEffect(() => {
     if (!midi.miss) return;
+    // A brief notice in answer to an outside event (a MIDI note), cleared by the timer below.
+    // oxlint-disable-next-line react/set-state-in-effect
     setMiss(midi.miss);
     const t = setTimeout(() => setMiss(undefined), 1500);
     return () => clearTimeout(t);
@@ -165,6 +167,8 @@ function PracticeControl() {
   const [shake, setShake] = useState(false);
   useEffect(() => {
     if (!practice?.wrongAt) return;
+    // A brief shake in answer to a wrong note, cleared by the timer below.
+    // oxlint-disable-next-line react/set-state-in-effect
     setShake(true);
     const t = setTimeout(() => setShake(false), 350);
     return () => clearTimeout(t);

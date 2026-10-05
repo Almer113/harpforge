@@ -206,7 +206,7 @@ describe('header comments', () => {
   });
 
   it('round-trips a backslash before "#" and a "#" before a word', () => {
-    for (const title of ['a\#b', 'Op. #five', 'C# minor']) {
+    for (const title of ['a\\#b', 'Op. #five', 'C# minor']) {
       const t = setMetaFields(doc('4 |'), { title });
       expect(parseHtab(t).doc.meta.title).toBe(title);
     }

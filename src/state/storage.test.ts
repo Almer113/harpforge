@@ -3,14 +3,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../audio/engine', () => {
-  const names = ['ensureAudio', 'stopPlayback', 'previewMidis', 'setVoicing', 'setSoundMode', 'loadSamples', 'noteOn', 'noteOff', 'setPitch', 'playScore', 'pausePlayback', 'resumePlayback', 'setTempo', 'setMetronome', 'setLoop', 'allNotesOff'];
-  const m: Record<string, unknown> = Object.fromEntries(names.map((n) => [n, vi.fn(async () => true)]));
-  m.samplesReady = () => true;
-  m.transportBeats = () => 0;
-  m.isTransportRunning = () => false;
-  return m;
-});
+vi.mock('../audio/engine', async () => (await import('../test/fakeEngine')).fakeEngine());
 
 // A library that answers when the test says so.
 const pending: { text: string; id: string | null | undefined; resolve: (id: string) => void }[] = [];

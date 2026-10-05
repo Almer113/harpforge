@@ -19,7 +19,7 @@ const TOKEN_RE =
 const TOKEN_CLASSES = ['hl-chord', 'hl-bar', 'hl-group', 'hl-draw', 'hl-blow', 'hl-pitch', 'hl-rest', 'hl-hold'];
 
 function classify(text: string, issues: ParseIssue[]): string[] {
-  const cls: string[] = new Array(text.length).fill('');
+  const cls: string[] = Array.from({ length: text.length }, () => '');
   const mark = (a: number, b: number, c: string) => {
     for (let i = a; i < b && i < text.length; i++) cls[i] = cls[i] ? cls[i] + ' ' + c : c;
   };
