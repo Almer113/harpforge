@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { BarStyle, NoteEvent, RestEvent, TabEvent } from '../core/htab/types';
-import { midiToName, keyUsesFlats } from '../core/pitch';
+import { midiToName, keySpelling, type Spelling } from '../core/pitch';
 import { eventKey } from '../core/score';
 import type { HoleSound, Sound } from '../core/types';
 import type { Parsed, ReadAs } from '../state/store';
@@ -70,7 +70,7 @@ export function useStableClick<A extends unknown[]>(fn: ((...args: A) => void) |
 
 export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, showLyrics = true, showChords = true, onCardClick, follow = true, notation = 'holes', readAs = 'holes' }: Props) {
   const { doc, score, harp } = parsed;
-  const flats = keyUsesFlats(doc.meta.key ?? harp.spec.key);
+  const flats = keySpelling(doc.meta.key ?? harp.spec.key);
   const numbers = notation === 'numbers';
   const asNotes = !numbers && readAs === 'notes';
   const doPc = doPitchClass(doc.meta.key ?? harp.spec.key.replace(/^(Low|High)\s+/i, ''));
@@ -136,7 +136,7 @@ interface TabLineProps {
   showChords: boolean;
   numbers: boolean;
   asNotes: boolean;
-  flats: boolean;
+  flats: Spelling;
   doPc: number;
   onCardClick: (scoreIndex: number, ev: NoteEvent | RestEvent) => void;
 }
@@ -213,7 +213,7 @@ const TabCard = memo(function TabCard({
   showChords: boolean;
   numbers: boolean;
   asNotes: boolean;
-  flats: boolean;
+  flats: Spelling;
   doPc: number;
   onCardClick: (scoreIndex: number, ev: NoteEvent | RestEvent) => void;
 }) {
@@ -271,7 +271,7 @@ function breathOf(sounds: Sound[]): string {
   return 'mixed';
 }
 
-export function Glyph({ sound, flats }: { sound: Sound; flats: boolean }) {
+export function Glyph({ sound, flats }: { sound: Sound; flats: Spelling }) {
   if (sound.type === 'pitch') return <span className="glyph pitch">{midiToName(sound.midi, flats)}</span>;
   return (
     <span className={`glyph ${sound.breath}`}>
@@ -285,7 +285,7 @@ export function Glyph({ sound, flats }: { sound: Sound; flats: boolean }) {
 }
 
 /** A note name as the main text (Notes mode): letter, accidental and a smaller octave, in the hole's blow/draw colour. */
-export function NoteGlyph({ sound, midi, flats }: { sound: Sound; midi: number | null; flats: boolean }) {
+export function NoteGlyph({ sound, midi, flats }: { sound: Sound; midi: number | null; flats: Spelling }) {
   const breath = sound.type === 'hole' ? sound.breath : 'pitch';
   const name = midi === null ? null : /^([A-G])([#b]?)(-?\d+)$/.exec(midiToName(midi, flats));
   if (!name) return <span className={`glyph note ${breath}`} title="Not playable on this harmonica">?</span>;

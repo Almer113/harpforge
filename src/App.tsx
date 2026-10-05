@@ -175,7 +175,8 @@ export function App() {
       // Undo / redo for every edit (visual and text). Plain inputs keep their own undo.
       const el = e.target as HTMLElement;
       const plainInput = isTyping(el) && el.tagName !== 'SELECT' && !el.closest('.code-editor');
-      if ((e.ctrlKey || e.metaKey) && !plainInput) {
+      // (Not behind a dialog: the song isn't what's in front of you.)
+      if ((e.ctrlKey || e.metaKey) && !plainInput && !document.querySelector('.modal-backdrop')) {
         const k = e.key.toLowerCase();
         if (k === 'z' && !e.shiftKey) {
           e.preventDefault();

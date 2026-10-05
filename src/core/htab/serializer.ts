@@ -1,12 +1,12 @@
 // Turns a TabDoc back into .htab text.
 
-import { midiToName } from '../pitch';
+import { midiToName, type Spelling } from '../pitch';
 import type { HoleSound, Sound } from '../types';
 import { beatsPerBar, type BarEvent, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine, type TabMeta } from './types';
 import { headerValue } from './parser';
 
 export interface SerializeOptions {
-  flats?: boolean;
+  flats?: Spelling;
   /** Beats in a bar (from the time signature): a line's first bar is a pickup only if shorter. */
   barBeats?: number;
 }

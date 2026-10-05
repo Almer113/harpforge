@@ -11,7 +11,7 @@
 import { parseHtab, splitHeader } from '../htab/parser';
 import { lineText, type SerializeOptions } from '../htab/serializer';
 import { beatsPerBar, type ParseIssue, type TabLine } from '../htab/types';
-import { keyUsesFlats } from '../pitch';
+import { keySpelling, type Spelling } from '../pitch';
 import { EPS, fromDoc, lineGroups, toDoc, type Song } from './model';
 
 /** What a rewrite had to keep in a comment: text that couldn't be read. */
@@ -111,12 +111,12 @@ function rewritten(text: string[], tail: string, before: string[], after: string
 }
 
 /** Whether to spell pitches with flats: as the text already does, else from the key. */
-export function flatsFor(text: string, key: string | undefined): boolean {
+export function flatsFor(text: string, key: string | undefined): Spelling {
   const body = text.slice(splitHeader(text).bodyStart);
   const flat = /(^|[\s([{|])[A-G]b-?\d/.test(body);
   // A tab written with sharps stays that way, whatever the key says.
   if (!flat && /(^|[\s([{|])[A-G]#-?\d/.test(body)) return false;
-  return flat || keyUsesFlats(key);
+  return flat || keySpelling(key);
 }
 
 /** Each measure-set of a song as lines: the text of each line plus the source line its measures came from. */
@@ -152,7 +152,7 @@ function rawLines(text: string, bodyStart: number): { raw: string[]; starts: num
  * for another harmonica, moving an octave): `lines` must be `oldText`'s lines, in order.
  * Lines whose music is unchanged, comments, blank lines, headings and extra verses stay as written.
  */
-export function replaceLines(oldText: string, lines: TabLine[], flats?: boolean, report?: SpliceReport): string {
+export function replaceLines(oldText: string, lines: TabLine[], flats?: Spelling, report?: SpliceReport): string {
   const { bodyStart } = splitHeader(oldText);
   const { doc: oldDoc, issues } = parseHtab(oldText);
   const opts: SerializeOptions = { flats: flatsFor(oldText, oldDoc.meta.key), barBeats: beatsPerBar(oldDoc.meta) };

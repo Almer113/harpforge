@@ -93,3 +93,18 @@ it('lengths in fifteenths and thirtieths of a beat are written exactly', () => {
 it('re-barring keeps a repeat sign that only rests follow', () => {
   expect(body(setTimeSignature(song('4 4 4 4 :| . . . . |]'), '3/4', true))).toBe('4 4 4 | 4 :|');
 });
+
+it('a chord symbol on its own stays a marker: giving it a hole makes no zero-length note', () => {
+  const s = song('4 4 4 4 [G] | 5 5 5 5 |');
+  const marker = s.measures[0].items.find((it) => it.dur === 0)!;
+  const out = body(updateItem(s, { m: 0, start: marker.start }, { sounds: [holeSound(6, 'blow')] }));
+  expect(out).toBe('4 4 4 4 [G] | 5 5 5 5 |');
+});
+
+it('notes outside the key are spelled the musical way: the blue third in G is Bb, its sharp fourth C#', async () => {
+  const { keySpelling, midiToName } = await import('../pitch');
+  const g = keySpelling('G');
+  expect([70, 61, 66, 63].map((m) => midiToName(m, g))).toEqual(['Bb4', 'C#4', 'F#4', 'Eb4']);
+  expect(keySpelling('G')).toBe(g);
+  expect(midiToName(61, keySpelling('F'))).toBe('Db4');
+});

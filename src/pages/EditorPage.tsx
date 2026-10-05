@@ -157,6 +157,8 @@ function SyntaxHelp() {
 /** `value`, once it has stayed the same for `ms` (0: right away). */
 function useSettled<T>(value: T, ms: number): T {
   const [settled, setSettled] = useState(value);
+  // While it follows right away, it keeps up (so switching to a delay starts from now).
+  if (ms <= 0 && settled !== value) setSettled(value);
   useEffect(() => {
     if (ms <= 0) return;
     const t = setTimeout(() => setSettled(value), ms);

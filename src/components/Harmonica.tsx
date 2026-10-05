@@ -6,7 +6,7 @@
 
 import { useMemo, useRef } from 'react';
 import { canOver, maxBend, soundPitch, type Harmonica as Harp } from '../core/instruments';
-import { midiToName, keyUsesFlats } from '../core/pitch';
+import { midiToName, keySpelling, type Spelling } from '../core/pitch';
 import type { Breath, HoleSound } from '../core/types';
 import { change, press, release } from '../live/livePlayer';
 import { BLOW_LABELS, DRAW_LABELS } from '../live/useHarmonicaKeyboard';
@@ -36,7 +36,7 @@ export function Harmonica({ size = 'full' }: { size?: 'full' | 'slim' }) {
   const slideLatch = useApp((s) => s.slideLatch);
   const practice = useApp((s) => s.practice);
   // Spelled for the song's key (D minor: B♭), else the harp's.
-  const flats = keyUsesFlats(doc.meta.key ?? harp.spec.key);
+  const flats = keySpelling(doc.meta.key ?? harp.spec.key);
 
   // Practice mode: the holes to play next.
   const targets = useMemo(() => {
@@ -233,7 +233,7 @@ export function Harmonica({ size = 'full' }: { size?: 'full' | 'slim' }) {
 }
 
 /** A hole's tooltip: its notes, bends and overblows. */
-function holeTip(harp: Harp, hole: number, flats: boolean): string {
+function holeTip(harp: Harp, hole: number, flats: Spelling): string {
   const h = harp.holes[hole - 1];
   const bendsDraw = maxBend(harp, hole, 'draw');
   const bendsBlow = maxBend(harp, hole, 'blow');
@@ -251,7 +251,7 @@ function holeTip(harp: Harp, hole: number, flats: boolean): string {
 }
 
 /** One hole of the slim harmonica: blow above, draw below, each lit, targeted and labelled. */
-function SlimHole({ harp, hole, state, target, flats, asNotes, slide }: { harp: Harp; hole: number; state?: HoleState; target?: HoleState; flats: boolean; asNotes: boolean; slide: boolean }) {
+function SlimHole({ harp, hole, state, target, flats, asNotes, slide }: { harp: Harp; hole: number; state?: HoleState; target?: HoleState; flats: Spelling; asNotes: boolean; slide: boolean }) {
   const h = harp.holes[hole - 1];
   const label = (sound: HoleSound | undefined, breath: Breath, midi: number) => {
     // A bend or overblow being played shows itself ("-4'"); otherwise the plain hole.
@@ -280,7 +280,7 @@ function SlimHole({ harp, hole, state, target, flats, asNotes, slide }: { harp: 
   );
 }
 
-function Hole({ harp, hole, state, target, flats }: { harp: Harp; hole: number; state?: HoleState; target?: HoleState; flats: boolean }) {
+function Hole({ harp, hole, state, target, flats }: { harp: Harp; hole: number; state?: HoleState; target?: HoleState; flats: Spelling }) {
   const tip = holeTip(harp, hole, flats);
   const active = state?.blow ?? state?.draw;
   return (
@@ -307,7 +307,7 @@ export function NowPlaying() {
   const held = useApp((s) => s.held);
   const activeEvents = useApp((s) => s.activeEvents);
   const asNotes = useApp((s) => s.readAs === 'notes');
-  const flats = keyUsesFlats(doc.meta.key ?? harp.spec.key);
+  const flats = keySpelling(doc.meta.key ?? harp.spec.key);
   const list = Object.values(held);
   const sounding = list.length
     ? list

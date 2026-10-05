@@ -173,6 +173,7 @@ export function toDoc(song: Song): TabDoc {
     const measureFrom = events.length;
     let t = 0;
     for (const it of [...m.items].sort((a, b) => a.start - b.start || a.dur - b.dur)) {
+      if (it.dur <= EPS && !it.chord) continue;
       if (it.start > t + EPS) {
         pushRest(events, t, it.start);
         prev = null;
@@ -223,6 +224,8 @@ export function sameSounds(a: Sound[], b: Sound[]): boolean {
 }
 
 function itemEvent(it: Item, tie = false): TabEvent {
+  // (Nothing sounds for no time: a zero-length item is only ever a chord marker.)
+  if (it.dur <= EPS) return { kind: 'rest', beats: 0, chord: it.chord };
   if (it.sounds.length && tie) {
     const ev: NoteEvent = { kind: 'note', sounds: it.sounds, beats: it.dur, tied: true };
     if (it.chord) ev.chord = it.chord;
@@ -353,6 +356,11 @@ export function removeItems(song: Song, positions: Pos[]): Song {
 export function updateItem(song: Song, pos: Pos, patch: Partial<Omit<Item, 'start'>>): Song {
   const it = findItem(song, pos);
   if (!it) return song;
+  // A chord symbol on its own (no length) can't sound: it stays a marker until given a length.
+  if (it.dur <= EPS && patch.sounds?.length && !(patch.dur && patch.dur > EPS)) {
+    patch = { ...patch };
+    delete patch.sounds;
+  }
   const chain = chainAt(song, pos);
   if (patch.dur !== undefined) {
     const total = chainLength(song, chain);

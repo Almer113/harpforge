@@ -4,7 +4,7 @@
 import { guessTonic, positionFor, positionName } from '../convert';
 import { soundPitch, type Harmonica } from '../instruments';
 import type { NoteEvent, TabDoc, TabEvent } from '../htab/types';
-import { midiToName, keyUsesFlats } from '../pitch';
+import { midiToName, keySpelling, type Spelling } from '../pitch';
 import type { HoleSound, Sound } from '../types';
 
 export interface PlainTextOptions {
@@ -47,7 +47,7 @@ export function holeToken(s: HoleSound, o: PlainTextOptions): string {
   return `${s.slide ? '<' : ''}${head}${s.hole}${tail}${bend}${over}`;
 }
 
-function soundToken(s: Sound, o: PlainTextOptions, flats: boolean, harp: Harmonica): string {
+function soundToken(s: Sound, o: PlainTextOptions, flats: Spelling, harp: Harmonica): string {
   if (s.type === 'pitch') return midiToName(s.midi, flats);
   if (o.spelling === 'notes') {
     const m = soundPitch(harp, s);
@@ -56,7 +56,7 @@ function soundToken(s: Sound, o: PlainTextOptions, flats: boolean, harp: Harmoni
   return holeToken(s, o);
 }
 
-function noteToken(ev: NoteEvent, o: PlainTextOptions, flats: boolean, harp: Harmonica): string {
+function noteToken(ev: NoteEvent, o: PlainTextOptions, flats: Spelling, harp: Harmonica): string {
   if (ev.sounds.length === 1) return soundToken(ev.sounds[0], o, flats, harp);
   return `(${ev.sounds.map((s) => soundToken(s, o, flats, harp)).join(' ')})`;
 }
@@ -68,7 +68,7 @@ interface Cell {
 }
 
 /** One line of tab as columns: a cell per played note, "|" cells for bars. */
-function cellsOf(events: TabEvent[], o: PlainTextOptions, flats: boolean, harp: Harmonica): Cell[] {
+function cellsOf(events: TabEvent[], o: PlainTextOptions, flats: Spelling, harp: Harmonica): Cell[] {
   const cells: Cell[] = [];
   let pendingChord: string | undefined;
   for (const e of events) {
@@ -135,7 +135,7 @@ function layout(cells: Cell[], o: PlainTextOptions): string[] {
 /** The whole tab as plain text. */
 export function writePlainText(doc: TabDoc, harp: Harmonica, o: PlainTextOptions = DEFAULT_PLAIN_TEXT): string {
   const { meta } = doc;
-  const flats = keyUsesFlats(meta.key ?? harp.spec.key);
+  const flats = keySpelling(meta.key ?? harp.spec.key);
   const out: string[] = [];
   if (o.title) {
     out.push(`${meta.title || 'Untitled'}${meta.artist ? ` — ${meta.artist}` : ''}`);

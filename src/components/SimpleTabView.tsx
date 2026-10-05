@@ -6,7 +6,7 @@ import { holeSoundText, soundText } from '../core/htab/serializer';
 import type { NoteEvent, TabDoc, TabEvent } from '../core/htab/types';
 import { eventKey } from '../core/score';
 import type { Parsed, ReadAs } from '../state/store';
-import { midiToName, keyUsesFlats } from '../core/pitch';
+import { midiToName, keySpelling, type Spelling } from '../core/pitch';
 import { followTo } from './follow';
 import { indexesByLine, useStableClick } from './TabView';
 
@@ -50,7 +50,7 @@ function Token({ ev }: { ev: NoteEvent }) {
 }
 
 /** A note's pitches as names (Notes mode); a chord's notes sit side by side. */
-function NoteNames({ midis, flats }: { midis: (number | null)[]; flats: boolean }) {
+function NoteNames({ midis, flats }: { midis: (number | null)[]; flats: Spelling }) {
   return <>{midis.map((m) => (m === null ? '?' : midiToName(m, flats).replace('#', '♯').replace(/b(?=-?\d)/, '♭'))).join(' ')}</>;
 }
 
@@ -96,7 +96,7 @@ export function SimpleTabPreview({ doc, lines = 2 }: { doc: TabDoc; lines?: numb
 
 export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect, readAs = 'holes' }: Props) {
   const { doc, score, harp } = parsed;
-  const flats = keyUsesFlats(doc.meta.key ?? harp.spec.key);
+  const flats = keySpelling(doc.meta.key ?? harp.spec.key);
   const root = useRef<HTMLDivElement>(null);
   const click = useStableClick(onSelect);
 
@@ -135,7 +135,7 @@ const SimpleLine = memo(function SimpleLine({
   active: string;
   selected: number | null;
   asNotes: boolean;
-  flats: boolean;
+  flats: Spelling;
   onSelect: (scoreIndex: number, ev: NoteEvent) => void;
 }) {
   const { doc, indexByKey, score } = parsed;

@@ -25,7 +25,7 @@ import {
 import { holeSoundText, soundText } from '../../core/htab/serializer';
 import type { BarStyle } from '../../core/htab/types';
 import { canOver, maxBend, soundPitch } from '../../core/instruments';
-import { midiToName } from '../../core/pitch';
+import { midiToName, type Spelling } from '../../core/pitch';
 import { flatsFor } from '../../core/edit/splice';
 import type { HoleSound, Sound } from '../../core/types';
 import { commitSong, durationLabel, mapHoles, parseSoundsInput, stepPitch } from '../../state/editor';
@@ -234,19 +234,20 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
         <>
           <div className="field">
             <span>Breath</span>
-            <div className="seg">
-              <button className={first.breath === 'blow' ? 'on' : ''} onClick={() => set({ sounds: mapHoles(harp, item.sounds, (s) => ({ ...s, breath: 'blow' })) })}>Blow</button>
-              <button className={first.breath === 'draw' ? 'on' : ''} onClick={() => set({ sounds: mapHoles(harp, item.sounds, (s) => ({ ...s, breath: 'draw' })) })}>Draw</button>
+            <div className="seg" role="group" aria-label="Breath">
+              <button className={first.breath === 'blow' ? 'on' : ''} aria-pressed={first.breath === 'blow'} onClick={() => set({ sounds: mapHoles(harp, item.sounds, (s) => ({ ...s, breath: 'blow' })) })}>Blow</button>
+              <button className={first.breath === 'draw' ? 'on' : ''} aria-pressed={first.breath === 'draw'} onClick={() => set({ sounds: mapHoles(harp, item.sounds, (s) => ({ ...s, breath: 'draw' })) })}>Draw</button>
             </div>
           </div>
           {harp.bendable && (
             <div className="field">
               <span>Bend</span>
-              <div className="seg">
+              <div className="seg" role="group" aria-label="Bend">
                 {[0, 1, 2, 3].map((b) => (
                   <button
                     key={b}
                     className={first.bend === b && !first.over ? 'on' : ''}
+                    aria-pressed={first.bend === b && !first.over}
                     disabled={b > maxBend(harp, first.hole, first.breath)}
                     onClick={() => set({ sounds: mapHoles(harp, item.sounds, (s) => ({ ...s, bend: b, over: false })) })}
                     title={b ? `${b === 1 ? 'Half step' : b === 2 ? 'Whole step' : '1½ steps'} down` : 'No bend'}
@@ -255,7 +256,7 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
                   </button>
                 ))}
                 {canOver(harp, first.hole, first.breath) && (
-                  <button className={first.over ? 'on' : ''} onClick={() => set({ sounds: mapHoles(harp, item.sounds, (s) => ({ ...s, over: !s.over, bend: 0 })) })} title="Overblow / overdraw">
+                  <button className={first.over ? 'on' : ''} aria-pressed={!!first.over} onClick={() => set({ sounds: mapHoles(harp, item.sounds, (s) => ({ ...s, over: !s.over, bend: 0 })) })} title="Overblow / overdraw">
                     OB
                   </button>
                 )}
@@ -330,7 +331,7 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
 }
 
 /** Notes mode: type the note, step it, and choose how it's played. */
-function NoteFields({ song, pos, item, flats }: { song: Song; pos: Pos; item: Item; flats: boolean }) {
+function NoteFields({ song, pos, item, flats }: { song: Song; pos: Pos; item: Item; flats: Spelling }) {
   const { harp, doc } = useParsed();
   const names = (sounds: Sound[]) => sounds.map((s) => pitchOf(harp, s)).map((m) => (m === null ? '?' : midiToName(m, flats))).join(' ');
   const [input, setInput] = useState(names(item.sounds));
@@ -402,13 +403,14 @@ function NoteFields({ song, pos, item, flats }: { song: Song; pos: Pos; item: It
           return (
             <div key={k} className="play-as">
               {item.sounds.length > 1 && <span className="muted small pa-note">{midiToName(m!, flats)}</span>}
-              <div className="seg wrap">
+              <div className="seg wrap" role="group" aria-label={item.sounds.length > 1 ? `Play ${midiToName(m!, flats)} as` : 'Play it as'}>
                 {ways.map((w) => {
                   const on = s.type === 'hole' && holeSoundText(s) === holeSoundText(w.sound);
                   return (
                     <button
                       key={holeSoundText(w.sound)}
                       className={`${on ? 'on' : ''} ${w.sound.breath}`}
+                      aria-pressed={on}
                       onClick={() => setSounds(item.sounds.map((x, i) => (i === k ? w.sound : x)))}
                       title={w.cost === 0 ? 'Plain hole' : w.sound.over ? (w.sound.breath === 'blow' ? 'Overblow' : 'Overdraw') : w.sound.bend ? `Bend (${w.sound.bend === 1 ? 'half' : w.sound.bend === 2 ? 'whole' : '1½'} step)` : 'Slide in'}
                     >

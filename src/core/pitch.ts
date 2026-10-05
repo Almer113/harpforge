@@ -9,11 +9,18 @@ export function mod12(n: number): number {
   return ((n % 12) + 12) % 12;
 }
 
-export function pitchClassName(midi: number, flats = false): string {
-  return (flats ? FLAT_NAMES : SHARP_NAMES)[mod12(Math.round(midi))];
+/**
+ * How black keys are named: with flats (true), sharps (false), or per pitch class (a key's
+ * spelling: see keySpelling).
+ */
+export type Spelling = boolean | ((pc: number) => boolean);
+
+export function pitchClassName(midi: number, flats: Spelling = false): string {
+  const pc = mod12(Math.round(midi));
+  return ((typeof flats === 'function' ? flats(pc) : flats) ? FLAT_NAMES : SHARP_NAMES)[pc];
 }
 
-export function midiToName(midi: number, flats = false): string {
+export function midiToName(midi: number, flats: Spelling = false): string {
   const m = Math.round(midi);
   return pitchClassName(m, flats) + (Math.floor(m / 12) - 1);
 }
@@ -98,6 +105,28 @@ export function keyUsesFlats(name: string | undefined): boolean {
   if (!k) return prefersFlats(name);
   if (k.root.length > 1) return k.root.endsWith('b');
   return [5, 10, 3, 8, 1].includes(mod12(k.tonic - MODE_OFFSET[k.mode]));
+}
+
+const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
+const spellings = new Map<string, Spelling>();
+
+/**
+ * How a key names black keys: its own notes as the key signature has them, and notes outside
+ * it that are blue notes or borrowed (♭2, ♭3, ♭6, ♭7 of the tonic) with flats: B♭ in G, not A♯.
+ * (The same function for the same key, so it can be compared.)
+ */
+export function keySpelling(name: string | undefined): Spelling {
+  const base = keyUsesFlats(name);
+  const k = parseKey(name);
+  if (!k) return base;
+  const id = `${k.tonic}:${k.mode}:${base}`;
+  let fn = spellings.get(id);
+  if (!fn) {
+    const doPc = mod12(k.tonic - MODE_OFFSET[k.mode]);
+    fn = (pc: number) => (MAJOR_STEPS.includes(mod12(pc - doPc)) ? base : base || [1, 3, 8, 10].includes(mod12(pc - k.tonic)));
+    spellings.set(id, fn);
+  }
+  return fn;
 }
 
 /** A key moved by `semis` semitones, written the usual way ("G" + 2 → "A", "Em" + 1 → "Fm"). */

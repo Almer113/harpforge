@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { holeSoundText } from '../core/htab/serializer';
-import { midiToName, keyUsesFlats } from '../core/pitch';
+import { midiToName, keySpelling } from '../core/pitch';
 import { startMic, startMidi, stopMic, stopMidi } from '../live/inputs';
 import { startRecording, stopRecording } from '../live/recorder';
 import { hint, practiceTotal, startPractice, stopPractice } from '../state/practice';
@@ -185,7 +185,7 @@ function PracticeControl() {
   }
   const ev = score.events[practice.index];
   const total = practiceTotal();
-  const flats = keyUsesFlats(doc.meta.key ?? harp.spec.key);
+  const flats = keySpelling(doc.meta.key ?? harp.spec.key);
   const target = ev
     ? ev.sounds.map((s, k) => (s.type === 'hole' ? holeSoundText(s) : midiToName(ev.midis[k] ?? 0, flats))).join(' ')
     : '';

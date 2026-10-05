@@ -17,7 +17,7 @@ describe('plain-text tab', () => {
   });
 
   it('writes notes instead of holes when asked', () => {
-    expect(body("4 -4 (4 5) -3' |", { spelling: 'notes' })).toBe("C5 D5 (C5 E5) A#4 |\n");
+    expect(body("4 -4 (4 5) -3' |", { spelling: 'notes' })).toBe("C5 D5 (C5 E5) Bb4 |\n");
   });
 
   it('lines chords up above and lyrics below the notes', () => {

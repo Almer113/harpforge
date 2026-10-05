@@ -115,6 +115,14 @@ function KeyChoice({ from, to, songKey, onClose }: { from: HarmonicaSpec; to: Ha
       window.removeEventListener('mousedown', onDown);
     };
   }, [onClose]);
+  // When it closes, the keyboard goes back to where it was (the harmonica you picked).
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null;
+    return () => {
+      const lost = !document.activeElement || document.activeElement === document.body;
+      if (lost && before && before !== document.body && document.contains(before)) before.focus({ preventScroll: true });
+    };
+  }, []);
   // "an A harp", "an F harp", "a G harp"
   const harpName = `${/^[AEF]/.test(to.key) ? 'an' : 'a'} ${to.key} harp`;
   const pick = (keep: 'holes' | 'notes') => {
@@ -299,12 +307,12 @@ export function HarmonicaChip() {
       label={
         <>
           <span>{harp.name}</span>
-          {position !== undefined && <span className="muted">· {positionName(position)} pos.</span>}
+          {position !== undefined && <span className="muted chip-pos">· {positionName(position)} pos.</span>}
           <span aria-hidden>▾</span>
         </>
       }
       buttonClass="harp-chip"
-      title="Harmonica, key, position and octave"
+      title={`${harp.name}${position !== undefined ? `, ${positionName(position)} position` : ''}: harmonica, key, position and octave`}
       panelLabel="Harmonica"
       kind="panel"
       panelClass="harp-pop"

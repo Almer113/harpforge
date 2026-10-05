@@ -43,7 +43,7 @@ import {
   type Song,
 } from '../../core/edit/model';
 import { soundPitch, specId, type Harmonica as HarmonicaModel } from '../../core/instruments';
-import { midiToName } from '../../core/pitch';
+import { midiToName, type Spelling } from '../../core/pitch';
 import { flatsFor } from '../../core/edit/splice';
 import type { Sound } from '../../core/types';
 import { onPitchPlayed, onPlayed } from '../../live/livePlayer';
@@ -100,7 +100,7 @@ function detailLevel(width: number, ems: number, stack: boolean): '' | 'lod-mid'
 }
 
 /** The widest glyph on a card, in em of its monospace font ("−10ʼ" ≈ 2.6, "C♯5" ≈ 1.9). */
-function glyphEms(sounds: Sound[], midis: (number | null)[], asNotes: boolean, flats: boolean): number {
+function glyphEms(sounds: Sound[], midis: (number | null)[], asNotes: boolean, flats: Spelling): number {
   const CH = 0.6; // a monospace character is 0.6 em wide
   let most = CH;
   sounds.forEach((s, k) => {
@@ -218,9 +218,10 @@ export function VisualEditor() {
         const together = id.startsWith('key:')
           ? Object.keys(st.held).some((k) => k !== id && k.startsWith('key:'))
           : !!li && now - li.at < 90 && id !== 'mouse';
-        if (li && together) {
-          const it = s.measures[li.pos.m]?.items.find((x) => Math.abs(x.start - li.pos.start) < EPS);
-          if (it && !it.sounds.some((x) => JSON.stringify(x) === JSON.stringify(sound))) {
+        const it = li && together ? s.measures[li.pos.m]?.items.find((x) => Math.abs(x.start - li.pos.start) < EPS) : undefined;
+        // (The note it would join may have been taken back meanwhile: then it's a new note.)
+        if (li && it) {
+          if (!it.sounds.some((x) => JSON.stringify(x) === JSON.stringify(sound))) {
             // One hole can't blow and draw at once.
             if (sound.type === 'hole' && it.sounds.some((x) => x.type === 'hole' && x.hole === sound.hole)) {
               st.notify(`Hole ${sound.hole} can’t blow and draw at the same time, so it wasn’t added to the chord.`);
@@ -360,6 +361,8 @@ export function VisualEditor() {
             if (!prev) return;
             e.preventDefault();
             const head = chainAt(s, prev.pos)[0] ?? prev.pos;
+            // A key still held from the note taken back doesn't make the next one a chord with it.
+            lastInsert.current = null;
             let next = deleteNotes(s, [prev.pos], v.insert);
             // Taking back the last notes leaves no empty bars behind at the end.
             while (next.measures.length > 1 && next.measures.length - 1 >= head.m && !next.measures[next.measures.length - 1].items.length) {
@@ -563,7 +566,7 @@ function Toolbar({ song }: { song: Song }) {
       </div>
       <span className="tb-sep" />
       <button className={`btn small step-btn ${ve.step ? 'on' : ''}`} aria-pressed={ve.step} aria-label="Step entry" onClick={() => setVe({ step: !ve.step, justEntered: undefined })} title="Step entry: every hole you play (keyboard, mouse, MIDI, mic) is written at the caret">
-        <span className="rec-dot" /> Step
+        <span className="rec-dot" /> <span className="step-label">Step</span>
       </button>
       <div className="seg icons" role="radiogroup" aria-label="Writing over or in between">
         <button role="radio" aria-checked={!ve.insert} aria-label="Overwrite" className={ve.insert ? '' : 'on'} onClick={() => setVe({ insert: false })} title="Overwrite: new notes replace what’s there (Ins switches)">
@@ -704,7 +707,7 @@ function StatusLine() {
         Next: <b>{durationLabel(toolDuration(ve)).toLowerCase()}</b>
       </span>
       <span className="ve-status-hint">
-        {hint} ·{' '}
+        <span className="hint-text">{hint} · </span>
         <button className="link-btn" onClick={openShortcuts}>
           all shortcuts (?)
         </button>
@@ -742,7 +745,7 @@ interface Drag {
 }
 
 /** A narrow card's label: holes, notes, chord and lyric ("−4  D5 · G7 · “tle”"). */
-function peekText(it: Item, midis: (number | null)[], flats: boolean): string {
+function peekText(it: Item, midis: (number | null)[], flats: Spelling): string {
   if (!it.sounds.length) return ['Rest', it.chord, it.lyric && `“${it.lyric}”`].filter(Boolean).join(' · ');
   const holes = it.sounds.map((s) => (s.type === 'hole' ? holeSoundText(s) : '')).filter(Boolean).join(' ');
   const notes = midis.map((x) => (x === null ? '?' : midiToName(x, flats))).join(' ');
@@ -792,7 +795,7 @@ interface MeasureHandlers {
  * the current one, which of its notes are selected or sounding, the caret, its part of a
  * drag preview), so a click, a caret move or a playback step redraws one or two measures.
  */
-function Score({ song, flats, showSecond, asNotes }: { song: Song; flats: boolean; showSecond: boolean; asNotes: boolean }) {
+function Score({ song, flats, showSecond, asNotes }: { song: Song; flats: Spelling; showSecond: boolean; asNotes: boolean }) {
   const zoom = useApp((s) => s.ve.zoom);
   const selection = useApp((s) => s.ve.selection);
   const caret = useApp((s) => s.ve.caret);
@@ -1093,7 +1096,7 @@ interface MeasureProps {
   harpKey: string;
   asNotes: boolean;
   showSecond: boolean;
-  flats: boolean;
+  flats: Spelling;
   current: boolean;
   /** Starts of the selected notes in this measure ("0,1.5"), and whether exactly one note is selected. */
   selected: string;

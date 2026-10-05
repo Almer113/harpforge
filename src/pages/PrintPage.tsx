@@ -7,7 +7,7 @@ import { SimpleTabView } from '../components/SimpleTabView';
 import { TabView } from '../components/TabView';
 import { guessTonic, positionFor, positionName } from '../core/convert';
 import { rangeLabel } from '../core/instruments';
-import { midiToName, keyUsesFlats } from '../core/pitch';
+import { midiToName, keySpelling } from '../core/pitch';
 import { useApp, useParsed, type SheetView } from '../state/store';
 
 const StaffView = lazy(() => import('../components/StaffView').then((m) => ({ default: m.StaffView })));
@@ -40,7 +40,7 @@ export function PrintPage() {
   const harp = parsed.harp;
   const tonic = guessTonic(parsed.doc, harp);
   const position = tonic !== undefined && harp.spec.family !== 'chromatic' ? positionFor(harp.spec.key, tonic) : undefined;
-  const flats = keyUsesFlats(meta.key ?? harp.spec.key);
+  const flats = keySpelling(meta.key ?? harp.spec.key);
 
   // Ctrl+P on this page prints straight away.
   useEffect(() => {
