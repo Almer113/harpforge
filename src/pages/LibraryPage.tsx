@@ -218,15 +218,19 @@ export function LibraryPage() {
           {/* Always first (whatever the order); not while searching or filtering, where the grid shows only results. */}
           {!q && family === 'all' && (
             <article className="lib-card lib-new">
-              <button className="lib-new-main" onClick={startNew} aria-label="New tab: start from scratch in the editor">
-                <span className="lib-new-plus" aria-hidden>+</span>
-                <b>New tab</b>
-                <span className="muted small">Start from scratch in the editor</span>
+              <button className="lib-new-part main" onClick={startNew} aria-label="New tab: start from scratch in the editor">
+                {NEW_ICONS.plus}
+                <span>New tab</span>
               </button>
-              <div className="lib-new-more small">
-                <button className="link-btn" onClick={importFile}>Open a file…</button>
-                <span aria-hidden>·</span>
-                <button className="link-btn" onClick={openPasteImport}>Paste or type…</button>
+              <div className="lib-new-row">
+                <button className="lib-new-part" onClick={importFile} title="Import a PDF, chord sheet, ABC, MusicXML, MIDI or tab file">
+                  {NEW_ICONS.file}
+                  <span>Open a file</span>
+                </button>
+                <button className="lib-new-part" onClick={openPasteImport} title="Paste tab, notes or a chord sheet from anywhere, or type a song">
+                  {NEW_ICONS.paste}
+                  <span>Paste or type</span>
+                </button>
               </div>
             </article>
           )}
@@ -281,6 +285,18 @@ export function LibraryPage() {
     </section>
   );
 }
+
+// The "+ New tab" card's icons (one stroke style, like the rest of the app's icons).
+const svg = (d: string) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d={d} />
+  </svg>
+);
+const NEW_ICONS = {
+  plus: svg('M12 5v14M5 12h14'),
+  file: svg('M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M12 18v-6M9 15l3-3 3 3'),
+  paste: svg('M9 4h6v3H9zM9 5.5H7a2 2 0 0 0-2 2V19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7.5a2 2 0 0 0-2-2h-2M9 12h6M9 16h4'),
+};
 
 interface TabInfo {
   doc: TabDoc;

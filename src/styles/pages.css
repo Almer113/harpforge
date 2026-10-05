@@ -155,17 +155,23 @@ html { scroll-padding-top: calc(var(--topbar-h) + var(--edit-head-h, 64px) + 14p
 /* Library cards: menus may reach outside the card */
 .lib-card { overflow: visible; position: relative; }
 .lib-card:has(.menu) { z-index: 30; }
-/* The "+ New tab" card, first in the library: a dashed tile like the editor's "add measure". */
-.lib-card.lib-new { border: 2px dashed var(--border-2); background: transparent; min-height: 170px; }
+/* The "+ New tab" card, first in the library: one dashed card in three parts (New tab, and
+   Open a file and Paste or type below it). The part under the mouse fills with brass. */
+.lib-card.lib-new { border: 2px dashed var(--border-2); background: transparent; min-height: 170px; display: grid; grid-template-rows: 1fr 74px; overflow: hidden; }
 .lib-card.lib-new:hover, .lib-card.lib-new:focus-within { border-color: var(--brass); }
-.lib-new-main {
-  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 18px;
-  border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; border-radius: var(--radius) var(--radius) 0 0;
+.lib-new-row { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--border-2); }
+.lib-new-row .lib-new-part + .lib-new-part { border-left: 1px solid var(--border-2); }
+.lib-new-part {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-width: 0; padding: 8px;
+  border: 0; background: transparent; color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background 0.12s, color 0.12s;
 }
-.lib-new-main b { font-size: 16px; }
-.lib-new-plus { font-size: 34px; line-height: 1; color: var(--faint); font-weight: 300; }
-.lib-new-main:hover .lib-new-plus, .lib-new-main:hover b { color: var(--brass-2); }
-.lib-new-more { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px dashed var(--border-2); color: var(--faint); }
+.lib-new-part svg { width: 19px; height: 19px; color: var(--faint); transition: color 0.12s; }
+.lib-new-part.main { font-size: 16px; }
+.lib-new-part.main svg { width: 28px; height: 28px; }
+.lib-new-part:hover { background: rgba(227, 169, 72, 0.12); color: var(--brass-2); }
+.lib-new-part:hover svg { color: var(--brass-2); }
+.lib-new-part:focus-visible { outline: 2px solid var(--focus); outline-offset: -5px; border-radius: 10px; }
 .lib-open { border-radius: var(--radius) var(--radius) 0 0; }
 
 /* Sheet "Show" checklist */
