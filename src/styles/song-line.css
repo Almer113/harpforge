@@ -1,0 +1,96 @@
+/* The song line, and note cards that show less when narrow. */
+
+/* ---------- The song line: the same boxes on Edit and Play ----------
+   Title and artist: a 1px border and 8px padding on both pages (pulled 9px left so the title's
+   text lines up with the bar below); the editor's show on hover. Key, time and tempo: a field box
+   each; the editor's are outlined (with a ▾ on the pickers), Play's are plain text in the same box. */
+.song-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; min-height: 44px; margin: 2px 0 0; }
+.song-line .sl-title, .song-line .sl-artist {
+  box-sizing: border-box; margin: 0; padding: 3px 8px; border: 1px solid transparent; border-radius: 6px;
+  background: transparent; font-family: inherit;
+}
+.song-line .sl-title { margin-left: -9px; margin-right: -10px; font-size: 22px; font-weight: 800; letter-spacing: -0.01em; line-height: 32px; color: var(--text); }
+.song-line .sl-artist { font-size: 14px; font-weight: 400; line-height: 20px; color: var(--muted); }
+.song-line input.sl-title, .song-line input.sl-artist { field-sizing: content; min-width: 5ch; max-width: 100%; outline: none; }
+.song-line.editable :is(.sl-title, .sl-artist):hover { border-color: var(--border-2); }
+.song-line.editable :is(.sl-title, .sl-artist):focus { border-color: var(--brass); background: var(--bg); }
+.song-line.editable :is(.sl-title, .sl-artist)::placeholder { color: var(--faint); }
+
+.sl-item { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+.sl-label { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint); }
+.sl-field {
+  position: relative; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; height: 28px;
+  padding: 0 8px; border: 1px solid transparent; border-radius: 6px;
+  font-size: 13px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.sl-field.pick { padding-right: 24px; } /* room for the chevron (kept on Play too, so nothing moves) */
+.sl-field.unset { color: var(--muted); font-weight: 400; }
+.sl-unit { color: var(--muted); font-weight: 400; }
+.song-line.editable .sl-field { border-color: var(--border-2); background: var(--bg); cursor: pointer; }
+.song-line.editable .sl-field:hover { border-color: #6a5c4c; background: var(--panel-2); }
+.song-line.editable .sl-field:focus-within { border-color: var(--brass); box-shadow: 0 0 0 2px rgba(227, 169, 72, 0.25); }
+.sl-field select, .sl-field input {
+  appearance: none; -moz-appearance: textfield; field-sizing: content; box-sizing: border-box;
+  margin: 0; padding: 0; border: 0; background: transparent; outline: none;
+  font: inherit; color: inherit; height: 100%; cursor: inherit;
+}
+/* The select stretches over the chevron, so a click anywhere in the box opens it. */
+.sl-field.pick select { margin-right: -24px; padding-right: 24px; }
+.sl-field select option { color: var(--text); background: var(--panel); }
+.sl-field input { min-width: 1ch; cursor: text; }
+.sl-field input::-webkit-inner-spin-button, .sl-field input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.sl-chev { position: absolute; right: 8px; top: 50%; margin-top: -3px; color: var(--muted); pointer-events: none; }
+.song-line.editable .sl-field:hover .sl-chev { color: var(--brass-2); }
+
+/* The sound menu's speed (editor), under the sound choices. */
+.pb-speed { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 10px; flex-wrap: nowrap; }
+.pb-speed input[type='range'] { width: 90px; }
+.pb-speed .t-value { min-width: 0; white-space: nowrap; }
+/* Play, stop, loop and metronome: the same 34px buttons on both pages. */
+.play-stop .t-btn { width: 34px; min-width: 34px; height: 32px; padding: 0; }
+
+/* ---------- Note cards: exactly as long as their notes; narrow ones show less ---------- */
+.ve-item.lod-mid .ve-glyphs .glyph { font-size: 14px; }
+.ve-item.lod-mid .ve-glyphs.stack .glyph { font-size: 11px; }
+.ve-item.lod-small, .ve-item.lod-bar { padding: 2px 1px; border-radius: 5px; }
+.ve-item.lod-small .ve-glyphs .glyph { font-size: 11px; }
+.ve-item.lod-small .ve-glyphs.stack .glyph { font-size: 9px; }
+.ve-item.lod-small :is(.g-sign, .n-oct, .g-slide) { display: none; }
+/* Hidden, not removed: every row keeps its height, so the text sits at the same heights at every zoom. */
+.ve-item:is(.lod-small, .lod-bar) .ve-name { visibility: hidden; }
+.ve-item.lod-bar .ve-glyphs { visibility: hidden; }
+.ve-item:is(.lod-small, .lod-bar) .ve-resize { width: 4px; }
+/* Chords and lyrics run on past their card (to the next chord or lyric), above the cards after it. */
+.ve-item > .ve-chord, .ve-item > .ve-lyric {
+  justify-self: start; min-width: 100%; text-align: center; position: relative; z-index: 1;
+  text-overflow: ellipsis; text-shadow: 0 0 3px #171411, 0 0 3px #171411;
+}
+/* A narrow card's instant label (hover, or the one selected note). */
+.ve-item[data-peek]:is(:hover, .solo)::after {
+  content: attr(data-peek); position: absolute; bottom: calc(100% + 5px); left: 50%; transform: translateX(-50%); z-index: 6;
+  padding: 3px 8px; border-radius: 6px; background: #2a241e; border: 1px solid var(--border-2); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  font: 600 12px/1.3 var(--mono); color: var(--text); white-space: pre; pointer-events: none;
+}
+.ve-item.dragging[data-peek]::after { display: none; }
+/* The zoom control, at the end of the status line. */
+.ve-zoom { display: inline-flex; align-items: center; border: 1px solid var(--border-2); border-radius: 7px; overflow: hidden; }
+.ve-zoom button { height: 22px; min-width: 24px; padding: 0 6px; border: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+.ve-zoom button:hover:not(:disabled) { background: var(--panel-2); color: var(--text); }
+.ve-zoom button:disabled { opacity: 0.35; cursor: default; }
+.ve-zoom .ve-zoom-val { min-width: 46px; color: var(--text); border-left: 1px solid var(--border); border-right: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+/* The music and the side panel 10px apart (as the bar and the content are), which leaves the music
+   1072px at the widest: four 4/4 measures at 100% zoom (4 × (4 beats × 64px + 12px)). */
+.ve-main { gap: 10px; }
+
+/* Cards: 2px side padding, so the glyph has as much room as possible. */
+.ve-item { padding: 2px 2px; }
+
+/* Play, no artist: "—" where the editor shows its "Artist" placeholder, in a box exactly as wide. */
+.song-line .sl-artist.empty { display: inline-grid; min-width: 5ch; color: var(--faint); }
+.sl-artist.empty > span { grid-area: 1 / 1; }
+.sl-artist.empty > .sl-sizer { visibility: hidden; }
+
+/* Import: which part of a MIDI file is the melody. */
+.import-part { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; font-size: 13px; }
+.import-part > span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+.import-part select { max-width: 100%; }

@@ -2,7 +2,6 @@
 // converters reason about.
 
 import { getHarmonica, soundPitch, type Harmonica, type HarmonicaSpec } from './instruments';
-import { midiToName } from './pitch';
 import type { ParseIssue, TabDoc, TabMeta } from './htab/types';
 import type { Sound } from './types';
 
@@ -90,8 +89,4 @@ export function buildScore(doc: TabDoc, harp: Harmonica): { score: Score; issues
     });
   });
   return { score: { events, totalBeats: t, bars }, issues };
-}
-
-export function describeMidis(midis: (number | null)[], flats = false): string {
-  return midis.map((m) => (m === null ? '?' : midiToName(m, flats))).join(' ');
 }

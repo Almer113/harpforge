@@ -1,0 +1,58 @@
+/* Text and Split editing: the code editor, the issue list. */
+
+/* ---------- Editor ---------- */
+.editor-split { display: grid; grid-template-columns: minmax(380px, 5fr) 6fr; gap: 16px; align-items: start; }
+.editor-pane { display: flex; flex-direction: column; gap: 8px; position: sticky; top: 74px; }
+.preview-pane { min-height: 300px; max-height: calc(100vh - 220px); overflow: auto; }
+.code-editor {
+  display: flex; height: calc(100vh - 330px); min-height: 320px;
+  background: #100e0c; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+  font-family: var(--mono); font-size: 13.5px; line-height: 21px;
+}
+
+.code-area { position: relative; flex: 1; min-width: 0; }
+.code-mirror, .code-area textarea {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  font: inherit;
+  line-height: inherit;
+  white-space: pre;
+  tab-size: 2;
+  overflow: auto;
+  word-break: normal;
+  /* Same width for the mirror and the textarea (whose scrollbar would otherwise change the wrapping). */
+  scrollbar-gutter: stable;
+}
+.code-mirror { pointer-events: none; color: var(--text); overflow: hidden; counter-reset: line; }
+.code-area textarea { background: transparent; color: transparent; caret-color: var(--brass-2); resize: none; outline: none; }
+.code-area textarea::selection { background: rgba(227, 169, 72, 0.3); color: transparent; }
+.hl-fence { color: var(--faint); }
+.hl-key { color: var(--muted); }
+.hl-value { color: #e9d7b6; }
+.hl-comment { color: var(--faint); font-style: italic; }
+.hl-section { color: var(--brass); font-weight: 700; }
+.hl-lyric { color: #b7a99a; font-style: italic; }
+.hl-chord { color: var(--brass-2); font-weight: 700; }
+.hl-bar { color: var(--muted); }
+.hl-group { color: #d7c5f0; }
+.hl-draw { color: var(--draw); }
+.hl-blow { color: var(--blow); }
+.hl-pitch { color: var(--pitch); }
+.hl-rest, .hl-hold { color: var(--faint); }
+.hl-err { text-decoration: wavy underline var(--danger); text-decoration-skip-ink: none; text-underline-offset: 3px; }
+.hl-warn { text-decoration: wavy underline #e8c547; text-decoration-skip-ink: none; text-underline-offset: 3px; }
+.issues { display: flex; flex-direction: column; gap: 4px; max-height: 120px; overflow: auto; font-size: 12.5px; }
+.issues.ok { color: var(--ok); }
+.issue { text-align: left; border: 0; background: transparent; padding: 3px 8px; border-left: 3px solid; border-radius: 3px; cursor: pointer; color: var(--text); }
+.issue.error { border-color: var(--danger); background: rgba(239, 106, 90, 0.08); }
+.issue.warning { border-color: #e8c547; background: rgba(232, 197, 71, 0.07); }
+.issue b { color: var(--muted); margin-right: 6px; }
+.syntax-help { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; }
+.syntax-help p { margin: 0 0 10px; color: var(--muted); }
+.syntax-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 24px; }
+.syntax-grid div { display: flex; gap: 12px; align-items: baseline; }
+.syntax-grid code { min-width: 170px; color: var(--brass-2); }
+.syntax-grid span { color: var(--muted); }

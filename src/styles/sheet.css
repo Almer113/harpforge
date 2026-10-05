@@ -1,0 +1,64 @@
+/* The Play sheet: tab view and note cards. */
+
+/* ---------- Sheet & tab view ---------- */
+.sheet { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.tabview { display: flex; flex-direction: column; gap: 8px; }
+.tab-section {
+  margin: 10px 0 2px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--brass);
+}
+.tab-line-wrap:first-child .tab-section { margin-top: 0; }
+.tab-line { display: flex; flex-wrap: wrap; row-gap: 10px; }
+.measure {
+  display: flex; flex-wrap: wrap; row-gap: 6px; align-items: stretch; gap: 3px; padding: 0 8px; position: relative; max-width: 100%;
+  border-right: 2px solid var(--border-2);
+}
+.measure:first-child { border-left: 2px solid var(--border-2); }
+.measure.bar-open { border-right-color: transparent; }
+.measure.bar-double { border-right: 5px double var(--border-2); }
+.measure.bar-final { border-right: 5px solid var(--muted); box-shadow: inset -7px 0 0 -5px var(--border-2); }
+.measure.bar-repeat-end { border-right: 5px double var(--muted); padding-right: 14px; }
+.measure.bar-repeat-start { border-right: 5px double var(--muted); }
+.repeat-dots.right { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 4px; height: 14px; background: radial-gradient(circle, var(--muted) 1.6px, transparent 2px) 0 0 / 4px 7px; }
+.repeat-dots.left { display: none; }
+
+.card {
+  display: grid; grid-template-rows: 16px 1fr auto minmax(16px, auto); justify-items: center; align-items: center;
+  padding: 2px 4px; border-radius: 9px; border: 1px solid transparent; background: transparent; cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, transform 0.1s;
+  min-height: 82px;
+}
+.card:hover { background: var(--panel-2); border-color: var(--border); }
+.card.selected { border-color: var(--brass); }
+.card.active { background: rgba(227, 169, 72, 0.16); border-color: var(--brass-2); transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35); }
+.card.bad { border-color: rgba(239, 106, 90, 0.7); background: rgba(239, 106, 90, 0.08); }
+.card.marker { min-width: 0; padding: 2px 0; cursor: default; }
+.card-chord { font-weight: 800; font-size: 12.5px; color: var(--brass-2); white-space: nowrap; justify-self: start; }
+.card-body { display: flex; align-items: center; }
+.card-note { font-family: var(--mono); font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+.card-lyric {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+  /* Phrases (chord sheets) wrap inside their card instead of stretching it. */
+  max-width: 15em;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25;
+}
+
+.rest-glyph { font-size: 22px; color: var(--faint); }
+.glyphs { display: flex; gap: 2px; }
+.glyphs.stack { flex-direction: column-reverse; gap: 0; line-height: 1.05; }
+.glyphs.stack .glyph { font-size: 15px; }
+.glyph { display: inline-flex; align-items: baseline; font-family: var(--mono); font-weight: 700; font-size: 21px; }
+.glyph.blow { color: var(--blow); }
+.glyph.draw { color: var(--draw); }
+.glyph.pitch { color: var(--pitch); font-size: 16px; }
+.card.short .glyph { font-size: 17px; }
+.g-sign { font-size: 0.8em; margin-right: 1px; }
+.g-bend { color: #fff; font-size: 0.9em; margin-left: 1px; letter-spacing: -0.1em; }
+.g-over { font-size: 0.6em; color: #fff; border: 1.5px solid currentColor; border-radius: 50%; width: 1.25em; height: 1.25em; display: inline-flex; align-items: center; justify-content: center; margin-left: 2px; align-self: center; }
+.g-slide { font-size: 0.8em; color: #fff; margin-right: 1px; }
+.tab-empty { text-align: center; padding: 30px; color: var(--text); }
+.tab-empty p { margin: 4px 0; }

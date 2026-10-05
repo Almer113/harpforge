@@ -77,6 +77,7 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `src/audio/engineImpl.ts` | Live voices and transport playback (Tone.js) |
 | `src/audio/voices.ts` | Sample player (VCSL harmonica) and synthesized reed |
 | `src/audio/pitch.ts` | Pitch detection (YIN) for the microphone |
+| `src/styles/` | Stylesheets by area; `index.css` imports them in cascade order (keep it) |
 | `scripts/prepare-samples.py` | Turns the VCSL recordings into web-ready, looped samples |
 | `src/live` | Keyboard/mouse input and recording |
 | `src/core/edit/model.ts` | Measure model behind the visual editor (placement, moves, re-barring) |

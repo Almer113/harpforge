@@ -40,10 +40,6 @@ export async function listTabs(): Promise<SavedTab[]> {
   return db.tabs.orderBy('updatedAt').reverse().toArray();
 }
 
-export async function getTab(id: string): Promise<SavedTab | undefined> {
-  return db.tabs.get(id);
-}
-
 /** Saves text; updates the existing entry when `id` is given and still exists. */
 export async function saveTab(text: string, id?: string | null): Promise<string> {
   const now = Date.now();

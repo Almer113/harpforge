@@ -260,11 +260,6 @@ export function findItem(song: Song, pos: Pos): Item | undefined {
   return song.measures[pos.m]?.items.find((it) => near(it.start, pos.start));
 }
 
-/** The item covering a time in a measure (for clicks on a note's body). */
-export function itemAt(song: Song, m: number, time: number): Item | undefined {
-  return song.measures[m]?.items.find((it) => it.start - EPS <= time && time < itemEnd(it) - EPS);
-}
-
 /**
  * Places an item, overwriting what it lands on: items starting inside its span are
  * removed and an item running into it is shortened. A note longer than the room

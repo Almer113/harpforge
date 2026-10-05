@@ -15,7 +15,6 @@ vi.mock('./storage/library', async (importOriginal) => {
   return {
     ...real,
     listTabs: async () => tabs.map((t) => ({ ...t })),
-    getTab: async (id: string) => tabs.find((t) => t.id === id),
     saveTab: async (_text: string, id?: string | null) => id ?? 'new',
     deleteTab: async () => undefined,
     persistStorage: async () => true,

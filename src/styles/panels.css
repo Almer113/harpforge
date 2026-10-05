@@ -1,0 +1,132 @@
+/* Library, view switch, staff view, menus, dialogs, toasts. */
+
+/* ---------- Convert ---------- */
+
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.panel.wide { grid-column: 1 / -1; }
+
+.plain-editor {
+  height: 260px; resize: vertical; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border);
+  background: #100e0c; font-family: var(--mono); font-size: 13px; line-height: 20px; outline: none; white-space: pre;
+}
+.plain-editor:focus { border-color: var(--brass); }
+.hint { margin: 0; color: var(--muted); font-size: 12.5px; }
+.suggestions { display: flex; flex-direction: column; gap: 6px; max-height: 330px; overflow: auto; }
+.suggestion {
+  display: flex; align-items: center; gap: 12px; text-align: left; padding: 8px 10px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg-2);
+}
+.suggestion:hover { border-color: var(--border-2); }
+.suggestion.active { border-color: var(--brass); background: rgba(227, 169, 72, 0.1); }
+.rank { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--panel-2); font-weight: 800; font-size: 12px; color: var(--muted); flex: none; }
+.suggestion.active .rank { background: var(--brass); color: #22190d; }
+.s-main { display: flex; flex-direction: column; gap: 3px; }
+.s-tags { display: flex; gap: 6px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+.s-tags span { background: var(--panel-2); padding: 0 7px; border-radius: 999px; }
+.s-tags .bad { color: var(--danger); }
+.s-tags .good { color: var(--ok); }
+
+/* ---------- Library ---------- */
+.lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.lib-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; overflow: hidden; }
+.lib-card.current { border-color: var(--brass); }
+.lib-open { border: 0; background: transparent; text-align: left; padding: 14px 16px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.lib-open:hover h3 { color: var(--brass-2); }
+.lib-preview { margin: 0; width: 100%; font-size: 12px; color: var(--muted); background: var(--bg-2); border-radius: 8px; padding: 8px 10px; overflow: hidden; white-space: pre; text-overflow: ellipsis; }
+.lib-actions { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 16px 14px; border-top: 1px solid var(--border); }
+
+/* ---------- Sheet view switch ---------- */
+.seg { display: inline-flex; background: var(--bg-2); border: 1px solid var(--border); border-radius: 9px; padding: 2px; }
+.seg button { border: 0; background: transparent; color: var(--muted); padding: 4px 12px; border-radius: 7px; cursor: pointer; font-weight: 600; font-size: 12.5px; }
+.seg button.on { background: var(--panel-2); color: var(--brass-2); box-shadow: inset 0 0 0 1px var(--border-2); }
+
+/* ---------- Staff view (abcjs) ---------- */
+.staffview { width: 100%; overflow-x: auto; }
+.staffview svg { display: block; }
+.staffview .abcjs-note, .staffview .abcjs-rest { cursor: pointer; }
+.staffview .abcjs-playing { fill: var(--brass-2) !important; stroke: var(--brass-2); }
+.staffview .abcjs-selected-note { fill: var(--draw) !important; }
+.staffview .abcjs-lyric { fill: var(--muted); }
+.staffview .abcjs-chord { fill: var(--brass-2); }
+.staffview .abcjs-title { fill: var(--text); }
+
+/* ---------- Menus ---------- */
+.menu-wrap { position: relative; display: inline-block; }
+.menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; min-width: 250px;
+  background: #241f1a; border: 1px solid var(--border-2); border-radius: 12px; padding: 6px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55); display: flex; flex-direction: column;
+}
+.lib-actions .menu { right: auto; left: 0; bottom: calc(100% + 6px); top: auto; }
+.menu-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; border: 0; background: transparent; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
+.menu-item:hover { background: var(--panel-2); }
+.mi-name { font-weight: 600; }
+.mi-ext { color: var(--faint); font-family: var(--mono); font-size: 11.5px; margin-left: 4px; }
+.mi-hint { color: var(--muted); font-size: 12px; }
+.mi-loses { color: var(--faint); font-size: 11px; font-style: italic; }
+
+/* ---------- Modal ---------- */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 60; background: rgba(8, 6, 5, 0.66); backdrop-filter: blur(3px);
+  display: grid; place-items: center; padding: 24px; animation: fade-in 0.12s ease-out;
+}
+@keyframes fade-in { from { opacity: 0; } }
+.modal {
+  width: min(1060px, 100%); max-height: calc(100vh - 48px); overflow: auto;
+  background: var(--panel); border: 1px solid var(--border-2); border-radius: 16px; padding: 18px 20px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); display: flex; flex-direction: column; gap: 14px;
+}
+.modal-head { display: flex; align-items: center; gap: 10px; }
+.modal-head h2 { font-size: 18px; }
+.modal-x { margin-left: auto; border: 0; background: transparent; color: var(--muted); font-size: 24px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.modal-x:hover { color: var(--text); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.paste-box { height: 180px; }
+.import-grid { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
+.import-info { display: flex; flex-direction: column; gap: 10px; }
+.import-info h3 { font-size: 17px; }
+.import-info h4 { margin: 4px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); }
+.import-preview { max-height: 460px; overflow: auto; }
+.suggestions.compact { max-height: none; }
+.suggestions.compact .suggestion { padding: 6px 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); font-weight: 700; }
+@media (max-width: 860px) { .import-grid { grid-template-columns: 1fr; } }
+
+/* ---------- Toast ---------- */
+.toast {
+  /* Above dialogs too ("Copied ✓" from a dialog must be seen). */
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 90;
+  background: #2f2821; border: 1px solid var(--border-2); padding: 10px 18px; border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); animation: toast-in 0.18s ease-out;
+}
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+
+@media (max-width: 900px) {
+  .editor-split { grid-template-columns: 1fr; }
+  .editor-pane { position: static; }
+}
+
+/* Octave buttons in the harmonica picker */
+.octave-ctl { display: flex; flex-direction: column; gap: 3px; }
+.octave-ctl > span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); font-weight: 700; }
+.octave-ctl .seg button { padding: 5px 11px; font-size: 11px; }
+.seg button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Import progress */
+.progress-box { display: flex; gap: 16px; align-items: center; padding: 18px 4px; }
+.progress-text { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.progress-bar { height: 6px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
+.progress-bar > div { height: 100%; background: var(--brass); transition: width 0.25s; }
+.spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--panel-2); border-top-color: var(--brass); animation: spin 0.8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Drag & drop */
+.drop-overlay {
+  position: fixed; inset: 0; z-index: 70; pointer-events: none;
+  display: grid; place-items: center; background: rgba(19, 17, 15, 0.7);
+  border: 3px dashed var(--brass); border-radius: 18px; margin: 10px;
+}
+.drop-overlay div { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.drop-overlay b { font-size: 22px; color: var(--brass-2); }
+.drop-overlay span { color: var(--muted); }
