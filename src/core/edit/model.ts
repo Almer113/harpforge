@@ -299,14 +299,22 @@ export function placeItem(song: Song, m: number, item: Item): Song {
  */
 function roomEnd(song: Song, m: number, start: number): number {
   const meas = song.measures[m];
-  const end = meas ? Math.min(song.cap, measureSpan(song, meas)) : song.cap;
+  // The last bar (a short last bar, the end of an unbarred tab) just grows: there's no next one.
+  if (!meas || m >= song.measures.length - 1) return song.cap;
+  const end = Math.min(song.cap, measureSpan(song, meas));
   return start < end - EPS ? end : song.cap;
+}
+
+/** A tab written without bar lines (every measure runs on). */
+function unbarred(song: Song): boolean {
+  return song.measures.length > 0 && song.measures.every((m) => m.endBar === 'none');
 }
 
 /** Places an item within one measure (clipped to it). */
 function placeOne(song: Song, m: number, item: Item): Song {
   const s = cloneSong(song);
-  while (s.measures.length <= m) s.measures.push(emptyMeasure(false));
+  const noBars = unbarred(s);
+  while (s.measures.length <= m) s.measures.push({ ...emptyMeasure(false), endBar: noBars ? 'none' : 'single' });
   const meas = s.measures[m];
   const start = Math.max(0, Math.min(item.start, s.cap - EPS));
   const dur = item.dur <= EPS ? 0 : Math.min(item.dur, roomEnd(s, m, start) - start);
@@ -617,7 +625,13 @@ function flatten(song: Song, measures: Measure[]): { abs: AbsItem[]; marks: Mark
  * A repeat sign or double bar always gets a bar line: when it falls inside a new bar, the
  * bar before it ends early (a short bar), so the music and the repeat stay exactly the same.
  */
-function rebar(cap: number, abs: AbsItem[], marks: Mark[], total: number, opts: { pickup: number; lastShort: boolean; firstBreak: boolean; info?: RebarInfo }): Measure[] {
+function rebar(
+  cap: number,
+  abs: AbsItem[],
+  marks: Mark[],
+  total: number,
+  opts: { pickup: number; lastShort: boolean; firstBreak: boolean; info?: RebarInfo; keepLines?: boolean; noBars?: boolean },
+): Measure[] {
   const { pickup } = opts;
   // Where bar lines must fall: repeat signs and double bars.
   const keep = new Set<number>();
@@ -641,6 +655,18 @@ function rebar(cap: number, abs: AbsItem[], marks: Mark[], total: number, opts: 
     t = next;
   }
   if (opts.info) opts.info.shortBars = shortBars;
+  // `keepLines`: a line that starts inside a bar still starts after the same note; the bar is
+  // split over the two lines (its first part runs on without a bar line), as it was written.
+  const splitAt = new Set<number>();
+  if (opts.keepLines) {
+    for (const mk of marks) {
+      if (!(mk.m.lineBreak || mk.m.section !== undefined) || mk.at <= EPS || mk.at >= total - 1e-3) continue;
+      if (starts.some((x) => near(x, mk.at))) continue;
+      splitAt.add(mk.at);
+      starts.push(mk.at);
+    }
+    starts.sort((a, b) => a - b);
+  }
   const count = starts.length;
   const indexAt = (at: number) => {
     let i = 0;
@@ -650,6 +676,8 @@ function rebar(cap: number, abs: AbsItem[], marks: Mark[], total: number, opts: 
   const startOf = (mi: number) => starts[Math.max(0, Math.min(count - 1, mi))];
   const spanOf = (mi: number) => (mi + 1 < count ? starts[mi + 1] - starts[mi] : cap);
   const measures: Measure[] = Array.from({ length: count }, (_, i) => emptyMeasure(i === 0 && opts.firstBreak));
+  for (let i = 0; i + 1 < count; i++) if (opts.noBars || [...splitAt].some((x) => near(x, starts[i + 1]))) measures[i].endBar = 'none';
+  if (opts.noBars) measures[count - 1].endBar = 'none';
   // Short bars (the pickup, and bars ending early at a repeat sign) keep their length.
   for (let i = 0; i + 1 < count; i++) if (spanOf(i) < cap - EPS) measures[i].len = spanOf(i);
   for (const it of abs) {
@@ -683,7 +711,7 @@ function rebar(cap: number, abs: AbsItem[], marks: Mark[], total: number, opts: 
     nm.src ??= mk.m.src;
     // Bar lines move with the music when a new bar line falls on the same beat.
     if (mk.m.startBar && near(startOf(mi), mk.at)) nm.startBar = mk.m.startBar;
-    if (mk.m.endBar !== 'single' && mk.m.endBar !== 'none') {
+    if (mk.m.endBar !== 'single' && mk.m.endBar !== 'none' && !opts.noBars) {
       const ei = Math.max(0, Math.min(count - 1, indexAt(mk.end - 1e-3)));
       if (near(startOf(ei) + spanOf(ei), mk.end) || ei === count - 1) measures[ei].endBar = mk.m.endBar;
     }
@@ -717,10 +745,12 @@ export function setTimeSignature(song: Song, time: string, reflow: boolean, info
   const first = song.measures[0];
   const pickup = first?.len !== undefined && first.len < song.cap - EPS && first.endBar !== 'none' ? marks[0].end : 0;
   // Re-bar up to the end of the last note (trailing empty space isn't music).
+  // (Up to a closing repeat sign or double bar, though: the rests before it are part of the repeat.)
   const lastNoteEnd = abs.reduce((a, it) => Math.max(a, it.at + it.dur), 0);
-  const total = lastNoteEnd > EPS ? lastNoteEnd : t;
+  const lastMark = marks.reduce((a, mk) => (mk.m.endBar === 'repeat-end' || mk.m.endBar === 'double' ? Math.max(a, mk.end) : a), 0);
+  const total = Math.max(lastNoteEnd > EPS ? lastNoteEnd : t, lastMark);
   const last = song.measures[song.measures.length - 1];
-  const measures = rebar(cap, abs, marks, total, { pickup: pickup > EPS && pickup < cap - EPS ? pickup : 0, lastShort: last?.len !== undefined, firstBreak: true, info });
+  const measures = rebar(cap, abs, marks, total, { pickup: pickup > EPS && pickup < cap - EPS ? pickup : 0, lastShort: last?.len !== undefined || lastMark >= total - EPS, firstBreak: true, info, noBars: unbarred(song) });
   return { meta, measures, cap };
 }
 
@@ -751,10 +781,20 @@ export function posAtReal(song: Song, beat: number): Pos {
  */
 export function ripple(song: Song, at: Pos, delta: number): Song {
   if (Math.abs(delta) < EPS || at.m >= song.measures.length) return song;
-  const k = at.m;
+  // Start at the real start of the bar: a bar split over two lines of text starts on the line before.
+  let k = at.m;
+  let from = at.start;
+  while (k > 0 && song.measures[k - 1].endBar === 'none' && song.measures[k - 1].len !== undefined) {
+    k--;
+    from += measureSpan(song, song.measures[k]);
+  }
+  const noBars = unbarred(song);
+  if (noBars) {
+    from = realBeat(song, at);
+    k = 0;
+  }
   const tail = song.measures.slice(k);
   const { abs, marks, t } = flatten(song, tail);
-  const from = at.start;
   const moved = abs
     // Closing a gap: whatever is still in it goes (callers clear it first).
     .filter((it) => !(delta < 0 && it.at >= from + delta - EPS && it.at < from - EPS))
@@ -763,9 +803,10 @@ export function ripple(song: Song, at: Pos, delta: number): Song {
   const lastNoteEnd = moved.reduce((a, it) => Math.max(a, it.at + it.dur), 0);
   const total = Math.max(lastNoteEnd, t + delta, EPS);
   const last = tail[tail.length - 1];
-  // The bar it starts in keeps its length: a pickup stays a pickup.
-  const own = tail[0].len !== undefined ? Math.min(song.cap, measureSpan(song, tail[0])) : song.cap;
-  const measures = rebar(song.cap, moved, shifted, total, { pickup: own < song.cap - EPS ? own : 0, lastShort: last?.len !== undefined, firstBreak: tail[0].lineBreak });
+  // The bar it starts in keeps its length: a pickup stays a pickup (a bar that only runs on to
+  // the next line isn't one).
+  const own = tail[0].len !== undefined && tail[0].endBar !== 'none' ? Math.min(song.cap, measureSpan(song, tail[0])) : song.cap;
+  const measures = rebar(song.cap, moved, shifted, total, { pickup: own < song.cap - EPS && !noBars ? own : 0, lastShort: last?.len !== undefined, firstBreak: tail[0].lineBreak, keepLines: true, noBars });
   return keepFinalBarLast({ ...song, measures: [...cloneSong(song).measures.slice(0, k), ...measures] });
 }
 

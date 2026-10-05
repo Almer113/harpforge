@@ -100,7 +100,9 @@ export function parseChordPro(text: string): Imported {
         pendingSection = undefined;
       }
       if (!chordParts.length) continue;
-      chordParts[0].text = orphanLyric + (orphanLyric ? ' ' : '') + chordParts[0].text.trimStart();
+      // ("Well-[G]known": no space either side of the chord, so the word carries on.)
+      const glue = lead && !/\s$/.test(parts[0].text) && !/^\s/.test(chordParts[0].text) ? '' : ' ';
+      chordParts[0].text = orphanLyric + (orphanLyric ? glue : '') + chordParts[0].text.trimStart();
       orphanLyric = '';
     }
     // A lead-in (or a whole line without chords) continues the previous chord.

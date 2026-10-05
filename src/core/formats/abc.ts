@@ -562,11 +562,13 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
       order.push([l, ei]);
       if (ev.kind === 'rest') {
         parts.push(`${prefix}${chord}z${len}`);
+        lastTieable = null;
         return;
       }
       const midis = eventMidis(ev, harp);
       if (!midis.length) {
         parts.push(`${prefix}${chord}z${len}`);
+        lastTieable = null;
         return;
       }
       const body = midis.length === 1 ? noteText(midis[0]) : `[${midis.map(noteText).join('')}]`;

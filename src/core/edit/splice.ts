@@ -10,7 +10,7 @@
 
 import { parseHtab, splitHeader } from '../htab/parser';
 import { lineText, type SerializeOptions } from '../htab/serializer';
-import type { ParseIssue, TabLine } from '../htab/types';
+import { beatsPerBar, type ParseIssue, type TabLine } from '../htab/types';
 import { keyUsesFlats } from '../pitch';
 import { EPS, fromDoc, lineGroups, toDoc, type Song } from './model';
 
@@ -155,9 +155,9 @@ function rawLines(text: string, bodyStart: number): { raw: string[]; starts: num
 export function replaceLines(oldText: string, lines: TabLine[], flats?: boolean, report?: SpliceReport): string {
   const { bodyStart } = splitHeader(oldText);
   const { doc: oldDoc, issues } = parseHtab(oldText);
-  const opts: SerializeOptions = { flats: flatsFor(oldText, oldDoc.meta.key) };
+  const opts: SerializeOptions = { flats: flatsFor(oldText, oldDoc.meta.key), barBeats: beatsPerBar(oldDoc.meta) };
   // Rewritten lines may be spelled for a new key (a transposed tab).
-  const newOpts: SerializeOptions = { flats: flats ?? opts.flats };
+  const newOpts: SerializeOptions = { ...opts, flats: flats ?? opts.flats };
   const { raw, starts } = rawLines(oldText, bodyStart);
   const replace = new Map<number, { to: number; text: string[] }>();
   oldDoc.lines.forEach((l, li) => {
@@ -189,7 +189,7 @@ export function replaceLines(oldText: string, lines: TabLine[], flats?: boolean,
 export function spliceBody(oldText: string, song: Song, report?: SpliceReport): string {
   const { bodyStart } = splitHeader(oldText);
   const { doc: oldDoc, issues } = parseHtab(oldText);
-  const opts: SerializeOptions = { flats: flatsFor(oldText, oldDoc.meta.key) };
+  const opts: SerializeOptions = { flats: flatsFor(oldText, oldDoc.meta.key), barBeats: beatsPerBar(oldDoc.meta) };
   const tell = (kept: string[]) => report?.kept.push(...kept);
 
   // Raw lines of the body, and which belong to each tab line.

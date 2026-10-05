@@ -40,7 +40,7 @@ export function copyText(song: Song, positions: Pos[]): string {
   for (let m = first.m, t = 0; t < end - EPS; m++) {
     const src = song.measures[m];
     const span = (src ? measureSpan(song, src) : song.cap) - (m === first.m ? first.start : 0);
-    measures.push({ items: [], endBar: 'single', lineBreak: m === first.m, len: Math.min(span, end - t) });
+    measures.push({ items: [], endBar: src?.endBar === 'none' ? 'none' : 'single', lineBreak: m === first.m, len: Math.min(span, end - t) });
     t += span;
   }
   let s: Song = { meta: song.meta, cap: song.cap, measures };

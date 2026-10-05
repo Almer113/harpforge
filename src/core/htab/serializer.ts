@@ -2,11 +2,13 @@
 
 import { midiToName } from '../pitch';
 import type { HoleSound, Sound } from '../types';
-import type { BarEvent, NoteEvent, RestEvent, TabDoc, TabEvent, TabLine, TabMeta } from './types';
+import { beatsPerBar, type BarEvent, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine, type TabMeta } from './types';
 import { headerValue } from './parser';
 
 export interface SerializeOptions {
   flats?: boolean;
+  /** Beats in a bar (from the time signature): a line's first bar is a pickup only if shorter. */
+  barBeats?: number;
 }
 
 export function holeSoundText(s: HoleSound, omitBreath = false): string {
@@ -192,7 +194,9 @@ export function eventsText(events: TabEvent[], opts: SerializeOptions = {}): str
   const flush = (beforeBar: boolean) => {
     if (!stretch.length) return;
     // The first bar of a line, when it's short, is a pickup: its beats count from its end.
-    out.push(...stretchText(stretch, opts, lineStart && beforeBar));
+    const len = stretch.reduce((a, e) => a + e.beats, 0);
+    const short = opts.barBeats === undefined || len < opts.barBeats - EPS;
+    out.push(...stretchText(stretch, opts, lineStart && beforeBar && short));
     stretch = [];
     lineStart = false;
   };
@@ -268,7 +272,7 @@ export function bodyText(lines: TabLine[], opts: SerializeOptions = {}): string 
 }
 
 export function serializeHtab(doc: TabDoc, opts: SerializeOptions = {}): string {
-  return headerText(doc.meta) + '\n' + bodyText(doc.lines, opts) + '\n';
+  return headerText(doc.meta) + '\n' + bodyText(doc.lines, { barBeats: beatsPerBar(doc.meta), ...opts }) + '\n';
 }
 
 /** Breaks a flat list of events into lines of `barsPerLine` bars (or `notesPerLine` if no bars). */

@@ -10,8 +10,21 @@ import { eventMidis, keyFifths, notesMeta, type Imported } from './common';
 
 // ---- Reading -------------------------------------------------------------------
 
-/** Grids a beat can be read in, simplest first. */
-const BEAT_GRIDS = [1 / 2, 1 / 4, 1 / 3, 1 / 6, 1 / 8, 1 / 5, 1 / 7, 1 / 12];
+/**
+ * Grids a beat can be read in, simplest first, with how far off a note may start. Odd
+ * tuplets need near-exact timing (a file written by a program), so a human's slightly
+ * uneven eighths aren't read as quintuplets.
+ */
+const BEAT_GRIDS: [number, number][] = [
+  [1 / 2, 0.03],
+  [1 / 4, 0.03],
+  [1 / 3, 0.03],
+  [1 / 6, 0.02],
+  [1 / 8, 0.02],
+  [1 / 5, 0.005],
+  [1 / 7, 0.005],
+  [1 / 12, 0.005],
+];
 
 interface RawNote {
   start: number;
@@ -201,12 +214,24 @@ export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Impor
   }
   const beatGrid = new Map<number, number>();
   for (const [k, offs] of byBeat) {
-    const g = BEAT_GRIDS.find((c) => offs.every((o) => Math.abs(o - Math.round(o / c) * c) < 0.03));
-    if (g !== undefined) beatGrid.set(k, g);
+    const g = BEAT_GRIDS.find(([c, tol]) => offs.every((o) => Math.abs(o - Math.round(o / c) * c) < tol));
+    if (g !== undefined) beatGrid.set(k, g[0]);
   }
   const gridAt = (at: number) => beatGrid.get(Math.floor(at + 1e-6)) ?? grid;
-  const notes = chosen.notes.map((n) => ({ start: toBeats(n.start), end: toBeats(n.end), sound: { type: 'pitch', midi: n.midi } as Sound }));
-  const clusters = quantize(notes, gridAt, (a, b) => a.type === 'pitch' && b.type === 'pitch' && a.midi === b.midi);
+  // A note's end (often played short) snaps to whichever is nearer: its beat's grid or the song's.
+  const snapEnd = (x: number) => {
+    const a = Math.round(x / gridAt(x)) * gridAt(x);
+    const b = Math.round(x / grid) * grid;
+    return Math.abs(a - x) <= Math.abs(b - x) ? a : b;
+  };
+  // A note that stops just before the next one starts (played or written slightly short) lasts until it.
+  const starts = [...new Set(chosen.notes.map((n) => toBeats(n.start)))].sort((x, y) => x - y);
+  const notes = chosen.notes.map((n) => {
+    const end = toBeats(n.end);
+    const next = starts.find((x) => x > toBeats(n.start) + 1e-6);
+    return { start: toBeats(n.start), end: next !== undefined && next >= end && next - end <= 0.08 ? next : end, sound: { type: 'pitch', midi: n.midi } as Sound };
+  });
+  const clusters = quantize(notes, gridAt, (a, b) => a.type === 'pitch' && b.type === 'pitch' && a.midi === b.midi, snapEnd);
   for (const c of clusters) c.sounds.sort((a, b) => (a.type === 'pitch' && b.type === 'pitch' ? a.midi - b.midi : 0));
   const events = clustersToEvents(clusters, beatsPerBar(meta));
   const parts = candidates.length > 1 ? candidates.map((c) => ({ id: c.id, label: c.label })) : undefined;

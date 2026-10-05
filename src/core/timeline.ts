@@ -14,7 +14,12 @@ export interface TimedCluster {
  * Snaps timed notes to a grid and merges notes that start together into chords. The grid
  * can differ from beat to beat (a function of the time): triplets here, sixteenths there.
  */
-export function quantize(notes: { start: number; end: number; sound: Sound }[], grid: number | ((at: number) => number), dedupe: (a: Sound, b: Sound) => boolean): TimedCluster[] {
+export function quantize(
+  notes: { start: number; end: number; sound: Sound }[],
+  grid: number | ((at: number) => number),
+  dedupe: (a: Sound, b: Sound) => boolean,
+  snapEnd?: (at: number) => number,
+): TimedCluster[] {
   const gridAt = typeof grid === 'number' ? () => grid : grid;
   const q = (x: number) => {
     const g = gridAt(x);
@@ -23,7 +28,7 @@ export function quantize(notes: { start: number; end: number; sound: Sound }[], 
   const clusters: TimedCluster[] = [];
   for (const n of notes) {
     const start = q(n.start);
-    const end = Math.max(start + gridAt(n.start), q(n.end));
+    const end = Math.max(start + gridAt(n.start), snapEnd ? Math.max(0, snapEnd(n.end)) : q(n.end));
     const c = clusters.find((k) => Math.abs(k.start - start) < 1e-9);
     if (c) {
       if (!c.sounds.some((s) => dedupe(s, n.sound))) c.sounds.push(n.sound);
