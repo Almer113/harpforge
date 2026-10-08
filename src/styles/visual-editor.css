@@ -203,3 +203,7 @@
 .kc-title { font-weight: 700; }
 .kc-desc { font-size: 12px; color: var(--muted); line-height: 1.35; }
 .key-choice > .btn { align-self: flex-end; }
+/* Notes in the looped passage: a brass line under them, as on the Play page. */
+.ve-item.in-loop { box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6); }
+.ve-item.in-loop.selected { box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6), 0 0 0 2px var(--brass-2), 0 6px 16px rgba(0, 0, 0, 0.4); }
+.ve-item.in-loop.playing { box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6), 0 0 0 2px var(--ok), 0 0 18px rgba(124, 207, 138, 0.45); }

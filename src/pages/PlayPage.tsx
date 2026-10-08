@@ -6,7 +6,7 @@ import { Sheet } from '../components/Sheet';
 import { SongLine } from '../components/editor/SongDetails';
 import { Popover } from '../components/Popover';
 import { useHarmonicaKeyboard } from '../live/useHarmonicaKeyboard';
-import { selectEvent } from '../state/playback';
+import { extendPassage, selectEvent } from '../state/playback';
 import { useApp, useParsed, type HarpSize } from '../state/store';
 import type { Harmonica as HarmonicaT } from '../core/instruments';
 
@@ -49,7 +49,7 @@ export function PlayPage() {
         <InputBar />
       </div>
 
-      <Sheet parsed={parsed} onSelect={(i) => selectEvent(i)} />
+      <Sheet parsed={parsed} onSelect={(i, _ev, extend) => (extend ? extendPassage(i) : selectEvent(i))} />
     </section>
   );
 }
@@ -68,6 +68,7 @@ function KeyHelp({ harp }: { harp: HarmonicaT }) {
       {holes > 12 && <span><kbd>←</kbd><kbd>→</kbd> move keys</span>}
       <span>Mouse: drag sideways to glide{bendable ? ', drag out to bend' : ''}</span>
       <span><kbd>Enter</kbd> play / pause · <kbd>Esc</kbd> stop</span>
+      <span><kbd>L</kbd> loop · <kbd>Shift</kbd>+click a note or click a bar number to choose a passage</span>
     </Popover>
   );
 }

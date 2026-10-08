@@ -3,6 +3,8 @@
 import * as engine from '../audio/engine';
 import { beatsPerBar } from '../core/htab/types';
 import { soundPitch } from '../core/instruments';
+import { eventPassage, joinPassages, type Passage } from '../core/passage';
+import { findItem, fromDoc, realBeat } from '../core/edit/model';
 import { getParsed, useApp } from './store';
 
 function onEvent(index: number, on: boolean) {
@@ -31,9 +33,11 @@ export async function play() {
     return;
   }
   const sel = s.selectedEvent !== null ? p.score.events[s.selectedEvent] : undefined;
+  const range = s.loop && s.loopRange ? s.loopRange : undefined;
   engine.playScore(p.score, {
     tempo: p.doc.meta.tempo * s.speed,
     startBeat: sel?.start ?? 0,
+    range,
     loop: s.loop,
     metronomeBeatsPerBar: s.metronome ? beatsPerBar(p.doc.meta) : undefined,
     onEvent,
@@ -80,6 +84,7 @@ export function playFrom(index: number) {
  * sounds and becomes where playback starts (a paused song starts over from it).
  */
 export function selectEvent(index: number) {
+  useApp.setState({ passage: null });
   const st = useApp.getState().play;
   if (st === 'playing') return playFrom(index);
   if (st === 'paused') stop();
@@ -148,3 +153,75 @@ useApp.subscribe((s, prev) => {
   if (s.loop !== prev.loop && s.play !== 'stopped') engine.setLoop(s.loop);
   if (s.text !== prev.text && s.play !== 'stopped' && !s.recording) stop();
 });
+
+// ---- Passages and looping one --------------------------------------------------------
+
+/** Shift+click on a card: the passage runs from the selected note to this one (no sound). */
+export function extendPassage(index: number) {
+  const s = useApp.getState();
+  const { score } = getParsed(s.text);
+  const ev = score.events[index];
+  if (!ev) return;
+  const anchor = s.selectedEvent !== null ? score.events[s.selectedEvent] : undefined;
+  if (!anchor) return selectEvent(index);
+  useApp.setState({ passage: joinPassages(eventPassage(anchor), eventPassage(ev)) });
+}
+
+/** A click on a bar number selects that bar; with Shift, from the selected note to it. */
+export function selectBar(bar: Passage, extend: boolean) {
+  const s = useApp.getState();
+  const { score } = getParsed(s.text);
+  const first = score.events.find((ev) => ev.start >= bar.start - 1e-6 && ev.start < bar.end - 1e-6);
+  if (!first) return;
+  const anchor = s.selectedEvent !== null ? score.events[s.selectedEvent] : undefined;
+  if (extend && anchor) {
+    useApp.setState({ passage: joinPassages(s.passage ?? eventPassage(anchor), bar) });
+    return;
+  }
+  if (s.play === 'paused') stop();
+  useApp.setState({ selectedEvent: first.index, passage: bar });
+}
+
+/** The passage the loop button would loop: the editor's selection there, else the Play page's. */
+export function currentPassage(): Passage | null {
+  const s = useApp.getState();
+  if (s.page === 'editor' && s.editorMode !== 'text') {
+    const sel = s.ve.selection;
+    if (sel.length < 2) return null;
+    const song = fromDoc(getParsed(s.text).doc);
+    let start = Infinity;
+    let end = -Infinity;
+    for (const p of sel) {
+      const it = findItem(song, p);
+      if (!it) continue;
+      const at = realBeat(song, p);
+      start = Math.min(start, at);
+      end = Math.max(end, at + it.dur);
+    }
+    return end > start ? { start, end } : null;
+  }
+  return s.passage;
+}
+
+/**
+ * The loop button (and L): loops the chosen passage, or the whole song with none chosen;
+ * pressed again, stops looping. Starting a passage loop while playing jumps to it.
+ */
+export function toggleLoop() {
+  const s = useApp.getState();
+  if (s.loop) {
+    useApp.setState({ loop: false, loopRange: null });
+    return;
+  }
+  const range = currentPassage();
+  useApp.setState({ loop: true, loopRange: range });
+  if (range && s.play !== 'stopped') {
+    stop();
+    void play();
+  }
+}
+
+/** Ends a passage loop (the loop chip's ✕); if it's playing, this pass is the last. */
+export function endPassageLoop() {
+  useApp.setState({ loop: false, loopRange: null });
+}

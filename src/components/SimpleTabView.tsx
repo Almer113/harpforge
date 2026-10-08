@@ -5,6 +5,7 @@ import { memo, useEffect, useRef } from 'react';
 import { holeSoundText, soundText } from '../core/htab/serializer';
 import type { NoteEvent, TabDoc, TabEvent } from '../core/htab/types';
 import { eventKey } from '../core/score';
+import { eventsIn, type Passage } from '../core/passage';
 import type { Parsed, ReadAs } from '../state/store';
 import { midiToName, keySpelling, type Spelling } from '../core/pitch';
 import { followTo } from './follow';
@@ -14,7 +15,11 @@ interface Props {
   parsed: Parsed;
   activeEvents: number[];
   selectedEvent: number | null;
-  onSelect?: (scoreIndex: number, ev: NoteEvent) => void;
+  /** `extend`: Shift was held (the passage runs to this note). */
+  onSelect?: (scoreIndex: number, ev: NoteEvent, extend?: boolean) => void;
+  /** The chosen passage and the looped one, shown as bands behind their notes. */
+  passage?: Passage | null;
+  loopRange?: Passage | null;
   /** Notes mode: note names (C5) instead of holes. */
   readAs?: ReadAs;
 }
@@ -94,7 +99,7 @@ export function SimpleTabPreview({ doc, lines = 2 }: { doc: TabDoc; lines?: numb
   );
 }
 
-export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect, readAs = 'holes' }: Props) {
+export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect, passage, loopRange, readAs = 'holes' }: Props) {
   const { doc, score, harp } = parsed;
   const flats = keySpelling(doc.meta.key ?? harp.spec.key);
   const root = useRef<HTMLDivElement>(null);
@@ -110,11 +115,13 @@ export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect, r
 
   // Each line redraws only when its own notes start or stop sounding (or are selected).
   const activeByLine = indexesByLine(score, activeEvents);
+  const passageByLine = indexesByLine(score, passage ? eventsIn(score, passage) : []);
+  const loopByLine = indexesByLine(score, loopRange ? eventsIn(score, loopRange) : []);
   const selectedLine = selectedEvent !== null ? score.events[selectedEvent]?.line : undefined;
   return (
     <div className={`simpletab ${readAs === 'notes' ? 'as-notes' : ''}`} ref={root}>
       {lines.map(({ li }) => (
-        <SimpleLine key={li} parsed={parsed} li={li} active={activeByLine.get(li) ?? ''} selected={selectedLine === li ? selectedEvent : null} asNotes={readAs === 'notes'} flats={flats} onSelect={click} />
+        <SimpleLine key={li} parsed={parsed} li={li} active={activeByLine.get(li) ?? ''} inPassage={passageByLine.get(li) ?? ''} inLoop={loopByLine.get(li) ?? ''} selected={selectedLine === li ? selectedEvent : null} asNotes={readAs === 'notes'} flats={flats} onSelect={click} />
       ))}
     </div>
   );
@@ -125,6 +132,8 @@ const SimpleLine = memo(function SimpleLine({
   parsed,
   li,
   active,
+  inPassage,
+  inLoop,
   selected,
   asNotes,
   flats,
@@ -133,13 +142,18 @@ const SimpleLine = memo(function SimpleLine({
   parsed: Parsed;
   li: number;
   active: string;
+  inPassage: string;
+  inLoop: string;
   selected: number | null;
   asNotes: boolean;
   flats: Spelling;
-  onSelect: (scoreIndex: number, ev: NoteEvent) => void;
+  onSelect: (scoreIndex: number, ev: NoteEvent, extend?: boolean) => void;
 }) {
   const { doc, indexByKey, score } = parsed;
-  const activeSet = new Set(active ? active.split(',').map(Number) : []);
+  const set = (list: string) => new Set(list ? list.split(',').map(Number) : []);
+  const activeSet = set(active);
+  const passageSet = set(inPassage);
+  const loopSet = set(inLoop);
   return (
     <div className="st-line">
       {measuresOf(doc.lines[li].events).map((m, mi) => (
@@ -148,12 +162,13 @@ const SimpleLine = memo(function SimpleLine({
             const idx = indexByKey.get(eventKey(li, ei));
             const isActive = idx !== undefined && activeSet.has(idx);
             const isSelected = idx !== undefined && idx === selected;
+            const band = idx === undefined ? '' : `${passageSet.has(idx) ? 'in-passage' : ''} ${loopSet.has(idx) ? 'in-loop' : ''}`;
             return (
               <button
                 key={ei}
                 data-index={idx}
-                className={`st-note ${breathClass(ev)} ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''}`}
-                onClick={() => idx !== undefined && onSelect(idx, ev)}
+                className={`st-note ${breathClass(ev)} ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''} ${band}`}
+                onClick={(e) => idx !== undefined && onSelect(idx, ev, e.shiftKey)}
               >
                 {asNotes && idx !== undefined ? <NoteNames midis={score.events[idx]?.midis ?? []} flats={flats} /> : <Token ev={ev} />}
               </button>

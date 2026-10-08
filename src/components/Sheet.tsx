@@ -7,6 +7,7 @@ import { doPitchClass } from '../core/formats/jianpu';
 import { pitchClassName, keyUsesFlats } from '../core/pitch';
 import { SimpleTabView } from './SimpleTabView';
 import { TabView } from './TabView';
+import { selectBar } from '../state/playback';
 
 // Sheet music pulls in abcjs; load it only when the staff view is opened.
 const StaffView = lazy(() => import('./StaffView').then((m) => ({ default: m.StaffView })));
@@ -18,9 +19,11 @@ export function Sheet({
   title = 'Tab',
 }: {
   parsed: Parsed;
-  onSelect: (scoreIndex: number, ev?: NoteEvent | RestEvent) => void;
+  onSelect: (scoreIndex: number, ev?: NoteEvent | RestEvent, extend?: boolean) => void;
   title?: string;
 }) {
+  const passage = useApp((s) => s.passage);
+  const loopRange = useApp((s) => (s.loop ? s.loopRange : null));
   const activeEvents = useApp((s) => s.activeEvents);
   const selectedEvent = useApp((s) => s.selectedEvent);
   const showNoteNames = useApp((s) => s.showNoteNames);
@@ -82,7 +85,7 @@ export function Sheet({
         </div>
       </div>
       {view === 'simple' ? (
-        <SimpleTabView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} readAs={readAs} />
+        <SimpleTabView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} passage={passage} loopRange={loopRange} readAs={readAs} />
       ) : view !== 'staff' ? (
         <TabView
           parsed={parsed}
@@ -92,6 +95,9 @@ export function Sheet({
           showLyrics={view === 'numbers' ? show.numbers.lyrics : show.tab.lyrics}
           showChords={view === 'numbers' ? show.numbers.chords : show.tab.chords}
           onCardClick={onSelect}
+          passage={passage}
+          loopRange={loopRange}
+          onBarClick={selectBar}
           notation={view === 'numbers' ? 'numbers' : 'holes'}
           readAs={readAs}
         />

@@ -62,3 +62,24 @@
 .g-slide { font-size: 0.8em; color: #fff; margin-right: 1px; }
 .tab-empty { text-align: center; padding: 30px; color: var(--text); }
 .tab-empty p { margin: 4px 0; }
+
+/* ---------- Passages and loops (Phase 9) ---------- */
+/* Bar numbers above each bar (Play): click to choose the bar, Shift+click to choose up to it. */
+.tab-line.numbered { padding-top: 13px; row-gap: 20px; }
+.bar-num {
+  position: absolute; top: -15px; left: 4px; padding: 0 3px; border: 0; border-radius: 4px; background: transparent;
+  font: inherit; font-size: 10.5px; font-weight: 600; color: var(--faint); cursor: pointer; line-height: 14px;
+}
+.bar-num:hover { color: var(--brass-2); background: var(--panel-2); }
+/* The chosen passage: a light wash; the looped one: a brass line under its notes. */
+.card.in-passage, .st-note.in-passage { background: rgba(255, 244, 226, 0.07); border-color: rgba(255, 244, 226, 0.22); }
+.card.in-loop, .st-note.in-loop { background-color: rgba(227, 169, 72, 0.06); box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6); }
+.card.in-loop.active { box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6), 0 6px 16px rgba(0, 0, 0, 0.35); }
+.card.selected.in-passage { border-color: var(--brass); }
+/* "Looping bars 5–8 ✕" next to the loop button. */
+.loop-chip {
+  display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 3px 0 10px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid rgba(227, 169, 72, 0.45); background: rgba(227, 169, 72, 0.1); color: var(--brass-2); font-size: 12px; font-weight: 600;
+}
+.loop-chip-x { width: 24px; height: 24px; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; font-size: 11px; }
+.loop-chip-x:hover { background: rgba(227, 169, 72, 0.2); }

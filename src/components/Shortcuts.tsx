@@ -14,7 +14,10 @@ const COLUMNS: Group[][] = [
       title: 'Anywhere',
       rows: [
         ['Enter', 'Play / pause'],
-        ['Esc', 'Stop, or stop recording'],
+        ['Esc', 'Stop, or stop recording; when stopped, end a passage loop'],
+        ['L', 'Loop the chosen passage, or the whole song (Shift+L in the editor)'],
+        ['Shift+click', 'Choose a passage, from the selected note (Play)'],
+        ['Bar number', 'Click: choose that bar; Shift+click: up to it (Play)'],
         ['Ctrl+S', 'Save to your library'],
         ['Ctrl+P', 'Print or save as PDF'],
         ['Ctrl+Z / Ctrl+Y', 'Undo / redo'],

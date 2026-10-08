@@ -90,3 +90,19 @@ export function buildScore(doc: TabDoc, harp: Harmonica): { score: Score; issues
   });
   return { score: { events, totalBeats: t, bars }, issues };
 }
+
+/** Where each event's note sounds: from the start of its tied chain to the end of its last tie. */
+export function soundSpans(score: Score): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  let head: { start: number; end: number } | null = null;
+  for (const ev of score.events) {
+    if (ev.rest) {
+      head = null;
+      out.push({ start: ev.start, end: ev.start + ev.beats });
+      continue;
+    }
+    if (!ev.tied || !head) head = { start: ev.start, end: ev.start + ev.soundBeats };
+    out.push(head);
+  }
+  return out;
+}

@@ -157,7 +157,11 @@ export interface AppState {
   activeEvents: number[];
   /** Score index of the selected card (playback starts here). */
   selectedEvent: number | null;
+  /** A stretch chosen on the Play page (Shift+click, bar numbers), in score beats. */
+  passage: import('../core/passage').Passage | null;
   loop: boolean;
+  /** What the loop repeats: a passage, or (null) the whole song from where playback starts. */
+  loopRange: import('../core/passage').Passage | null;
   metronome: boolean;
   /** Playback speed multiplier (practice slow-down). */
   speed: number;
@@ -321,7 +325,9 @@ export const useApp = create<AppState>((set) => ({
   play: 'stopped',
   activeEvents: [],
   selectedEvent: null,
+  passage: null,
   loop: false,
+  loopRange: null,
   metronome: false,
   speed: 1,
   held: {},
@@ -405,7 +411,7 @@ export const useApp = create<AppState>((set) => ({
   loadSeq: 0,
   loadText: (text, docId = null, saved = false) =>
     // A different tab: the editor's caret and selection start over (they belonged to the old one).
-    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0 }, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
+    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0 }, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, passage: null, loopRange: null, loop: s.loopRange ? false : s.loop, activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
   markSaved: (docId, text) => set((s) => ({ docId, savedText: text ?? s.text })),
   notify: (message) => set({ toast: { message, id: Date.now() } }),
 }));

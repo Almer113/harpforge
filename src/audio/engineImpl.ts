@@ -3,7 +3,7 @@
 // are created per note so each can bend independently.
 
 import * as Tone from 'tone';
-import type { Score } from '../core/score';
+import { soundSpans, type Score } from '../core/score';
 import { createVoice, outputs, type Voice } from './voices';
 
 export { loadSamples, samplesReady, setSoundMode, setVoicing, type SoundMode, type Voicing } from './voices';
@@ -77,6 +77,11 @@ export interface PlaybackOptions {
   tempo: number;
   startBeat?: number;
   loop?: boolean;
+  /**
+   * Plays (and loops) only this stretch, in score beats: notes are cut at its edges, and a
+   * note held into it from before sounds from its start.
+   */
+  range?: { start: number; end: number };
   /** When set, plays a click every beat (accent on bar starts). */
   metronomeBeatsPerBar?: number;
   /** Beats of count-in clicks before the score starts. */
@@ -159,19 +164,29 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
   t.bpm.value = opts.tempo;
   const countIn = opts.countIn ?? 0;
   const offset = countIn; // score beat 0 sits at transport beat `countIn`
-  const startBeat = opts.startBeat ?? 0;
+  const range = opts.range && opts.range.end > opts.range.start ? opts.range : undefined;
+  const startBeat = range ? range.start : (opts.startBeat ?? 0);
 
   if (score) {
+    const until = range ? Math.min(range.end, score.totalBeats) : score.totalBeats;
+    // Where each note's sound starts and ends (a tied piece belongs to the note it continues).
+    const heads = soundSpans(score);
     for (const ev of score.events) {
-      if (ev.rest || ev.start + ev.beats <= startBeat) continue;
-      const at = ev.start + offset;
+      if (ev.rest || ev.start + ev.beats <= startBeat + 1e-6 || ev.start >= until - 1e-6) continue;
+      const from = Math.max(ev.start, startBeat);
+      const head = heads[ev.index];
+      // A note sounds from its own start, or from where playback starts when it's held into it.
+      const attack = !ev.tied ? ev.start >= startBeat - 1e-6 : false;
+      const heldIn = !attack && head.start < startBeat - 1e-6 && ev.start <= startBeat + 1e-6;
+      const sounds = attack || heldIn;
+      const at = from + offset;
       t.schedule((time) => {
-        const dur = Tone.Time(beatTicks(ev.beats)).toSeconds();
+        const dur = Tone.Time(beatTicks(Math.min(ev.start + ev.beats, until) - from)).toSeconds();
         const gap = Math.min(0.06, dur * 0.12);
         // The note sounds through its ties; ties themselves only move the highlight.
-        const soundDur = Tone.Time(beatTicks(ev.soundBeats)).toSeconds();
+        const soundDur = Tone.Time(beatTicks(Math.min(head.end, until) - from)).toSeconds();
         const soundGap = Math.min(0.06, soundDur * 0.12);
-        if (!ev.tied) ev.midis.forEach((m, k) => {
+        if (sounds) ev.midis.forEach((m, k) => {
           if (m === null) return;
           const s = ev.sounds[k];
           const glide = s.type === 'hole' && s.bend > 0 ? m + s.bend : undefined;
@@ -188,7 +203,7 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
         Tone.getDraw().schedule(() => opts.onEvent?.(ev.index, false), time + dur - (ev.soundBeats > ev.beats ? 0 : gap));
       }, beatTicks(at));
     }
-    const end = score.totalBeats + offset;
+    const end = until + offset;
     current = { startBeat, end, offset, endId: null, onEnd: opts.onEnd };
     if (opts.loop && score.totalBeats > 0) setLoop(true);
     else scheduleEnd();

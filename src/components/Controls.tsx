@@ -5,7 +5,8 @@ import { stopRecording } from '../live/recorder';
 import { isKeyChange, keyDistance, setHarmonica, shiftOctave } from '../state/actions';
 import { guessTonic, harpForPosition, octaveOptions, positionFor, positionName } from '../core/convert';
 import { mod12, transposeKey } from '../core/pitch';
-import { playFrom, stop, togglePlay } from '../state/playback';
+import { describePassage } from '../core/passage';
+import { endPassageLoop, playFrom, stop, toggleLoop, togglePlay } from '../state/playback';
 import { useApp, useParsed } from '../state/store';
 import { Popover } from './Popover';
 
@@ -205,6 +206,12 @@ export function PlayStop() {
   const loop = useApp((s) => s.loop);
   const metronome = useApp((s) => s.metronome);
   const recording = useApp((s) => s.recording);
+  const page = useApp((s) => s.page);
+  // "Looping bars 5–8" while a passage loops.
+  const loopRange = useApp((s) => (s.loop ? s.loopRange : null));
+  const { score } = useParsed();
+  const looping = loopRange ? `Looping ${describePassage(score, loopRange)}` : null;
+  const loopKey = page === 'editor' ? 'Shift+L' : 'L';
   return (
     <div className="t-group play-stop">
       <button className="t-btn primary" onClick={togglePlay} disabled={!!recording} title="Play / pause (Enter)" aria-label={play === 'playing' ? 'Pause' : 'Play'}>
@@ -213,12 +220,26 @@ export function PlayStop() {
       <button className="t-btn" onClick={stop} disabled={play === 'stopped' || !!recording} title="Stop (Esc)" aria-label="Stop">
         {Icon.stop}
       </button>
-      <button className={`t-btn toggle ${loop ? 'on' : ''}`} onClick={() => useApp.setState({ loop: !loop })} title="Loop" aria-label="Loop" aria-pressed={loop}>
+      <button
+        className={`t-btn toggle ${loop ? 'on' : ''}`}
+        onClick={toggleLoop}
+        title={`Loop (${loopKey}): the selected passage, or the whole song`}
+        aria-label="Loop"
+        aria-pressed={loop}
+      >
         {Icon.loop}
       </button>
       <button className={`t-btn toggle ${metronome ? 'on' : ''}`} onClick={() => useApp.setState({ metronome: !metronome })} title="Metronome during playback" aria-label="Metronome" aria-pressed={metronome}>
         {Icon.metro}
       </button>
+      {looping && (
+        <span className="loop-chip" role="status">
+          {looping}
+          <button className="loop-chip-x" onClick={endPassageLoop} title="Stop looping this passage (Esc when stopped)" aria-label="Stop looping this passage">
+            ✕
+          </button>
+        </span>
+      )}
     </div>
   );
 }
@@ -246,12 +267,22 @@ export function Transport({ compact = false }: { compact?: boolean }) {
         playFrom(Number(card.dataset.index));
         return;
       }
+      const st = useApp.getState();
+      // L loops (Shift+L in the editor, where L ties notes).
+      if (e.code === 'KeyL' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && e.shiftKey === (st.page === 'editor')) {
+        e.preventDefault();
+        toggleLoop();
+        return;
+      }
       if (e.code === 'Enter' && !e.repeat && !el.closest('button')) {
         e.preventDefault();
         togglePlay();
       } else if (e.code === 'Escape') {
-        if (useApp.getState().recording) stopRecording();
-        else stop();
+        if (st.recording) stopRecording();
+        else if (st.play !== 'stopped') stop();
+        // Stopped: Escape lets go of the passage loop, then of the chosen passage.
+        else if (st.loop && st.loopRange) endPassageLoop();
+        else if (st.passage) useApp.setState({ passage: null });
       }
     };
     window.addEventListener('keydown', onKey);
