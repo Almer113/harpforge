@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
-// Phase 9a: choosing a passage on the Play page and looping it.
+// Phases 9a and 9b: choosing a passage on the Play page, looping it, and counting in.
 
 import { beforeEach, expect, it, vi } from 'vitest';
 
 vi.mock('../audio/engine', async () => (await import('../test/fakeEngine')).fakeEngine());
 
 import * as engine from '../audio/engine';
-import { extendPassage, play, selectBar, selectEvent, stop, toggleLoop } from './playback';
+import { countBeats, extendPassage, play, playFrom, selectBar, selectEvent, stop, toggleLoop } from './playback';
 import { useApp } from './store';
 
 const TAB = '---\ntitle: Loop\n---\n4 4 4 4 | 5 5 5 5 | 6 6 6 6 | 7 7 7 7 |\n';
@@ -16,7 +16,7 @@ const playScore = engine.playScore as unknown as ReturnType<typeof vi.fn>;
 beforeEach(() => {
   stop();
   s().loadText(TAB, null);
-  useApp.setState({ loop: false, loopRange: null, page: 'play' });
+  useApp.setState({ loop: false, loopRange: null, page: 'play', countIn: false, countEachLoop: false });
   playScore.mockClear();
 });
 
@@ -62,4 +62,34 @@ it('another song forgets the passage and its loop', () => {
   toggleLoop();
   s().loadText('---\n---\n4 5 6 |\n', null);
   expect(s()).toMatchObject({ passage: null, loopRange: null, loop: false });
+});
+
+// ---- Phase 9b: counting in
+
+it('a bar is counted in, two when a bar goes by in under 1.6 seconds', () => {
+  expect(countBeats(4, 96)).toBe(4);
+  expect(countBeats(4, 160)).toBe(8);
+  expect(countBeats(3, 120)).toBe(6);
+});
+
+it('counts in before playing when asked, but not when jumping to a note mid-play', async () => {
+  useApp.setState({ countIn: true });
+  await play();
+  expect(playScore).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ countIn: 4, countEachLoop: false }));
+  playFrom(6);
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(playScore).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ countIn: 0, startBeat: 6 }));
+});
+
+it('a loop can count in before each pass (and so before the first)', async () => {
+  useApp.setState({ countEachLoop: true });
+  selectBar({ start: 4, end: 8 }, false);
+  toggleLoop();
+  await play();
+  expect(playScore).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ countIn: 4, countEachLoop: true, range: { start: 4, end: 8 } }));
+  // Not looping: no count (the setting is only for loops).
+  toggleLoop();
+  await play();
+  expect(playScore).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ countIn: 0 }));
 });

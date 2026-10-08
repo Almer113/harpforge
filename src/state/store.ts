@@ -163,6 +163,10 @@ export interface AppState {
   /** What the loop repeats: a passage, or (null) the whole song from where playback starts. */
   loopRange: import('../core/passage').Passage | null;
   metronome: boolean;
+  /** Count in (a bar of clicks, two at fast tempos) before playback starts. Remembered. */
+  countIn: boolean;
+  /** Count in again before each pass of a loop. Remembered. */
+  countEachLoop: boolean;
   /** Playback speed multiplier (practice slow-down). */
   speed: number;
   /** Live-held sounds by input id (mouse, key codes). */
@@ -255,6 +259,8 @@ function loadPrefs(): {
   printPrefs?: Partial<import('../pages/PrintPage').PrintPrefs>;
   textPrefs?: Partial<import('../core/formats/plaintext').PlainTextOptions>;
   ownedHarps?: import('../core/instruments').HarmonicaSpec[];
+  countIn?: boolean;
+  countEachLoop?: boolean;
 } {
   let raw: unknown;
   try {
@@ -277,6 +283,8 @@ function loadPrefs(): {
     dockOpen: bool(p.dockOpen),
     zoom: typeof p.zoom === 'number' && p.zoom >= 32 && p.zoom <= 160 ? Math.round(p.zoom) : undefined,
     showNoteNames: bool(p.showNoteNames),
+    countIn: bool(p.countIn),
+    countEachLoop: bool(p.countEachLoop),
     readAs: p.readAs === 'notes' ? 'notes' : p.readAs === 'holes' ? 'holes' : undefined,
     sheetShow: { tab: like(sheet.tab, SHOW_ALL.tab), numbers: like(sheet.numbers, SHOW_ALL.numbers), staff: like(sheet.staff, SHOW_ALL.staff) },
     printPrefs: print as Partial<import('../pages/PrintPage').PrintPrefs>,
@@ -329,6 +337,8 @@ export const useApp = create<AppState>((set) => ({
   loop: false,
   loopRange: null,
   metronome: false,
+  countIn: prefs.countIn ?? false,
+  countEachLoop: prefs.countEachLoop ?? false,
   speed: 1,
   held: {},
   keyOffset: 0,
@@ -418,9 +428,9 @@ export const useApp = create<AppState>((set) => ({
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.ve.zoom === prev.ve.zoom && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps) return;
+  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.ve.zoom === prev.ve.zoom && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps && s.countIn === prev.countIn && s.countEachLoop === prev.countEachLoop) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, zoom: s.ve.zoom, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, zoom: s.ve.zoom, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps, countIn: s.countIn, countEachLoop: s.countEachLoop }));
   } catch {
     /* storage unavailable */
   }

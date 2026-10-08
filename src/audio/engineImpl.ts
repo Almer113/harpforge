@@ -4,6 +4,7 @@
 
 import * as Tone from 'tone';
 import { soundSpans, type Score } from '../core/score';
+import { isAccent, type ClickInfo } from './clicks';
 import { createVoice, outputs, type Voice } from './voices';
 
 export { loadSamples, samplesReady, setSoundMode, setVoicing, type SoundMode, type Voicing } from './voices';
@@ -64,7 +65,8 @@ function click(time: number, accent: boolean) {
     envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.02 },
     volume: -10,
   }).toDestination();
-  clickSynth.triggerAttackRelease(accent ? 1760 : 1175, 0.03, time);
+  // The first beat of a bar is higher and louder.
+  clickSynth.triggerAttackRelease(accent ? 1760 : 1175, 0.03, time, accent ? 1 : 0.55);
 }
 
 // ---- Transport playback -------------------------------------------------------
@@ -84,8 +86,14 @@ export interface PlaybackOptions {
   range?: { start: number; end: number };
   /** When set, plays a click every beat (accent on bar starts). */
   metronomeBeatsPerBar?: number;
-  /** Beats of count-in clicks before the score starts. */
+  /** Beats of count-in clicks before playback starts (from wherever it starts). */
   countIn?: number;
+  /** Count in again before each pass of a loop. */
+  countEachLoop?: boolean;
+  /** Where the score's bars start (score beats), so the clicks accent real bar starts (pickups too). */
+  barStarts?: number[];
+  /** Beats in a bar (for the count's accents when the metronome is off). */
+  beatsPerBar?: number;
   onEvent?: (index: number, on: boolean) => void;
   onEnd?: () => void;
 }
@@ -93,8 +101,12 @@ export interface PlaybackOptions {
 const scheduledVoices = new Set<Voice>();
 let metronomeId: number | null = null;
 let metronomeBpb = 4;
+// What the clicks need to know about the playing song (see clicks.ts).
+let clickInfo: ClickInfo = { offset: 0, countFrom: 0, count: 0 };
+const accented = (beat: number) => isAccent(beat, clickInfo, metronomeBpb);
 // The playing song's end, so looping can be switched on and off while it plays.
-let current: { startBeat: number; end: number; offset: number; endId: number | null; onEnd?: () => void } | null = null;
+// `loopFrom`: where each pass of a loop starts on the transport (before its count, if it has one).
+let current: { startBeat: number; loopFrom: number; end: number; offset: number; endId: number | null; onEnd?: () => void } | null = null;
 let endTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**
@@ -131,7 +143,7 @@ export function setLoop(on: boolean) {
     if (current.endId !== null) t.clear(current.endId);
     current.endId = null;
     clearTimeout(endTimer);
-    t.loopStart = beatTicks(current.startBeat + current.offset);
+    t.loopStart = beatTicks(current.loopFrom);
     t.loopEnd = beatTicks(current.end);
     t.loop = true;
   } else {
@@ -144,10 +156,12 @@ export function setLoop(on: boolean) {
 function scheduleMetronome(beatsPerBar: number) {
   metronomeBpb = beatsPerBar;
   if (metronomeId !== null) transport().clear(metronomeId);
+  // A click on every beat of the score (the transport may be offset by a fraction of a beat).
+  const frac = ((clickInfo.offset % 1) + 1) % 1;
   metronomeId = transport().scheduleRepeat((time) => {
-    const beat = Math.round(transport().getTicksAtTime(time) / ticksPerBeat());
-    click(time, beat % metronomeBpb === 0);
-  }, beatTicks(1), 0);
+    const beat = Math.round((transport().getTicksAtTime(time) / ticksPerBeat() - clickInfo.offset) * 1000) / 1000;
+    click(time, accented(beat));
+  }, beatTicks(1), beatTicks(frac));
 }
 
 export function setMetronome(beatsPerBar: number | null) {
@@ -163,7 +177,8 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
   const t = transport();
   t.bpm.value = opts.tempo;
   const countIn = opts.countIn ?? 0;
-  const offset = countIn; // score beat 0 sits at transport beat `countIn`
+  // Score beat b sits at transport beat b + offset, so the count fits before wherever playback starts.
+  const offset = countIn;
   const range = opts.range && opts.range.end > opts.range.start ? opts.range : undefined;
   const startBeat = range ? range.start : (opts.startBeat ?? 0);
 
@@ -204,18 +219,20 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
       }, beatTicks(at));
     }
     const end = until + offset;
-    current = { startBeat, end, offset, endId: null, onEnd: opts.onEnd };
+    current = { startBeat, loopFrom: startBeat + (opts.countEachLoop ? 0 : offset), end, offset, endId: null, onEnd: opts.onEnd };
     if (opts.loop && score.totalBeats > 0) setLoop(true);
     else scheduleEnd();
   }
 
+  clickInfo = { offset, barStarts: opts.barStarts, countFrom: startBeat - countIn, count: countIn };
+  metronomeBpb = opts.metronomeBeatsPerBar ?? opts.beatsPerBar ?? (countIn || 4);
   if (opts.metronomeBeatsPerBar) scheduleMetronome(opts.metronomeBeatsPerBar);
   else if (countIn > 0) {
-    // Count-in clicks only.
-    for (let b = 0; b < countIn; b++) t.schedule((time) => click(time, b === 0), beatTicks(b));
+    // Count-in clicks only, on the beats before the music (each pass, when a loop counts in again).
+    for (let b = 0; b < countIn - 1e-6; b++) t.schedule((time) => click(time, accented(startBeat - countIn + b)), beatTicks(startBeat + b));
   }
-  // Count-in only applies when starting from the top.
-  t.ticks = Math.round((startBeat > 0 ? startBeat + offset : 0) * ticksPerBeat());
+  // Playback starts with the count (if any) just before `startBeat`.
+  t.ticks = Math.round(startBeat * ticksPerBeat());
   t.start('+0.05');
 }
 

@@ -3,7 +3,7 @@
 import * as engine from '../audio/engine';
 import { beatsPerBar } from '../core/htab/types';
 import { soundPitch } from '../core/instruments';
-import { eventPassage, joinPassages, type Passage } from '../core/passage';
+import { barStarts, eventPassage, joinPassages, type Passage } from '../core/passage';
 import { findItem, fromDoc, realBeat } from '../core/edit/model';
 import { getParsed, useApp } from './store';
 
@@ -16,7 +16,16 @@ function onEvent(index: number, on: boolean) {
 // Bumped by stop(): a play() still waiting for the audio to start then doesn't go ahead.
 let generation = 0;
 
-export async function play() {
+/**
+ * How many beats to count in: a bar, or two when a bar goes by in under 1.6 seconds
+ * (fast tempos), so there's time to get ready.
+ */
+export function countBeats(bpb: number, bpm: number): number {
+  return (bpb * 60) / bpm < 1.6 ? bpb * 2 : bpb;
+}
+
+/** Starts (or resumes) playback. `count: false` skips the count-in (jumping to a note mid-play). */
+export async function play(opts: { count?: boolean } = {}) {
   const s = useApp.getState();
   if (s.recording) return;
   const gen = ++generation;
@@ -34,12 +43,20 @@ export async function play() {
   }
   const sel = s.selectedEvent !== null ? p.score.events[s.selectedEvent] : undefined;
   const range = s.loop && s.loopRange ? s.loopRange : undefined;
+  const bpb = beatsPerBar(p.doc.meta);
+  const tempo = p.doc.meta.tempo * s.speed;
+  // A loop that counts in before each pass counts in before the first one too.
+  const counting = (s.countIn || (s.loop && s.countEachLoop)) && opts.count !== false;
   engine.playScore(p.score, {
-    tempo: p.doc.meta.tempo * s.speed,
+    tempo,
     startBeat: sel?.start ?? 0,
     range,
     loop: s.loop,
-    metronomeBeatsPerBar: s.metronome ? beatsPerBar(p.doc.meta) : undefined,
+    countIn: counting ? countBeats(bpb, tempo) : 0,
+    countEachLoop: s.loop && s.countEachLoop,
+    barStarts: barStarts(p.score),
+    beatsPerBar: bpb,
+    metronomeBeatsPerBar: s.metronome ? bpb : undefined,
     onEvent,
     onEnd: () => useApp.setState({ play: 'stopped', activeEvents: [] }),
   });
@@ -76,7 +93,7 @@ export function playFrom(index: number) {
   if (useApp.getState().recording) return;
   stop();
   useApp.setState({ selectedEvent: index });
-  void play();
+  void play({ count: false });
 }
 
 /**

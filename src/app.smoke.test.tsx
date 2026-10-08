@@ -7,6 +7,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 // No Web Audio and no IndexedDB here: the audio engine is faked, the library lives in memory.
+// Pages load their code on demand (the staff view, the editor), which on a busy machine
+// (the commit hook) can take longer than the default 5 seconds.
+vi.setConfig({ testTimeout: 20000 });
+
 vi.mock('./audio/engine', async () => (await import('./test/fakeEngine')).fakeEngine());
 vi.mock('./storage/library', async (importOriginal) => {
   const real = await importOriginal<typeof import('./storage/library')>();

@@ -166,14 +166,16 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
   const speed = useApp((s) => s.speed);
   const soundMode = useApp((s) => s.soundMode);
   const samplesStatus = useApp((s) => s.samplesStatus);
+  const countIn = useApp((s) => s.countIn);
+  const countEachLoop = useApp((s) => s.countEachLoop);
   const { doc } = useParsed();
   const showSpeed = withSpeed && speed !== 1;
   return (
     <Popover
       label={`♫ ${soundMode === 'samples' ? 'Real' : 'Synth'}${showSpeed ? ` · ${Math.round(speed * 100)}%` : ''} ▾`}
       buttonClass="btn small ghost"
-      title={withSpeed ? 'Sound and speed: the real harmonica (recordings) or a synthesized reed' : 'Sound: the real harmonica (recordings) or a synthesized reed'}
-      ariaLabel={withSpeed ? 'Sound and speed' : 'Sound'}
+      title={withSpeed ? 'Sound, speed and counting in: the real harmonica (recordings) or a synthesized reed' : 'Sound and counting in: the real harmonica (recordings) or a synthesized reed'}
+      ariaLabel={withSpeed ? 'Sound, speed and counting in' : 'Sound and counting in'}
       kind="panel"
       panelClass="menu pb-menu"
     >
@@ -195,6 +197,17 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
             <span className="t-value">{Math.round(speed * 100)}% · {Math.round(doc.meta.tempo * speed)} bpm</span>
           </label>
         )}
+        <span className="pb-head">Counting in</span>
+        <label className="check">
+          <input type="checkbox" checked={countIn} onChange={(e) => useApp.setState({ countIn: e.target.checked })} />
+          Count in before playing
+        </label>
+        <span className="mi-hint pb-hint">A bar of clicks first (two at fast tempos)</span>
+        <label className="check">
+          <input type="checkbox" checked={countEachLoop} onChange={(e) => useApp.setState({ countEachLoop: e.target.checked })} />
+          Count in before each loop
+        </label>
+        <span className="mi-hint pb-hint">A breath between passes when looping</span>
       </div>
     </Popover>
   );
