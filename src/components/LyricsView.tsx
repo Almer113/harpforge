@@ -29,12 +29,14 @@ interface Props {
   show?: { holes: boolean; chords: boolean };
   /** The verses to show (0-based; default verse 1): a line of words each. */
   verses?: number[];
+  /** The verse being sung (the others dim), or null. */
+  singing?: number | null;
 }
 
 /** An event's syllables in every verse. */
 const lyricsIn = (e: NoteEvent | RestEvent) => [e.lyric, ...(e.verses ?? [])];
 
-export function LyricsView({ parsed, activeEvents, selectedEvent, onSelect, passage, loopRange, marks, marksPrev, readAs = 'holes', show = { holes: true, chords: true }, verses = [0] }: Props) {
+export function LyricsView({ parsed, activeEvents, selectedEvent, onSelect, passage, loopRange, marks, marksPrev, readAs = 'holes', show = { holes: true, chords: true }, verses = [0], singing = null }: Props) {
   const { doc, score, harp } = parsed;
   const flats = keySpelling(doc.meta.key ?? harp.spec.key);
   const root = useRef<HTMLDivElement>(null);
@@ -44,9 +46,11 @@ export function LyricsView({ parsed, activeEvents, selectedEvent, onSelect, pass
   // Following goes by the syllable (always shown, even with the holes hidden).
   useEffect(() => {
     if (!activeEvents.length || !root.current) return;
-    const el = root.current.querySelector(`[data-index="${activeEvents[activeEvents.length - 1]}"]`);
+    // (The note in the line of the verse being sung, when every verse has its line.)
+    const at = `[data-index="${activeEvents[activeEvents.length - 1]}"]`;
+    const el = (singing !== null && root.current.querySelector(`.ly-line[data-v="${singing}"] ${at}`)) || root.current.querySelector(at);
     followTo(el?.closest('.ly-syl') ?? el);
-  }, [activeEvents]);
+  }, [activeEvents, singing]);
 
   const lines = doc.lines.map((l, li) => ({ li, has: l.events.some((e) => e.kind !== 'bar') || l.section !== undefined })).filter((l) => l.has);
   if (!lines.length) return <div className="tab-empty"><p>This tab is empty.</p></div>;
@@ -73,6 +77,7 @@ export function LyricsView({ parsed, activeEvents, selectedEvent, onSelect, pass
           chords={show.chords}
           holes={show.holes}
           verses={verses.join(',')}
+          singing={singing ?? -1}
           flats={flats}
           onSelect={onSelect ? click : undefined}
         />
@@ -94,6 +99,7 @@ const LyricsLine = memo(function LyricsLine({
   chords,
   holes,
   verses,
+  singing,
   flats,
   onSelect,
 }: {
@@ -109,6 +115,8 @@ const LyricsLine = memo(function LyricsLine({
   holes: boolean;
   /** The verses shown ("0,1"). */
   verses: string;
+  /** The verse being sung (-1: none). */
+  singing: number;
   flats: Spelling;
   /** None on paper (Print): nothing to click. */
   onSelect?: (scoreIndex: number, ev: NoteEvent | RestEvent, extend?: boolean) => void;
@@ -176,7 +184,7 @@ const LyricsLine = memo(function LyricsLine({
     <div className="ly-block">
       {line.section !== undefined && <div className="tab-section ly-section">{line.section}</div>}
       {rows.map(({ v, words }) => words.length > 0 && (
-        <div key={v} className={`ly-line ${hasWords(words) ? '' : 'ly-fills'}`}>
+        <div key={v} data-v={v} className={`ly-line ${hasWords(words) ? '' : 'ly-fills'} ${singing >= 0 && rows.length > 1 && v !== singing ? 'not-sung' : ''}`}>
           {numbered && hasWords(words) && <span className="ly-vnum" aria-label={`Verse ${v + 1}`}>{v + 1}.</span>}
           {words.map((w, wi) => (
             <span className="ly-word" key={wi}>

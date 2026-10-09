@@ -195,6 +195,10 @@ export interface AppState {
   playRepeats: boolean;
   /** While playing: 2 when the note playing is a repeat's second time. */
   playPass: number;
+  /** Play the song once through for each verse. Remembered. */
+  playAllVerses: boolean;
+  /** While playing: the verse being sung (0 = verse 1). */
+  playVerse: number;
   /** This pass's marks, by score index. */
   alongMarks: Record<number, import('../core/playAlong').Mark>;
   /** The last pass's marks (shown faded until each note comes round again). */
@@ -340,6 +344,7 @@ function loadPrefs(): {
   performMove?: 'scroll' | 'pages';
   performSilent?: boolean;
   playRepeats?: boolean;
+  playAllVerses?: boolean;
 } {
   let raw: unknown;
   try {
@@ -372,6 +377,7 @@ function loadPrefs(): {
     performMove: p.performMove === 'pages' || p.performMove === 'scroll' ? p.performMove : undefined,
     performSilent: bool(p.performSilent),
     playRepeats: bool(p.playRepeats),
+    playAllVerses: bool(p.playAllVerses),
     readAs: p.readAs === 'notes' ? 'notes' : p.readAs === 'holes' ? 'holes' : undefined,
     sheetShow: { tab: like(sheet.tab, SHOW_ALL.tab), numbers: like(sheet.numbers, SHOW_ALL.numbers), staff: like(sheet.staff, SHOW_ALL.staff), lyrics: like(sheet.lyrics, SHOW_ALL.lyrics) },
     printPrefs: print as Partial<import('../pages/PrintPage').PrintPrefs>,
@@ -438,6 +444,8 @@ export const useApp = create<AppState>((set) => ({
   performSilent: prefs.performSilent ?? false,
   playRepeats: prefs.playRepeats ?? true,
   playPass: 1,
+  playAllVerses: prefs.playAllVerses ?? false,
+  playVerse: 0,
   calibrating: false,
   alongMarks: {},
   alongPrev: {},
@@ -534,9 +542,9 @@ export const useApp = create<AppState>((set) => ({
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.ve.zoom === prev.ve.zoom && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps && s.countIn === prev.countIn && s.countEachLoop === prev.countEachLoop && s.trainer === prev.trainer && s.trainerCleanOnly === prev.trainerCleanOnly && s.alongMelody === prev.alongMelody && s.micLatency === prev.micLatency && s.performSize === prev.performSize && s.performMove === prev.performMove && s.performSilent === prev.performSilent && s.playRepeats === prev.playRepeats) return;
+  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.ve.zoom === prev.ve.zoom && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps && s.countIn === prev.countIn && s.countEachLoop === prev.countEachLoop && s.trainer === prev.trainer && s.trainerCleanOnly === prev.trainerCleanOnly && s.alongMelody === prev.alongMelody && s.micLatency === prev.micLatency && s.performSize === prev.performSize && s.performMove === prev.performMove && s.performSilent === prev.performSilent && s.playRepeats === prev.playRepeats && s.playAllVerses === prev.playAllVerses) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, zoom: s.ve.zoom, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps, countIn: s.countIn, countEachLoop: s.countEachLoop, trainer: s.trainer, trainerCleanOnly: s.trainerCleanOnly, alongMelody: s.alongMelody, micLatency: s.micLatency ?? undefined, performSize: s.performSize, performMove: s.performMove, performSilent: s.performSilent, playRepeats: s.playRepeats }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, zoom: s.ve.zoom, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps, countIn: s.countIn, countEachLoop: s.countEachLoop, trainer: s.trainer, trainerCleanOnly: s.trainerCleanOnly, alongMelody: s.alongMelody, micLatency: s.micLatency ?? undefined, performSize: s.performSize, performMove: s.performMove, performSilent: s.performSilent, playRepeats: s.playRepeats, playAllVerses: s.playAllVerses }));
   } catch {
     /* storage unavailable */
   }

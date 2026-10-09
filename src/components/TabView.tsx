@@ -25,6 +25,8 @@ interface Props {
   showLyrics?: boolean;
   /** The verses to show, stacked (0-based; default verse 1). */
   verses?: number[];
+  /** The verse being sung (the others dim), or null. */
+  singing?: number | null;
   showChords?: boolean;
   /** `extend`: Shift was held (the passage runs to this card). */
   onCardClick?: (scoreIndex: number, ev: NoteEvent | RestEvent, extend?: boolean) => void;
@@ -82,7 +84,7 @@ export function useStableClick<A extends unknown[]>(fn: ((...args: A) => void) |
   return useCallback((...args: A) => latest.current?.(...args), []);
 }
 
-export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, showLyrics = true, verses = [0], showChords = true, onCardClick, passage, loopRange, marks, marksPrev, onBarClick, follow = true, notation = 'holes', readAs = 'holes' }: Props) {
+export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, showLyrics = true, verses = [0], singing = null, showChords = true, onCardClick, passage, loopRange, marks, marksPrev, onBarClick, follow = true, notation = 'holes', readAs = 'holes' }: Props) {
   const { doc, score, harp } = parsed;
   const flats = keySpelling(doc.meta.key ?? harp.spec.key);
   const numbers = notation === 'numbers';
@@ -134,6 +136,7 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, sh
           showNoteNames={showNoteNames}
           showLyrics={showLyrics}
           verses={verses.join(',')}
+          singing={singing ?? -1}
           showChords={showChords}
           numbers={numbers}
           asNotes={asNotes}
@@ -163,6 +166,8 @@ interface TabLineProps {
   showLyrics: boolean;
   /** The verses shown ("0,1"). */
   verses: string;
+  /** The verse being sung (-1: none). */
+  singing: number;
   showChords: boolean;
   numbers: boolean;
   asNotes: boolean;
@@ -206,7 +211,7 @@ export function markClass(mark: string | undefined): { cls: string; words: strin
 }
 
 /** One line of the sheet (redrawn only when something in it changes). */
-const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, marks, selected, showNoteNames, showLyrics, verses, showChords, numbers, asNotes, flats, doPc, onCardClick, onBarClick }: TabLineProps) {
+const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, marks, selected, showNoteNames, showLyrics, verses, singing, showChords, numbers, asNotes, flats, doPc, onCardClick, onBarClick }: TabLineProps) {
   const { doc, score, indexByKey, harp } = parsed;
   const line = doc.lines[li];
   // More than one verse: each row is numbered at the line's first syllable of it.
@@ -251,6 +256,7 @@ const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, m
                     showNoteNames={showNoteNames}
                     showLyrics={showLyrics}
                     verses={verses}
+                    singing={singing}
                     numbered={shown.filter((_, k) => firstSung[k] === ei).join(',')}
                     showChords={showChords}
                     numbers={numbers}
@@ -285,6 +291,7 @@ const TabCard = memo(function TabCard({
   showNoteNames,
   showLyrics,
   verses,
+  singing,
   numbered,
   showChords,
   numbers,
@@ -305,6 +312,7 @@ const TabCard = memo(function TabCard({
   showNoteNames: boolean;
   showLyrics: boolean;
   verses: string;
+  singing: number;
   /** The verses whose number this card shows (its line's first syllable of them). */
   numbered: string;
   showChords: boolean;
@@ -359,9 +367,9 @@ const TabCard = memo(function TabCard({
       {showLyrics && verses === '0' ? (
         <span className="card-lyric">{ev.lyric ?? ''}</span>
       ) : showLyrics ? (
-        <span className="card-lyric verses">
+        <span className={`card-lyric verses ${singing >= 0 ? 'singing' : ''}`}>
           {verses.split(',').map((v) => (
-            <span key={v} className="verse-syl" data-n={numbered.split(',').includes(v) ? `${Number(v) + 1}.` : undefined}>
+            <span key={v} className={`verse-syl ${Number(v) === singing ? 'sung' : ''}`} data-n={numbered.split(',').includes(v) ? `${Number(v) + 1}.` : undefined}>
               {lyricOf(ev, Number(v)) ?? ''}
             </span>
           ))}

@@ -94,3 +94,13 @@ it('shows each verse as its own numbered line; the Show menu picks one', async (
   ]);
   useApp.setState({ showVerse: 0 });
 });
+
+it('while it plays, the verse being sung stands out and the others dim', async () => {
+  await act(async () => s().loadText('---\ntitle: Verses\n---\n4 4 6 6 |\nw: Twin-kle twin-kle\nw: Up a-bove the\n', null));
+  await act(async () => useApp.setState({ play: 'playing', playVerse: 1 }));
+  expect([...host.querySelectorAll('.ly-line')].map((l) => l.classList.contains('not-sung'))).toEqual([true, false]);
+  await act(async () => useApp.setState({ sheetView: 'tab' }));
+  expect(host.querySelector('.verse-syl.sung')?.textContent).toBe('Up');
+  await act(async () => useApp.setState({ play: 'stopped', playVerse: 0 }));
+  expect(host.querySelector('.card-lyric.singing')).toBeNull();
+});

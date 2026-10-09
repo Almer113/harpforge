@@ -45,6 +45,8 @@ export function Sheet({
   const readAs = useApp((s) => s.readAs);
   const notes = readAs === 'notes';
   const verses = useShownVerses(parsed);
+  // The verse being sung, while it plays (with more than one shown, the others dim).
+  const singing = useApp((s) => (s.play !== 'stopped' && verses.length > 1 ? s.playVerse : null));
   // "Do" of the key: the song key's relative major, else the harmonica's key.
   const doName = pitchClassName(doPitchClass(parsed.doc.meta.key ?? parsed.harp.spec.key.replace(/^(Low|High)\s+/i, '')), keyUsesFlats(parsed.doc.meta.key ?? parsed.harp.spec.key));
 
@@ -71,7 +73,7 @@ export function Sheet({
       {/* (The staff is drawn to the width it's given: it's made bigger by giving it less.) */}
       <div className="sheet-body" style={scale !== 1 && view !== 'staff' ? { zoom: scale } : undefined}>
       {view === 'lyrics' ? (
-        <LyricsView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} passage={passage} loopRange={loopRange} marks={marks} marksPrev={marksPrev} readAs={readAs} show={show.lyrics} verses={verses} />
+        <LyricsView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} passage={passage} loopRange={loopRange} marks={marks} marksPrev={marksPrev} readAs={readAs} show={show.lyrics} verses={verses} singing={singing} />
       ) : view === 'simple' ? (
         <SimpleTabView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} passage={passage} loopRange={loopRange} marks={marks} marksPrev={marksPrev} readAs={readAs} />
       ) : view !== 'staff' ? (
@@ -82,6 +84,7 @@ export function Sheet({
           showNoteNames={view === 'numbers' ? show.numbers.holes : notes ? show.tab.holes : showNoteNames}
           showLyrics={view === 'numbers' ? show.numbers.lyrics : show.tab.lyrics}
           verses={verses}
+          singing={singing}
           showChords={view === 'numbers' ? show.numbers.chords : show.tab.chords}
           onCardClick={onSelect}
           passage={passage}

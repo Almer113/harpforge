@@ -76,3 +76,27 @@ it('an empty |: :| repeats nothing', () => {
   expect(played('4 5 |: :|')).toBe('4 5');
   expect(played('4 5 |:\n:| 6')).toBe('4 5 6');
 });
+
+it('the verse sung: verse 2 the second time through a repeat (if the line has one)', () => {
+  const { doc, score } = parse('4 |: 5 6 :|\nw: a b c\nw: _ d e');
+  const p = playbackScore(doc, score);
+  // 4 (verse 1) | 5 6 (verse 1) | 5 6 (verse 2)
+  expect(p.verse).toEqual([0, 0, 0, 1, 1]);
+  // A line with one verse sings it again.
+  const one = parse('4 |: 5 6 :|\nw: a b c');
+  expect(playbackScore(one.doc, one.score).verse).toEqual([0, 0, 0, 0, 0]);
+});
+
+it('all verses: once through the song for each, verse by verse', () => {
+  const { doc, score } = parse('4 5 |\nw: a b\nw: c d\nw: e f');
+  const p = playbackScore(doc, score, { allVerses: true });
+  expect(p.orig).toEqual([0, 1, 0, 1, 0, 1]);
+  expect(p.round).toEqual([0, 0, 1, 1, 2, 2]);
+  expect(p.verse).toEqual([0, 0, 1, 1, 2, 2]);
+  expect(p.score.events.map((e) => e.start)).toEqual([0, 1, 2, 3, 4, 5]);
+  expect(playbackIndexOf(p, 1, 1, 2)).toBe(5);
+  // One verse, or repeats off with no verses: as written (the very same).
+  const w = parse('4 5 |\nw: a b');
+  expect(playbackScore(w.doc, w.score, { allVerses: true }).score).toBe(w.score);
+  expect(playbackScore(w.doc, w.score, { repeats: false })).toBe(playbackScore(w.doc, w.score, { repeats: false }));
+});

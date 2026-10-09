@@ -9,6 +9,7 @@
 
 import type { TabDoc } from './htab/types';
 import type { Score, ScoreEvent } from './score';
+import { lineVerses, songVerses } from './verses';
 
 const EPS = 1e-6;
 
@@ -18,7 +19,11 @@ export interface PlaybackScore {
   orig: number[];
   /** Playback index → 1 the first time through, 2 the repeat. */
   pass: number[];
-  /** Whether any repeat is played (the playback score isn't just the written one). */
+  /** Playback index → which time through the whole song (0 = first; more with all verses). */
+  round: number[];
+  /** Playback index → the verse it sings (0 = verse 1). */
+  verse: number[];
+  /** Whether it isn't just the written score (repeats or verses played). */
   repeats: boolean;
 }
 
@@ -64,46 +69,84 @@ export function playOrder(doc: TabDoc, total: number): { from: number; to: numbe
   return out;
 }
 
-/** The written score as it's played: each note once, in order. */
-export function writtenScore(score: Score): PlaybackScore {
-  return { score, orig: score.events.map((ev) => ev.index), pass: score.events.map(() => 1), repeats: false };
+/** Where written note `index` is played: its `pass`-th time in round `round` if there is one, else in that round, else its first time. */
+export function playbackIndexOf(p: PlaybackScore, index: number, pass = 1, round = 0): number | undefined {
+  let first: number | undefined;
+  let inRound: number | undefined;
+  for (let i = 0; i < p.orig.length; i++) {
+    if (p.orig[i] !== index) continue;
+    if (p.round[i] === round) {
+      if (p.pass[i] === pass) return i;
+      inRound ??= i;
+    }
+    first ??= i;
+  }
+  return inRound ?? first;
 }
 
-const cache = new WeakMap<Score, PlaybackScore>();
+const written = new WeakMap<Score, PlaybackScore>();
 
-/** The score with its repeats played (the written one when it has none). */
-export function playbackScore(doc: TabDoc, score: Score): PlaybackScore {
-  const hit = cache.get(score);
+/** The written score as it's played: each note once, in order, verse 1. */
+export function writtenScore(score: Score): PlaybackScore {
+  const hit = written.get(score);
   if (hit) return hit;
-  const order = playOrder(doc, score.totalBeats);
-  const result = order.length === 1 && order[0].from < EPS ? writtenScore(score) : unroll(score, order);
-  cache.set(score, result);
+  const zeros = score.events.map(() => 0);
+  const result: PlaybackScore = { score, orig: score.events.map((ev) => ev.index), pass: score.events.map(() => 1), round: zeros, verse: zeros, repeats: false };
+  written.set(score, result);
   return result;
 }
 
-function unroll(score: Score, order: { from: number; to: number }[]): PlaybackScore {
+const cache = new WeakMap<Score, Map<string, PlaybackScore>>();
+
+/**
+ * The score as it's played: with its repeats (`repeats`, default on) and, with `allVerses`,
+ * once through for each verse (rounds). The written one when that changes nothing.
+ */
+export function playbackScore(doc: TabDoc, score: Score, opts: { repeats?: boolean; allVerses?: boolean } = {}): PlaybackScore {
+  const repeats = opts.repeats ?? true;
+  const rounds = opts.allVerses ? Math.max(1, songVerses(doc)) : 1;
+  const key = `${repeats}:${rounds}`;
+  const hit = cache.get(score)?.get(key);
+  if (hit) return hit;
+  const order = repeats ? playOrder(doc, score.totalBeats) : [{ from: 0, to: score.totalBeats }];
+  const result = rounds === 1 && order.length === 1 && order[0].from < EPS ? writtenScore(score) : unroll(doc, score, order, rounds);
+  if (!cache.has(score)) cache.set(score, new Map());
+  cache.get(score)!.set(key, result);
+  return result;
+}
+
+function unroll(doc: TabDoc, score: Score, order: { from: number; to: number }[], rounds: number): PlaybackScore {
   const events: ScoreEvent[] = [];
   const orig: number[] = [];
   const pass: number[] = [];
+  const round: number[] = [];
+  const verse: number[] = [];
   const bars: number[] = [];
-  const seen = new Map<number, number>();
+  const versesOf = doc.lines.map(lineVerses);
   let at = 0;
-  for (const { from, to } of order) {
-    if (at > EPS) bars.push(at);
-    for (const b of score.bars) if (b > from + EPS && b < to - EPS) bars.push(at + b - from);
-    for (const ev of score.events) {
-      if (ev.start < from - EPS || ev.start >= to - EPS) continue;
-      const n = (seen.get(ev.index) ?? 0) + 1;
-      seen.set(ev.index, n);
-      // A tie whose note isn't the one played just before it (the start of a repeat, after
-      // the jump back) has nothing to continue: it's played as a note of its own.
-      const after = events.at(-1);
-      const tied = ev.tied && !!after && orig.at(-1) === ev.index - 1 && !after.rest;
-      events.push({ ...ev, index: events.length, start: at + ev.start - from, soundBeats: ev.beats, tied });
-      orig.push(ev.index);
-      pass.push(n);
+  for (let r = 0; r < rounds; r++) {
+    const seen = new Map<number, number>();
+    for (const { from, to } of order) {
+      if (at > EPS) bars.push(at);
+      for (const b of score.bars) if (b > from + EPS && b < to - EPS) bars.push(at + b - from);
+      for (const ev of score.events) {
+        if (ev.start < from - EPS || ev.start >= to - EPS) continue;
+        const n = (seen.get(ev.index) ?? 0) + 1;
+        seen.set(ev.index, n);
+        // A tie whose note isn't the one played just before it (the start of a repeat, after
+        // the jump back) has nothing to continue: it's played as a note of its own.
+        const after = events.at(-1);
+        const tied = ev.tied && !!after && orig.at(-1) === ev.index - 1 && !after.rest;
+        events.push({ ...ev, index: events.length, start: at + ev.start - from, soundBeats: ev.beats, tied });
+        orig.push(ev.index);
+        pass.push(n);
+        round.push(r);
+        // The verse sung: one a round (all verses), else one a time through a repeat — a line
+        // without that many verses sings its last.
+        verse.push(Math.max(0, Math.min(rounds > 1 ? r : n - 1, (versesOf[ev.line] ?? 1) - 1)));
+      }
+      at += to - from;
     }
-    at += to - from;
   }
   // A tie carries the note before it in the order played.
   for (let i = 0; i < events.length; i++) {
@@ -118,16 +161,5 @@ function unroll(score: Score, order: { from: number; to: number }[]): PlaybackSc
       }
     }
   }
-  return { score: { events, totalBeats: at, bars }, orig, pass, repeats: true };
-}
-
-/** Where written note `index` is played (its `pass`-th time if it repeats, else its first). */
-export function playbackIndexOf(p: PlaybackScore, index: number, pass = 1): number | undefined {
-  let first: number | undefined;
-  for (let i = 0; i < p.orig.length; i++) {
-    if (p.orig[i] !== index) continue;
-    if (p.pass[i] === pass) return i;
-    first ??= i;
-  }
-  return first;
+  return { score: { events, totalBeats: at, bars }, orig, pass, round, verse, repeats: true };
 }

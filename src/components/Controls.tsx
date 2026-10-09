@@ -173,6 +173,7 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
   const countIn = useApp((s) => s.countIn);
   const countEachLoop = useApp((s) => s.countEachLoop);
   const playRepeats = useApp((s) => s.playRepeats);
+  const allVerses = useApp((s) => s.playAllVerses);
   const { doc } = useParsed();
   const showSpeed = withSpeed && speed !== 1;
   return (
@@ -213,12 +214,17 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
           Count in before each pass
         </label>
         <span className="mi-hint pb-hint">A breath between passes when looping</span>
-        <span className="pb-head">Repeats</span>
+        <span className="pb-head">Repeats and verses</span>
         <label className="check">
           <input type="checkbox" checked={playRepeats} onChange={(e) => useApp.setState({ playRepeats: e.target.checked })} />
           Play repeats
         </label>
-        <span className="mi-hint pb-hint">Sections between repeat signs (|: and :|) play twice; not when looping a passage</span>
+        <span className="mi-hint pb-hint">Sections between repeat signs (|: and :|) play twice, verse 2 the second time; not when looping a passage</span>
+        <label className="check">
+          <input type="checkbox" checked={allVerses} onChange={(e) => useApp.setState({ playAllVerses: e.target.checked })} />
+          Play all verses
+        </label>
+        <span className="mi-hint pb-hint">A song written once with several verses plays through once for each</span>
       </div>
     </Popover>
   );

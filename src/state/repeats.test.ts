@@ -138,3 +138,26 @@ it('a change while paused takes effect on resume; one that changes nothing doesn
   expect(playScore).not.toHaveBeenCalled();
   stop();
 });
+
+it('all verses plays the song once a verse; the sheet knows the verse sung', async () => {
+  s().loadText('---\ntempo: 60\n---\n4 5 |\nw: a b\nw: c d\n', null);
+  useApp.setState({ playAllVerses: true });
+  await play();
+  expect(last()[0].events).toHaveLength(4);
+  last()[1].onEvent(2, true);
+  expect(s().activeEvents).toEqual([0]);
+  expect(s().playVerse).toBe(1);
+  // Clicking a note in verse 2 stays in verse 2.
+  const { playFrom } = await import('./playback');
+  playFrom(1);
+  await vi.waitFor(() => expect(last()[1].startBeat).toBe(3));
+  // Turned off mid-song: as written, from the same note.
+  clock.beat = 3.2;
+  playScore.mockClear();
+  useApp.setState({ playAllVerses: false });
+  await vi.waitFor(() => expect(playScore).toHaveBeenCalledTimes(1));
+  expect(last()[0].events).toHaveLength(2);
+  stop();
+  expect(s().playVerse).toBe(0);
+  useApp.setState({ playAllVerses: false });
+});

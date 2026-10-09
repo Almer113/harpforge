@@ -9,6 +9,7 @@ import { Popover } from './Popover';
 import { keysTaken } from '../live/focus';
 import { ReadAsSwitch, ShowItems, ViewSwitch } from './Sheet';
 import { barAt, barStarts } from '../core/passage';
+import { songVerses } from '../core/verses';
 import { exitPerform, performResize } from '../state/perform';
 import { setAlong } from '../state/playAlong';
 import { DEFAULT_PERFORM_SIZE, PERFORM_SIZES, useApp, useParsed } from '../state/store';
@@ -40,9 +41,12 @@ export function PerformBar() {
   });
   const starts = useMemo(() => barStarts(score), [score]);
   const second = useApp((s) => s.play !== 'stopped' && s.playPass === 2);
+  // With several verses: which one is being sung (else "2nd time" in a repeat).
+  const verseCount = useMemo(() => songVerses(doc), [doc]);
+  const verse = useApp((s) => (s.play !== 'stopped' && verseCount > 1 ? s.playVerse + 1 : null));
   const ev = at !== null && at !== undefined ? score.events[at] : undefined;
   const bar = ev ? barAt(score, ev.start, starts) + 1 : null;
-  const where = bar ? `Bar ${bar} of ${starts.length}${second ? ' · 2nd time' : ''}` : `${starts.length} bars`;
+  const where = bar ? `Bar ${bar} of ${starts.length}${verse ? ` · Verse ${verse}` : second ? ' · 2nd time' : ''}` : `${starts.length} bars`;
 
   const { idle, hint } = useIdle(playing);
 

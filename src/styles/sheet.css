@@ -198,3 +198,10 @@
   font-style: normal; font-size: 10px; font-weight: 700; color: var(--faint);
 }
 .ly-vnum { align-self: flex-end; font-size: 0.65em; font-weight: 700; color: var(--faint); line-height: 2; margin-right: -0.25em; }
+/* While it plays: the verse being sung stands out, the others dim. */
+.card-lyric.verses.singing .verse-syl:not(.sung) { opacity: 0.4; }
+.card-lyric.verses.singing .verse-syl.sung { color: var(--text); }
+.ly-line.not-sung { opacity: 0.4; transition: opacity 0.3s; }
+/* (The playing note lights in the verse being sung only.) */
+.ly-line.not-sung .ly-note.active, .ly-line.not-sung .ly-syl.active .ly-text { background: transparent; border-color: transparent; color: inherit; }
+@media (prefers-reduced-motion: reduce) { .ly-line.not-sung { transition: none; } }

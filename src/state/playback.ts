@@ -24,26 +24,37 @@ export function setAlongHooks(hooks: AlongHooks) {
   along = hooks;
 }
 
-/** A written note starts or stops sounding (`pass`: 2 when it's the repeat). */
-function onEvent(index: number, on: boolean, pass?: number) {
+/**
+ * A written note starts or stops sounding (`pass`: 2 when it's the repeat; `verse`: the
+ * verse sung, 0-based).
+ */
+function onEvent(index: number, on: boolean, pass?: number, verse?: number) {
   useApp.setState((st) => ({
     activeEvents: on ? [...st.activeEvents.filter((x) => x !== index), index] : st.activeEvents.filter((x) => x !== index),
     ...(on && pass !== undefined && pass !== st.playPass ? { playPass: pass } : {}),
+    ...(on && verse !== undefined && verse !== st.playVerse ? { playVerse: verse } : {}),
   }));
 }
 
-// The score being played: the written one with its repeats played (see repeats.ts).
+// The score being played: the written one with its repeats and verses played (see
+// repeats.ts), and the last of its notes to start.
 let playing: PlaybackScore | null = null;
+let playingAt = -1;
 // What the sound was started with: changed since (even while paused), it starts again.
-let startedWith = { muted: false, repeats: false };
+let startedWith: { muted: boolean; played: PlaybackScore | null } = { muted: false, played: null };
 
-/** Whether the tune would be left out, and the repeats played, if playback started now. */
-function wanted(s: AppState): { muted: boolean; repeats: boolean } {
+/** The score as it would be played now: repeats and verses, unless a passage loops. */
+function playedScore(s: AppState): PlaybackScore {
   const p = getParsed(s.text);
   const range = s.loop && s.loopRange && usablePassage(s.loopRange, p.score.totalBeats);
-  return { muted: tuneMuted(s), repeats: s.playRepeats && !range && playbackScore(p.doc, p.score).repeats };
+  return range ? writtenScore(p.score) : playbackScore(p.doc, p.score, { repeats: s.playRepeats, allVerses: s.playAllVerses });
 }
-const sameStart = (a: typeof startedWith, b: typeof startedWith) => a.muted === b.muted && a.repeats === b.repeats;
+
+/** Whether the tune would be left out, and what would be played, if playback started now. */
+function wanted(s: AppState): typeof startedWith {
+  return { muted: tuneMuted(s), played: playedScore(s) };
+}
+const sameStart = (a: typeof startedWith, b: typeof startedWith) => a.muted === b.muted && a.played === b.played;
 
 /**
  * Starts playback again from where it is: the same note, the same time through a repeat.
@@ -56,7 +67,7 @@ function restartHere(record: boolean) {
   const at = beat === null ? undefined : [...pb.score.events].reverse().find((ev) => ev.start <= beat + 1e-6);
   stop({ record });
   useApp.setState({ selectedEvent: at ? (pb.orig[at.index] ?? s.selectedEvent) : s.selectedEvent });
-  void play({ count: false, pass: at ? pb.pass[at.index] : undefined });
+  void play({ count: false, pass: at ? pb.pass[at.index] : undefined, round: at ? pb.round[at.index] : undefined });
 }
 
 // Bumped by stop(): a play() still waiting for the audio to start then doesn't go ahead.
@@ -74,7 +85,7 @@ export function countBeats(bpb: number, bpm: number): number {
  * Starts (or resumes) playback. `count: false` skips the count-in (jumping to a note mid-play),
  * `count: true` counts in whatever the setting (a drill).
  */
-export async function play(opts: { count?: boolean; pass?: number } = {}) {
+export async function play(opts: { count?: boolean; pass?: number; round?: number } = {}) {
   const s = useApp.getState();
   if (s.recording) return;
   // Playing ends a microphone calibration that's still listening.
@@ -98,10 +109,10 @@ export async function play(opts: { count?: boolean; pass?: number } = {}) {
     return;
   }
   const range = (s.loop && s.loopRange && usablePassage(s.loopRange, p.score.totalBeats)) || undefined;
-  // Repeats play when the song plays through (a looped passage is its own repeat). The
-  // selected note starts it: its `pass`-th time when it's in a repeat (restarting there).
-  const pb = s.playRepeats && !range ? playbackScore(p.doc, p.score) : writtenScore(p.score);
-  const selAt = s.selectedEvent !== null ? playbackIndexOf(pb, s.selectedEvent, opts.pass) : undefined;
+  // Repeats (and all verses) play when the song plays through (a looped passage is its own
+  // repeat). The selected note starts it: its `pass`-th time in round `round` (restarting there).
+  const pb = playedScore(s);
+  const selAt = s.selectedEvent !== null ? playbackIndexOf(pb, s.selectedEvent, opts.pass, opts.round) : undefined;
   const sel = selAt !== undefined ? pb.score.events[selAt] : undefined;
   const bpb = beatsPerBar(p.doc.meta);
   const tempo = p.doc.meta.tempo * s.speed;
@@ -114,7 +125,8 @@ export async function play(opts: { count?: boolean; pass?: number } = {}) {
   const muted = tuneMuted(s);
   if (s.along) along?.startChecking(range ?? { start: sel?.start ?? 0, end: pb.score.totalBeats }, s.loop, eachLoop, pb);
   playing = pb;
-  startedWith = { muted, repeats: pb.repeats };
+  playingAt = selAt ?? 0;
+  startedWith = { muted, played: pb };
   engine.playScore(pb.score, {
     tempo,
     startBeat: sel?.start ?? 0,
@@ -127,14 +139,17 @@ export async function play(opts: { count?: boolean; pass?: number } = {}) {
     onLoop: loopPassed,
     muted,
     metronomeBeatsPerBar: s.metronome || alongMuted ? bpb : undefined,
-    onEvent: (i, on) => onEvent(pb.orig[i] ?? i, on, pb.pass[i]),
+    onEvent: (i, on) => {
+      if (on) playingAt = i;
+      onEvent(pb.orig[i] ?? i, on, pb.pass[i], pb.verse[i]);
+    },
     onEnd: () => {
       if (useApp.getState().along) along?.passEnded('end');
       along?.stopChecking(false);
-      useApp.setState({ play: 'stopped', activeEvents: [], playPass: 1 });
+      useApp.setState({ play: 'stopped', activeEvents: [], playPass: 1, playVerse: 0 });
     },
   });
-  useApp.setState({ play: 'playing', activeEvents: [], playPass: sel ? pb.pass[sel.index] : 1 });
+  useApp.setState({ play: 'playing', activeEvents: [], playPass: sel ? pb.pass[sel.index] : 1, playVerse: sel ? pb.verse[sel.index] : 0 });
 }
 
 export function pause() {
@@ -154,7 +169,7 @@ export function stop({ record = true }: { record?: boolean } = {}) {
   along?.stopChecking(record);
   generation++;
   engine.stopPlayback();
-  useApp.setState({ play: 'stopped', activeEvents: [], playPass: 1 });
+  useApp.setState({ play: 'stopped', activeEvents: [], playPass: 1, playVerse: 0 });
 }
 
 export function togglePlay() {
@@ -168,11 +183,11 @@ export function togglePlay() {
 export function playFrom(index: number) {
   const s = useApp.getState();
   if (s.recording) return;
-  // (Mid-song, in the repeat's second time: that time, not back to the first.)
-  const pass = s.play !== 'stopped' ? s.playPass : undefined;
+  // (Mid-song, in a repeat's second time or a later verse: that time, not back to the first.)
+  const now = s.play !== 'stopped' && playing ? { pass: playing.pass[playingAt], round: playing.round[playingAt] } : {};
   stop();
   useApp.setState({ selectedEvent: index });
-  void play({ count: false, pass });
+  void play({ count: false, ...now });
 }
 
 /**
@@ -264,7 +279,7 @@ useApp.subscribe((s, prev) => {
   // Repeats switched on or off: the same, from the same note — when it changes what's played.
   if (s.play === 'playing') {
     if (s.along !== prev.along || (s.along && s.alongMelody !== prev.alongMelody)) restartHere(true);
-    else if ((tuneMuted(s) !== tuneMuted(prev) || s.playRepeats !== prev.playRepeats) && !sameStart(wanted(s), startedWith)) restartHere(false);
+    else if ((tuneMuted(s) !== tuneMuted(prev) || s.playRepeats !== prev.playRepeats || s.playAllVerses !== prev.playAllVerses) && !sameStart(wanted(s), startedWith)) restartHere(false);
   }
 });
 
