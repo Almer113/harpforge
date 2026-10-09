@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { songVerses } from '../core/verses';
 import { FAMILIES, getHarmonica, harmonicaName, keysFor, rangeLabel, specId, tuningsFor, type Family, type HarmonicaSpec } from '../core/instruments';
 import { keysTaken } from '../live/focus';
 import { stopRecording } from '../live/recorder';
@@ -174,14 +175,16 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
   const countEachLoop = useApp((s) => s.countEachLoop);
   const playRepeats = useApp((s) => s.playRepeats);
   const allVerses = useApp((s) => s.playAllVerses);
+
   const { doc } = useParsed();
   const showSpeed = withSpeed && speed !== 1;
+  const oneVerse = useMemo(() => songVerses(doc) < 2, [doc]);
   return (
     <Popover
       label={`♫ ${soundMode === 'samples' ? 'Real' : 'Synth'}${showSpeed ? ` · ${Math.round(speed * 100)}%` : ''} ▾`}
       buttonClass="btn small ghost"
-      title={withSpeed ? 'Sound (real harmonica or synth), speed, counting in and repeats' : 'Sound (real harmonica or synth), counting in and repeats'}
-      ariaLabel={withSpeed ? 'Sound, speed, counting in and repeats' : 'Sound, counting in and repeats'}
+      title={withSpeed ? 'Sound (real harmonica or synth), speed, counting in, repeats and verses' : 'Sound (real harmonica or synth), counting in, repeats and verses'}
+      ariaLabel={withSpeed ? 'Sound, speed, counting in, repeats and verses' : 'Sound, counting in, repeats and verses'}
       kind="panel"
       panelClass="menu pb-menu"
     >
@@ -224,7 +227,7 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
           <input type="checkbox" checked={allVerses} onChange={(e) => useApp.setState({ playAllVerses: e.target.checked })} />
           Play all verses
         </label>
-        <span className="mi-hint pb-hint">A song written once with several verses plays through once for each</span>
+        <span className="mi-hint pb-hint">{oneVerse ? 'This song has one verse' : 'The song plays through until every verse has been sung'}</span>
       </div>
     </Popover>
   );

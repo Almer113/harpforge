@@ -149,7 +149,7 @@ export async function play(opts: { count?: boolean; pass?: number; round?: numbe
       useApp.setState({ play: 'stopped', activeEvents: [], playPass: 1, playVerse: 0 });
     },
   });
-  useApp.setState({ play: 'playing', activeEvents: [], playPass: sel ? pb.pass[sel.index] : 1, playVerse: sel ? pb.verse[sel.index] : 0 });
+  useApp.setState({ play: 'playing', activeEvents: [], playPass: sel ? pb.pass[sel.index] : 1, playVerse: sel ? pb.verse[sel.index] : 0, playVerses: pb.verse.some((v) => v > 0) });
 }
 
 export function pause() {

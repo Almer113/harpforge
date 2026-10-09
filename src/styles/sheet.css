@@ -199,9 +199,14 @@
 }
 .ly-vnum { align-self: flex-end; font-size: 0.65em; font-weight: 700; color: var(--faint); line-height: 2; margin-right: -0.25em; }
 /* While it plays: the verse being sung stands out, the others dim. */
-.card-lyric.verses.singing .verse-syl:not(.sung) { opacity: 0.4; }
+.card-lyric.verses.singing .verse-syl:not(.sung) { opacity: 0.55; }
 .card-lyric.verses.singing .verse-syl.sung { color: var(--text); }
-.ly-line.not-sung { opacity: 0.4; transition: opacity 0.3s; }
+.ly-line.not-sung { opacity: 0.55; transition: opacity 0.3s; }
+/* Verses under the first: their words (the holes and chords are over the first). */
+.ly-line.words-only .ly-notes { display: none; }
+.ly-line.words-only.ly-fills { display: none; }
+/* Lines of several verses: more room between one line's verses and the next line's. */
+.lyricsview.numbered { gap: 26px; }
 /* (The playing note lights in the verse being sung only.) */
 .ly-line.not-sung .ly-note.active, .ly-line.not-sung .ly-syl.active .ly-text { background: transparent; border-color: transparent; color: inherit; }
 @media (prefers-reduced-motion: reduce) { .ly-line.not-sung { transition: none; } }

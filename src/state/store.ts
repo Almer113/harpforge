@@ -203,6 +203,8 @@ export interface AppState {
   playAllVerses: boolean;
   /** While playing: the verse being sung (0 = verse 1). */
   playVerse: number;
+  /** While playing: whether it goes through verses (all verses, or a repeat's verse 2). */
+  playVerses: boolean;
   /** This pass's marks, by score index. */
   alongMarks: Record<number, import('../core/playAlong').Mark>;
   /** The last pass's marks (shown faded until each note comes round again). */
@@ -243,8 +245,9 @@ export interface AppState {
   ownedHarps: import('../core/instruments').HarmonicaSpec[];
   /** Plain-text export: open, and its choices (remembered). */
   plainTextOpen: boolean;
-  /** The editor's "Fill lyrics from text" dialog. */
+  /** The editor's "Fill lyrics from text" dialog, and the words in it (kept if it's closed by mistake). */
   fillLyricsOpen: boolean;
+  fillDraft: string;
   textPrefs: import('../core/formats/plaintext').PlainTextOptions;
   /** Print view choices (remembered). */
   printPrefs: import('../pages/PrintPage').PrintPrefs;
@@ -452,6 +455,7 @@ export const useApp = create<AppState>((set) => ({
   playPass: 1,
   playAllVerses: prefs.playAllVerses ?? false,
   playVerse: 0,
+  playVerses: false,
   calibrating: false,
   alongMarks: {},
   alongPrev: {},
@@ -479,6 +483,7 @@ export const useApp = create<AppState>((set) => ({
   printPrefs: { view: 'tab', size: 'normal', title: true, details: true, chart: false, ...prefs.printPrefs },
   plainTextOpen: false,
   fillLyricsOpen: false,
+  fillDraft: '',
   ownedHarps: Array.isArray(prefs.ownedHarps) ? prefs.ownedHarps : [],
   textPrefs: { ...DEFAULT_PLAIN_TEXT, ...prefs.textPrefs },
   sheetShow: {
@@ -543,7 +548,7 @@ export const useApp = create<AppState>((set) => ({
   loadSeq: 0,
   loadText: (text, docId = null, saved = false) =>
     // A different tab: the editor's caret and selection start over (they belonged to the old one).
-    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0, verse: 0, lyricAt: undefined }, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, passage: null, loopRange: null, loop: s.loopRange ? false : s.loop, training: null, alongMarks: {}, alongPrev: {}, alongPasses: [], activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
+    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0, verse: 0, lyricAt: undefined }, showVerse: 0, fillLyricsOpen: false, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, passage: null, loopRange: null, loop: s.loopRange ? false : s.loop, training: null, alongMarks: {}, alongPrev: {}, alongPasses: [], activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
   markSaved: (docId, text) => set((s) => ({ docId, savedText: text ?? s.text })),
   notify: (message) => set({ toast: { message, id: Date.now() } }),
 }));

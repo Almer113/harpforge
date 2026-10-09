@@ -238,6 +238,9 @@ export function spliceBody(oldText: string, song: Song, report?: SpliceReport): 
   const out: string[] = [];
   const used = new Set<number>();
   const emitted = new Set<number>(); // lines whose in-between lines were written
+  // Lines written as moved away (their comments already out): music of theirs that turns up
+  // later doesn't bring them again.
+  const flushed = new Set<number>();
   const verbatimLines = new Set<number>();
   const order = [...chunks.keys()];
   // Lines whose music isn't written under their own line any more.
@@ -252,6 +255,7 @@ export function spliceBody(oldText: string, song: Song, report?: SpliceReport): 
         out.push(...withoutChordRows(c.glue, c.glueStart), ...raw.slice(c.from, c.to + 1));
         continue;
       }
+      flushed.add(k);
       out.push(...withoutChordRows(c.glue, c.glueStart).filter((g) => isComment(g) || isLyrics(g)));
       if (c.tail) {
         out.push(c.tail);
@@ -283,7 +287,8 @@ export function spliceBody(oldText: string, song: Song, report?: SpliceReport): 
       if (out.length) out.push('');
       out.push(`@ ${section}`);
     }
-    if (verbatim) out.push(...raw.slice(chunk!.from, chunk!.to + 1));
+    if (L !== undefined && flushed.has(L)) out.push(...c.text);
+    else if (verbatim) out.push(...raw.slice(chunk!.from, chunk!.to + 1));
     else if (chunk && L !== undefined && !emitted.has(L)) {
       out.push(...rewritten(c.text, chunk.tail, chunk.before, chunk.after, chunk.to > chunk.from));
       tell(chunk.kept);

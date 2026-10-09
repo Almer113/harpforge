@@ -2,6 +2,7 @@
 // note) small above it and the chords above that. Notes held over a syllable sit beside its
 // note; lines without words show as a compact line of holes. Section headings stand out.
 
+import { lineShown, lineVerse } from '../core/verses';
 import { memo, useEffect, useMemo, useRef } from 'react';
 import type { NoteEvent, RestEvent } from '../core/htab/types';
 import { hasWords, lyricsLine, type LyNote } from '../core/lyricsLayout';
@@ -61,7 +62,7 @@ export function LyricsView({ parsed, activeEvents, selectedEvent, onSelect, pass
   const marksByLine = marksPerLine(score, marks, marksPrev);
   const selectedLine = selectedEvent !== null ? score.events[selectedEvent]?.line : undefined;
   return (
-    <div className={`lyricsview ${readAs === 'notes' ? 'as-notes' : ''} ${show.holes ? '' : 'no-holes'}`} ref={root}>
+    <div className={`lyricsview ${readAs === 'notes' ? 'as-notes' : ''} ${show.holes ? '' : 'no-holes'} ${verses.length > 1 ? 'numbered' : ''}`} ref={root}>
       {!anyWords && <p className="muted small ly-none">This song has no words yet. Add them in the editor, on a <code>w:</code> line under the tab.</p>}
       {lines.map(({ li }) => (
         <LyricsLine
@@ -125,12 +126,14 @@ const LyricsLine = memo(function LyricsLine({
   const line = doc.lines[li];
   // Each verse shown that has words here (verse 1 always: a line without words is fills).
   const rows = useMemo(() => {
-    const shown = verses.split(',').map(Number);
+    // (One verse picked: a line with fewer, a chorus, shows its own.)
+    const shown = lineShown(line, verses.split(',').map(Number));
     const all = shown.map((v) => ({ v, words: lyricsLine(line, v) }));
     const sung = all.filter((r) => hasWords(r.words));
     return sung.length ? sung : all.slice(0, 1);
   }, [line, verses]);
   const numbered = verses.includes(',');
+  const sungHere = singing >= 0 ? lineVerse(line, singing) : -1;
   const set = (list: string) => new Set(list ? list.split(',').map(Number) : []);
   const activeSet = set(active);
   const passageSet = set(inPassage);
@@ -183,9 +186,17 @@ const LyricsLine = memo(function LyricsLine({
   return (
     <div className="ly-block">
       {line.section !== undefined && <div className="tab-section ly-section">{line.section}</div>}
-      {rows.map(({ v, words }) => words.length > 0 && (
-        <div key={v} data-v={v} className={`ly-line ${hasWords(words) ? '' : 'ly-fills'} ${singing >= 0 && rows.length > 1 && v !== singing ? 'not-sung' : ''}`}>
-          {numbered && hasWords(words) && <span className="ly-vnum" aria-label={`Verse ${v + 1}`}>{v + 1}.</span>}
+      {rows.map(({ v, words }, ri) => {
+        // The holes and chords once a line, over its first verse; the verses under it are words.
+        const holesHere = holes && ri === 0;
+        return words.length > 0 && (
+        <div key={v} data-v={v} className={`ly-line ${hasWords(words) ? '' : 'ly-fills'} ${ri > 0 ? 'words-only' : ''} ${sungHere >= 0 && rows.length > 1 && v !== sungHere ? 'not-sung' : ''}`}>
+          {numbered && hasWords(words) && (
+            <span className="ly-vnum">
+              <span aria-hidden>{v + 1}.</span>
+              <span className="sr-only">Verse {v + 1}</span>
+            </span>
+          )}
           {words.map((w, wi) => (
             <span className="ly-word" key={wi}>
               {w.syllables.map((s, si) => {
@@ -206,13 +217,13 @@ const LyricsLine = memo(function LyricsLine({
                       // The words play from their note too. The note above is the button for the
                       // keyboard, unless the holes are hidden: then the syllable is.
                       <span
-                        className={`ly-text ${holes ? '' : states(idx).cls}`}
-                        role={!holes && onSelect ? 'button' : undefined}
-                        tabIndex={!holes && onSelect ? 0 : undefined}
-                        aria-label={!holes && onSelect ? `${s.text}: ${names(idx)}${states(idx).words ? ` · ${states(idx).words}` : ''}` : undefined}
+                        className={`ly-text ${holesHere ? '' : states(idx).cls}`}
+                        role={!holesHere && onSelect ? 'button' : undefined}
+                        tabIndex={!holesHere && onSelect ? 0 : undefined}
+                        aria-label={!holesHere && onSelect ? `${s.text}: ${names(idx)}${states(idx).words ? ` · ${states(idx).words}` : ''}` : undefined}
                         onClick={(e) => select(e.shiftKey)}
                         onKeyDown={(e) => {
-                          if (holes || (e.key !== 'Enter' && e.key !== ' ')) return;
+                          if (holesHere || (e.key !== 'Enter' && e.key !== ' ')) return;
                           e.preventDefault();
                           e.stopPropagation();
                           select(e.shiftKey);
@@ -227,7 +238,8 @@ const LyricsLine = memo(function LyricsLine({
             </span>
           ))}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 });

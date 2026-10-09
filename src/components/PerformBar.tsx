@@ -43,7 +43,7 @@ export function PerformBar() {
   const second = useApp((s) => s.play !== 'stopped' && s.playPass === 2);
   // With several verses: which one is being sung (else "2nd time" in a repeat).
   const verseCount = useMemo(() => songVerses(doc), [doc]);
-  const verse = useApp((s) => (s.play !== 'stopped' && verseCount > 1 ? s.playVerse + 1 : null));
+  const verse = useApp((s) => (s.play !== 'stopped' && s.playVerses && verseCount > 1 ? s.playVerse + 1 : null));
   const ev = at !== null && at !== undefined ? score.events[at] : undefined;
   const bar = ev ? barAt(score, ev.start, starts) + 1 : null;
   const where = bar ? `Bar ${bar} of ${starts.length}${verse ? ` · Verse ${verse}` : second ? ' · 2nd time' : ''}` : `${starts.length} bars`;

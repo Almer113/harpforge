@@ -262,7 +262,7 @@ function keepFinalBarLast(s: Song): Song {
   return s;
 }
 
-function cloneSong(song: Song): Song {
+export function cloneSong(song: Song): Song {
   return { ...song, measures: song.measures.map((m) => ({ ...m, items: m.items.map((it) => ({ ...it })) })) };
 }
 

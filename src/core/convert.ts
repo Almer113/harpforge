@@ -4,6 +4,7 @@
 // more than one way, so we pick the path through the song with the lowest
 // "playability cost" (techniques + hand movement), Viterbi-style.
 
+import { hasLyrics } from './verses';
 import {
   allOptions,
   allSpecs,
@@ -483,10 +484,10 @@ export function chordSheetToTab(doc: TabDoc, harp: Harmonica, pattern: StrumPatt
     const events: TabEvent[] = [];
     for (const e of l.events) {
       // Words sung before the line's first chord carry on the previous chord.
-      if (e.kind === 'rest' && !e.chord && e.lyric && e.beats > 0 && previous) {
+      if (e.kind === 'rest' && !e.chord && hasLyrics(e) && e.beats > 0 && previous) {
         const sounds = previous.sounds;
         patternBeats(e.beats, pattern).forEach((beats, k) => {
-          events.push({ kind: 'note', sounds, beats, lyric: k === 0 ? e.lyric : undefined, src: e.src });
+          events.push({ kind: 'note', sounds, beats, lyric: k === 0 ? e.lyric : undefined, verses: k === 0 ? e.verses : undefined, src: e.src });
           stats.notes++;
         });
         continue;
@@ -520,6 +521,7 @@ export function chordSheetToTab(doc: TabDoc, harp: Harmonica, pattern: StrumPatt
           beats,
           chord: k === 0 ? e.chord : undefined,
           lyric: k === 0 ? e.lyric : undefined,
+          verses: k === 0 ? e.verses : undefined,
           src: e.src,
         });
         stats.notes++;

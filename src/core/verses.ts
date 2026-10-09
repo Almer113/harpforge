@@ -55,3 +55,13 @@ export function shownVerses(count: number, pick: number): number[] {
   if (pick >= 1 && pick <= count) return [pick - 1];
   return Array.from({ length: Math.max(1, count) }, (_, k) => k);
 }
+
+/** Verse `v` on a line, or the line's last when it has fewer (a chorus with one verse sings it each time). */
+export function lineVerse(line: TabLine, v: number): number {
+  return Math.max(0, Math.min(v, lineVerses(line) - 1));
+}
+
+/** The verses a line shows: as chosen; one verse picked shows the line's own when it has fewer. */
+export function lineShown(line: TabLine, shown: number[]): number[] {
+  return shown.length === 1 ? [lineVerse(line, shown[0])] : shown;
+}

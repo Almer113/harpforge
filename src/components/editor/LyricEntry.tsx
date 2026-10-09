@@ -19,7 +19,8 @@ let carry: string | null = null;
 
 /** A separator in typed text, and the action it stands for. */
 function firstSeparator(value: string): { at: number; key: LyricKey } | null {
-  const m = /[\s\-_]/.exec(value);
+  // (Not the non-breaking space Ctrl+Space types: a space inside a syllable, "ku~kan".)
+  const m = /[ \t\n\r\-_]/.exec(value);
   if (!m) return null;
   return { at: m.index, key: m[0] === '-' ? 'join' : m[0] === '_' ? 'hold' : 'next' };
 }
@@ -95,7 +96,8 @@ export function LyricInput({ pos, verse }: { pos: Pos; verse: number }) {
     };
   });
 
-  const finish = (key: LyricKey | 'cancel') => {
+  /** Writes what's typed and moves on (`pasted`: part of a paste, which is one undo step). */
+  const finish = (key: LyricKey | 'cancel', pasted = false) => {
     if (!isOpen()) return;
     const st = useApp.getState();
     if (key === 'cancel') {
@@ -104,8 +106,9 @@ export function LyricInput({ pos, verse }: { pos: Pos; verse: number }) {
     }
     const { next } = write(key);
     // (A word ends on anything but "-": the next one is a new undo step.)
-    if (key !== 'join') word++;
+    if (key !== 'join' && !pasted) word++;
     st.setVe({ lyricAt: next ?? undefined, selection: [next ?? pos], anchor: next ?? pos, measure: (next ?? pos).m });
+    if (!next && key !== 'done' && key !== 'prev' && !pasted) st.notify('That was the last note.');
   };
 
   /** What's in the box now: up to a space, "-" or "_", that's this syllable (the rest goes on). */
@@ -118,9 +121,20 @@ export function LyricInput({ pos, verse }: { pos: Pos; verse: number }) {
     live.current = { ...live.current, text: value.slice(0, sep.at) };
     const rest = value.slice(sep.at + 1).replace(/^\s+/, '');
     carry = rest || null;
-    finish(sep.key);
+    finish(sep.key, true);
     // (The end of the song: nowhere for the rest to go.)
-    if (!useApp.getState().ve.lyricAt) carry = null;
+    if (!useApp.getState().ve.lyricAt && carry) {
+      const left = carry.split(/[\s\-_]+/).filter(Boolean).length;
+      useApp.getState().notify(`That was the last note: ${left} syllable${left === 1 ? '' : 's'} left out. (Fill lyrics from text shows where words go.)`);
+      carry = null;
+    }
+  };
+
+  /** Puts `inserted` where the caret is, and takes it from there. */
+  const insert = (inserted: string) => {
+    const el = box.current;
+    const value = el ? el.value.slice(0, el.selectionStart ?? el.value.length) + inserted + el.value.slice(el.selectionEnd ?? el.value.length) : text + inserted;
+    take(value);
   };
 
   return (
@@ -129,12 +143,35 @@ export function LyricInput({ pos, verse }: { pos: Pos; verse: number }) {
       className="ve-lyric-input"
       value={text}
       size={Math.max(4, text.length + 1)}
-      aria-label={`Syllable${verse ? ` (verse ${verse + 1})` : ''}: Space next note, hyphen joins, underscore holds, Enter done`}
+      aria-label={`Words for this note${verse ? ` (verse ${verse + 1})` : ''}`}
+      aria-describedby="lyric-keys"
       onChange={(e) => take(e.target.value)}
+      // A paste: its lines are words like any others (and it's one undo step).
+      onPaste={(e) => {
+        e.preventDefault();
+        insert(e.clipboardData.getData('text/plain').replace(/\r?\n/g, ' '));
+      }}
       onPointerDown={(e) => e.stopPropagation()}
-      onBlur={() => finish('done')}
+      // (Another window taking the keyboard isn't leaving: lyrics mode is there on return.)
+      onBlur={() => document.hasFocus() && finish('done')}
       onKeyDown={(e) => {
         const key = e.key;
+        const ctrl = e.ctrlKey || e.metaKey;
+        // Ctrl+L leaves; Ctrl+Z / Ctrl+Y undo and redo (what's typed is written first).
+        if (ctrl && (e.code === 'KeyL' || e.code === 'KeyZ' || e.code === 'KeyY')) {
+          e.preventDefault();
+          e.stopPropagation();
+          finish('done');
+          if (e.code === 'KeyZ' && !e.shiftKey) useApp.getState().undo();
+          else if (e.code !== 'KeyL') useApp.getState().redo();
+          return;
+        }
+        // Ctrl+Space: a space inside the syllable (two words on one note); Ctrl+-: a real hyphen.
+        if (ctrl && (key === ' ' || key === '-')) {
+          e.preventDefault();
+          insert(key === ' ' ? '\u00a0' : '\u2010');
+          return;
+        }
         let action: LyricKey | 'cancel' | null = null;
         if (key === ' ' || key === 'Tab') action = e.shiftKey ? 'prev' : 'next';
         else if (key === '-') action = 'join';
@@ -159,8 +196,10 @@ export function LyricsButton() {
       className={`pal-btn lyrics-btn ${typing ? 'on' : ''}`}
       aria-pressed={typing}
       aria-label="Lyrics"
+      // (Not taking the keyboard from the box: a click turns lyrics mode off, not on again.)
+      onPointerDown={(e) => e.preventDefault()}
       onClick={() => (typing ? stopLyrics() : startLyrics())}
-      title="Lyrics: type the words onto the notes (Ctrl+L, or click under a note). Space: next note · - joins the next syllable · _ holds over the next note · Shift+Space: back · Enter: done"
+      title="Lyrics: type the words onto the notes (Ctrl+L turns it on and off, or click under a note)"
     >
       <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
         <path d="M13 3v10l5-2" />
@@ -205,8 +244,20 @@ export function VerseSwitch({ song }: { song: Song }) {
         </select>
       )}
       <button className="link-btn fill-link" onClick={() => useApp.setState({ fillLyricsOpen: true })} title="Paste the words; they go on note after note">
-        Fill lyrics…
+        Fill lyrics from text…
       </button>
     </>
   );
 }
+
+/** The keys of lyrics mode, said once for screen readers (the box points here). */
+export const LYRIC_KEYS = 'Space: next note · - joins the next syllable · _ holds over the next note · Shift+Space or Backspace: back · Enter: done · Esc: leave · Ctrl+Space: a space in the syllable · Ctrl+-: a real hyphen';
+
+// Leaving the editor (or its visual view) leaves lyrics mode, keeping what's typed.
+useApp.subscribe((s) => {
+  if (s.ve.lyricAt && (s.page !== 'editor' || s.editorMode !== 'visual')) {
+    flushOpen?.();
+    carry = null;
+    useApp.getState().setVe({ lyricAt: undefined });
+  }
+});

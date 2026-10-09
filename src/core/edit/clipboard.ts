@@ -1,6 +1,7 @@
 // Copy and paste in the visual editor go through the system clipboard as tab text, so
 // notes can move between tabs, windows and other apps (a forum post, a message).
 
+import { hasLyrics } from '../verses';
 import { parseHtab } from '../htab/parser';
 import { bodyText } from '../htab/serializer';
 import { chainAt, clearSpan, EPS, findItem, fromDoc, measureSpan, placeItem, posAtReal, realBeat, samePos, toDoc, type Item, type Measure, type Pos, type Song } from './model';
@@ -87,7 +88,7 @@ export function pasteText(song: Song, text: string, at: Pos): { song: Song; plac
     }
     t += measureSpan(from, m);
   }
-  const notes = pieces.filter((p) => p.item.sounds.length || p.item.chord || p.item.lyric);
+  const notes = pieces.filter((p) => p.item.sounds.length || p.item.chord || hasLyrics(p.item));
   if (!notes.length) return null;
   const base = realBeat(song, at);
   // The pasted stretch overwrites what's there, rests included ("4 . 5" leaves a gap).

@@ -46,7 +46,8 @@ export function Sheet({
   const notes = readAs === 'notes';
   const verses = useShownVerses(parsed);
   // The verse being sung, while it plays (with more than one shown, the others dim).
-  const singing = useApp((s) => (s.play !== 'stopped' && verses.length > 1 ? s.playVerse : null));
+  const singing = useApp((s) => (s.play !== 'stopped' && s.playVerses && verses.length > 1 ? s.playVerse : null));
+  const verseCount = useMemo(() => songVerses(parsed.doc), [parsed.doc]);
   // "Do" of the key: the song key's relative major, else the harmonica's key.
   const doName = pitchClassName(doPitchClass(parsed.doc.meta.key ?? parsed.harp.spec.key.replace(/^(Low|High)\s+/i, '')), keyUsesFlats(parsed.doc.meta.key ?? parsed.harp.spec.key));
 
@@ -62,6 +63,7 @@ export function Sheet({
         <h2>
           {view === 'numbers' ? 'Numbered notation' : view === 'staff' ? 'Staff notation' : view === 'lyrics' ? 'Lyrics' : notes ? (view === 'simple' ? 'Simple notes' : 'Notes') : view === 'simple' ? 'Simple tab' : title}
           {view === 'numbers' && <span className="chip plain jp-key">1={doName}</span>}
+          {verses.length === 1 && verseCount > 1 && view !== 'simple' && <span className="chip plain">Verse {verses[0] + 1}</span>}
         </h2>
         <div className="tb-group">
           {view !== 'simple' && <ShowMenu view={view} />}
@@ -161,8 +163,10 @@ type ShowView = 'tab' | 'numbers' | 'staff' | 'lyrics';
 /** The verses the sheet shows (0-based), from the Show menu's choice. */
 export function useShownVerses(parsed: Parsed): number[] {
   const pick = useApp((s) => s.showVerse);
+  // One verse picked while playback goes through the verses: it turns to the verse being sung.
+  const following = useApp((s) => (s.showVerse > 0 && s.play !== 'stopped' && s.playVerses ? s.playVerse + 1 : null));
   const count = useMemo(() => songVerses(parsed.doc), [parsed.doc]);
-  return useMemo(() => shownVerses(count, pick), [count, pick]);
+  return useMemo(() => shownVerses(count, following ?? pick), [count, pick, following]);
 }
 
 /** "Verses: All / 1 / 2…", for a song with more than one. */
@@ -175,7 +179,7 @@ function VersePicker() {
     <label className="show-item verse-pick">
       <span>
         <b>Verses</b>
-        <span className="mi-hint">All of them under the notes, or just one</span>
+        <span className="mi-hint">All of them, or just one (with Play all verses it turns to each in turn)</span>
       </span>
       <select value={pick >= 1 && pick <= count ? pick : 0} onChange={(e) => useApp.setState({ showVerse: Number(e.target.value) })} aria-label="Verses shown">
         <option value={0}>All</option>

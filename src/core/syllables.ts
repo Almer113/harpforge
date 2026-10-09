@@ -18,8 +18,10 @@ const isVowel = (c: string) => VOWELS.has(c);
  * Words with an apostrophe (t'lah, 'ku) are left whole.
  */
 export function syllablesId(word: string): string[] {
-  if (word.length < 3 || /['’]/.test(word)) return [word];
-  const lower = word.toLowerCase();
+  if (word.length < 3 || /['’~]/.test(word)) return [word];
+  // (Letter by letter, so positions match the word as written.)
+  const lower = [...word].map((c) => c.toLowerCase()[0] ?? c).join('');
+  if (lower.length !== word.length) return [word];
   // Units: a letter, or a two-letter consonant sound.
   const units: { at: number; len: number; vowel: boolean }[] = [];
   for (let i = 0; i < lower.length; ) {
@@ -84,18 +86,25 @@ export function englishForSinging(word: string, parts: string[]): string[] {
   return parts;
 }
 
-const ID_WORDS = new Set('yang dan di ke dari ini itu aku kau engkau kamu dia kita kami tak tidak ada akan dengan untuk dalam pada tuhan hati cinta sayang selalu bagai seperti juga sudah telah lagi jangan mau bisa hanya kasih dunia hidup bersama'.split(' '));
+const ID_WORDS = new Set(
+  'yang dan di ke dari ini itu aku kau engkau dikau kamu dia ia kita kami tak tiada tidak ada akan dengan untuk dalam pada tuhan hati cinta sayang selalu bagai seperti juga sudah telah lagi jangan mau bisa hanya kasih dunia hidup bersama ku mu nya kan lah pun sang beta rindu malam hari pagi sore indah'.split(' '),
+);
 const EN_WORDS = new Set('the and you i to of a in is it my me your we he she on for be this that with all love will are what when how so no oh do can not'.split(' '));
 
-/** English or Indonesian, from the commonest little words in `text` (English when unsure). */
-export function detectLang(text: string): Lang {
+/**
+ * English or Indonesian, from the commonest little words in `text` and Indonesian endings
+ * (-nya, -kan, -lah, -ku, -mu); `fallback` when it can't tell.
+ */
+export function detectLang(text: string, fallback: Lang = 'en'): Lang {
   let id = 0;
   let en = 0;
   for (const w of text.toLowerCase().split(/[^a-zà-ÿ']+/)) {
+    if (!w) continue;
     if (ID_WORDS.has(w)) id++;
+    else if (w.length > 4 && /(nya|kan|lah)$/.test(w)) id += 0.5;
     if (EN_WORDS.has(w)) en++;
   }
-  return id > en ? 'id' : 'en';
+  return id > en ? 'id' : en > id ? 'en' : fallback;
 }
 
 /** A word with breaks at `cuts` (letter positions), as "dar-ling". */
@@ -135,15 +144,19 @@ async function englishPatterns(): Promise<Hyphenate> {
 export async function suggestBreaks(words: string[], lang: Lang, fixes: Record<string, string> = {}): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const en = lang === 'en' ? await englishPatterns() : null;
+  /** One part of a word (between hyphens): your correction, else the rules. */
+  const part = (word: string): string => {
+    const key = word.toLowerCase();
+    const fix = Object.hasOwn(fixes, key) ? fixes[key] : undefined;
+    if (typeof fix === 'string' && breaksOf(fix).word === key) return withBreaks(word, breaksOf(fix).cuts);
+    if (/['’~]/.test(word)) return word;
+    return (lang === 'id' ? syllablesId(word) : englishForSinging(word, en!(word))).join('-');
+  };
   for (const word of words) {
     if (out.has(word)) continue;
-    const fix = fixes[word.toLowerCase()];
-    if (fix && breaksOf(fix).word === word.toLowerCase()) {
-      out.set(word, withBreaks(word, breaksOf(fix).cuts));
-      continue;
-    }
-    const parts = lang === 'id' ? syllablesId(word) : /['’]/.test(word) ? [word] : englishForSinging(word, en!(word));
-    out.set(word, parts.join('-'));
+    // A hyphenated word (anak-anak, dar-ling): each part is split further where it can be;
+    // a part that's one syllable already stays as it is.
+    out.set(word, word.split('-').map((p) => (p ? part(p) : p)).join('-'));
   }
   return out;
 }
@@ -172,9 +185,23 @@ export function replaceWord(text: string, from: string, to: string): string {
   });
 }
 
-/** The text with each word that has no breaks yet given its suggested ones. */
+/** The text with each word given its suggested breaks (a hyphenated one keeps its own and gets more). */
 export function applySuggestions(text: string, suggested: Map<string, string>): string {
   let out = text;
-  for (const [word, form] of suggested) if (!word.includes('-') && form !== word) out = replaceWord(out, word, form);
+  for (const [word, form] of suggested) if (form !== word) out = replaceWord(out, word, form);
   return out;
+}
+
+/**
+ * The text with the word `bare` (any capitalisation, wherever it is) given breaks at `cuts`:
+ * "Kasih" and "kasih" change together, each keeping its own capitals.
+ */
+export function rebreakWord(text: string, bare: string, cuts: number[]): string {
+  const key = bare.toLowerCase();
+  return text.replace(/\S+/g, (token) => {
+    const m = EDGE.exec(token);
+    if (!m) return token;
+    const { word } = breaksOf(m[2]);
+    return word.toLowerCase() === key ? m[1] + withBreaks(word, cuts) + m[3] : token;
+  });
 }

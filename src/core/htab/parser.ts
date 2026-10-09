@@ -352,8 +352,14 @@ export function splitLyrics(text: string): string[] {
     // syllable is kept as the hyphen character "‐" (U+2010), so it isn't read as joined.
     // (U+0001 stands in for "\-" while splitting: it never occurs in typed text.)
     const parts = word.replace(/\\-/g, '\u0001').split(/(?<=-)/);
-    // oxlint-disable-next-line no-control-regex
-    for (const p of parts) if (p && p !== '-') out.push(p.replace(/~/g, ' ').replace(/(?<=.)\u0001$/, '‐').replace(/\u0001/g, '-'));
+    for (const p of parts) {
+      if (!p || p === '-') continue;
+      // oxlint-disable-next-line no-control-regex
+      const syl = p.replace(/~/g, ' ').replace(/(?<=.)\u0001$/, '‐').replace(/\u0001/g, '-');
+      // (Spaces from "~" at either end join nothing: "a~" is "a", "~" alone is no syllable.)
+      const trimmed = syl.replace(/^ +| +(?=-?$)/g, '');
+      out.push(trimmed || '*');
+    }
   }
   return out;
 }

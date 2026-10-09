@@ -39,3 +39,23 @@ export function saveSyllableFix(lang: Lang, form: string) {
     /* storage full or unavailable: the correction applies only this time */
   }
 }
+
+const LANG_KEY = 'harpforge:lyrics-lang';
+
+/** The language last chosen for suggestions (the guess when the words don't say). */
+export function lastLang(): Lang | undefined {
+  try {
+    const v = localStorage.getItem(LANG_KEY);
+    return v === 'en' || v === 'id' ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function rememberLang(lang: Lang) {
+  try {
+    localStorage.setItem(LANG_KEY, lang);
+  } catch {
+    /* not remembered: the guess falls back to English */
+  }
+}

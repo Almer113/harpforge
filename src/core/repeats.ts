@@ -104,18 +104,31 @@ const cache = new WeakMap<Score, Map<string, PlaybackScore>>();
  */
 export function playbackScore(doc: TabDoc, score: Score, opts: { repeats?: boolean; allVerses?: boolean } = {}): PlaybackScore {
   const repeats = opts.repeats ?? true;
-  const rounds = opts.allVerses ? Math.max(1, songVerses(doc)) : 1;
+  const order = repeats ? playOrder(doc, score.totalBeats) : [{ from: 0, to: score.totalBeats }];
+  // The most times a note is played in one time through (2 in a repeat): that many verses a
+  // time through, so all verses take as many times through as that needs.
+  const timesThrough = maxPass(score, order);
+  const rounds = opts.allVerses ? Math.max(1, Math.ceil(songVerses(doc) / timesThrough)) : 1;
   const key = `${repeats}:${rounds}`;
   const hit = cache.get(score)?.get(key);
   if (hit) return hit;
-  const order = repeats ? playOrder(doc, score.totalBeats) : [{ from: 0, to: score.totalBeats }];
-  const result = rounds === 1 && order.length === 1 && order[0].from < EPS ? writtenScore(score) : unroll(doc, score, order, rounds);
+  const result = rounds === 1 && order.length === 1 && order[0].from < EPS ? writtenScore(score) : unroll(doc, score, order, rounds, timesThrough);
   if (!cache.has(score)) cache.set(score, new Map());
   cache.get(score)!.set(key, result);
   return result;
 }
 
-function unroll(doc: TabDoc, score: Score, order: { from: number; to: number }[], rounds: number): PlaybackScore {
+/** The most times any note is played in one time through `order`. */
+function maxPass(score: Score, order: { from: number; to: number }[]): number {
+  let most = 1;
+  for (const ev of score.events) {
+    const n = order.filter(({ from, to }) => ev.start >= from - EPS && ev.start < to - EPS).length;
+    if (n > most) most = n;
+  }
+  return most;
+}
+
+function unroll(doc: TabDoc, score: Score, order: { from: number; to: number }[], rounds: number, timesThrough: number): PlaybackScore {
   const events: ScoreEvent[] = [];
   const orig: number[] = [];
   const pass: number[] = [];
@@ -141,9 +154,9 @@ function unroll(doc: TabDoc, score: Score, order: { from: number; to: number }[]
         orig.push(ev.index);
         pass.push(n);
         round.push(r);
-        // The verse sung: one a round (all verses), else one a time through a repeat — a line
-        // without that many verses sings its last.
-        verse.push(Math.max(0, Math.min(rounds > 1 ? r : n - 1, (versesOf[ev.line] ?? 1) - 1)));
+        // The verse sung: the next each time through a repeat, and on from there each time
+        // through the song (all verses) — a line without that many verses sings its last.
+        verse.push(Math.max(0, Math.min(r * timesThrough + n - 1, (versesOf[ev.line] ?? 1) - 1)));
       }
       at += to - from;
     }

@@ -13,6 +13,7 @@
 //   {5 6 5}          a beat split evenly (triplets etc.), as in .htab
 //   [G7] w: @ |      chord symbols, lyrics, sections, bars — as in .htab
 
+import { setLyricOf } from '../verses';
 import type { Harmonica } from '../instruments';
 import { keyUsesFlats, mod12, parseKey, parsePitchClass, pitchClassName } from '../pitch';
 import type { BarEvent, NoteEvent, RestEvent, TabDoc, TabEvent, TabLine } from '../htab/types';
@@ -87,6 +88,7 @@ export function parseJianpu(text: string): Imported {
   const lines: TabLine[] = [];
   let pendingSection: string | undefined;
   let lastLine: TabLine | undefined;
+  let lineVerseCount = 0;
   let inHeader = false;
   const tieCtx: TieContext = { last: null };
 
@@ -138,12 +140,14 @@ export function parseJianpu(text: string): Imported {
     }
     if (/^w:/i.test(trimmed)) {
       if (lastLine) {
+        // Each "w:" line under the music is a verse of it.
+        const verse = lineVerseCount++;
         const syl = splitLyrics(trimmed.slice(2));
         let k = 0;
         for (const ev of lastLine.events) {
           if (ev.kind !== 'note' || ev.tied || k >= syl.length) continue;
           const s = syl[k++];
-          if (s !== '*' && s !== '_') ev.lyric = s;
+          if (s !== '*' && s !== '_') setLyricOf(ev, verse, s);
         }
       }
       continue;
@@ -158,6 +162,7 @@ export function parseJianpu(text: string): Imported {
     }
     lines.push(tl);
     lastLine = tl;
+    lineVerseCount = 0;
   }
   if (!lines.length) warnings.push('No numbered notes found.');
   return { doc: { meta, lines }, warnings: [...new Set(warnings)], format: 'Numbered notation' };

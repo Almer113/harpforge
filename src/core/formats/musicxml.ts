@@ -1,6 +1,6 @@
 // MusicXML (partwise) import & export. Import reads the first part and first voice.
 
-import { lineVerses, lyricOf, setLyricOf } from '../verses';
+import { hasLyrics, lineVerses, lyricOf, setLyricOf } from '../verses';
 import { strFromU8, unzipSync } from 'fflate';
 import { isNoChord, parseChord } from '../chords';
 import type { Harmonica } from '../instruments';
@@ -52,8 +52,19 @@ export function parseMusicXml(xml: string): Imported {
   const part = parts[0];
   // Its lyric lines (numbered 1, 2…, or named), in order: verse 1, 2…
   const numbers = [...new Set([...part.getElementsByTagName('lyric')].filter((l) => l.getAttribute('name') !== 'tab').map((l) => l.getAttribute('number') ?? '1'))];
-  if (numbers.every((n) => /^\d+$/.test(n))) numbers.sort((a, b) => Number(a) - Number(b));
-  const verseOf = new Map(numbers.map((n, k) => [n, k]));
+  // (Numbered: verse n is number n, an empty verse 1 included; named: in order of appearance.)
+  const numbered = numbers.every((n) => /^\d+$/.test(n) && Number(n) >= 1);
+  const verseOf = new Map(numbers.map((n, k) => [n, numbered ? Number(n) - 1 : k]));
+  /** A note's (or rest's) lyric lines, as verses. */
+  const readLyrics = (el: Element, ev: NoteEvent | RestEvent) => {
+    for (const lyric of el.getElementsByTagName('lyric')) {
+      if (lyric.getAttribute('name') === 'tab') continue;
+      const v = verseOf.get(lyric.getAttribute('number') ?? '1');
+      const t = text(lyric, 'text');
+      const syl = text(lyric, 'syllabic');
+      if (v !== undefined && t && !lyricOf(ev, v)) setLyricOf(ev, v, t + (syl === 'begin' || syl === 'middle' ? '-' : ''));
+    }
+  };
 
   let divisions = 1;
   let voice: string | null = null;
@@ -209,6 +220,9 @@ export function parseMusicXml(xml: string): Imported {
             const rest: RestEvent = { kind: 'rest', beats };
             if (pendingChord) rest.chord = pendingChord;
             pendingChord = undefined;
+            // Words sung over a rest: a sung rest ("_").
+            readLyrics(el, rest);
+            if (hasLyrics(rest)) rest.sung = true;
             events.push(rest);
             last = null;
             break;
@@ -217,13 +231,7 @@ export function parseMusicXml(xml: string): Imported {
           if (pendingChord) ev.chord = pendingChord;
           pendingChord = undefined;
           // Each lyric line (number 1, 2, …) is a verse; the tab HarpForge writes under the staff isn't.
-          for (const lyric of el.getElementsByTagName('lyric')) {
-            if (lyric.getAttribute('name') === 'tab') continue;
-            const v = verseOf.get(lyric.getAttribute('number') ?? '1');
-            const t = text(lyric, 'text');
-            const syl = text(lyric, 'syllabic');
-            if (v !== undefined && t && !lyricOf(ev, v)) setLyricOf(ev, v, t + (syl === 'begin' || syl === 'middle' ? '-' : ''));
-          }
+          readLyrics(el, ev);
           events.push(ev);
           last = ev;
           break;
@@ -446,9 +454,23 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
       const typeXml = t
         ? `<type>${t.type}</type>${'<dot/>'.repeat(t.dots)}${t.tuplet ? `<time-modification><actual-notes>${t.tuplet[0]}</actual-notes><normal-notes>${t.tuplet[1]}</normal-notes></time-modification>` : ''}`
         : '';
+      /** The event's words, a numbered lyric line per verse (each with its own word under way). */
+      const verseXml = (ev: NoteEvent | RestEvent) => {
+        let xml = '';
+        for (let v = 0; v < verses; v++) {
+          const lyric = lyricOf(ev, v);
+          if (!lyric) continue;
+          const hyphen = lyric.length > 1 && lyric.endsWith('-');
+          const word = hyphen ? lyric.slice(0, -1) : lyric;
+          const syllabic = wordOpen[v] ? (hyphen ? 'middle' : 'end') : hyphen ? 'begin' : 'single';
+          wordOpen[v] = hyphen;
+          xml += `<lyric number="${v + 1}"><syllabic>${syllabic}</syllabic><text>${esc(word)}</text></lyric>`;
+        }
+        return xml;
+      };
       const midis = n.ev.kind === 'note' ? eventMidis(n.ev, harp) : [];
       if (!midis.length) {
-        out.push(`<note><rest/><duration>${dur}</duration>${typeXml}</note>`);
+        out.push(`<note><rest/><duration>${dur}</duration>${typeXml}${n.first && n.ev.kind === 'rest' ? verseXml(n.ev) : ''}</note>`);
         continue;
       }
       const tieXml = (n.tieStop ? '<tie type="stop"/>' : '') + (n.tieStart ? '<tie type="start"/>' : '');
@@ -459,15 +481,7 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
         let lyrics = '';
         if (k === 0 && n.first && n.ev.kind === 'note') {
           const ev = n.ev;
-          for (let v = 0; v < verses; v++) {
-            const lyric = lyricOf(ev, v);
-            if (!lyric) continue;
-            const hyphen = lyric.length > 1 && lyric.endsWith('-');
-            const word = hyphen ? lyric.slice(0, -1) : lyric;
-            const syllabic = wordOpen[v] ? (hyphen ? 'middle' : 'end') : hyphen ? 'begin' : 'single';
-            wordOpen[v] = hyphen;
-            lyrics += `<lyric number="${v + 1}"><syllabic>${syllabic}</syllabic><text>${esc(word)}</text></lyric>`;
-          }
+          lyrics += verseXml(ev);
           const holes = ev.tied ? [] : ev.sounds.filter((s): s is HoleSound => s.type === 'hole');
           if (holes.length) lyrics += `<lyric number="${verses + 1}" name="tab"><syllabic>single</syllabic><text>${esc(holes.map((h) => holeSoundText(h)).join(' '))}</text></lyric>`;
         }

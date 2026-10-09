@@ -2,16 +2,31 @@
 // syllable, and what each key does. The keys are MuseScore's: Space goes on to the next note
 // (a new word), "-" goes on joined ("Twin-kle"), "_" holds the syllable over the next note.
 
-import { lyricOf, setLyricOf } from '../verses';
+import { hasLyrics, lyricOf, setLyricOf } from '../verses';
 import { splitLyrics } from '../htab/parser';
-import { allPositions, EPS, findItem, updateItem, type Pos, type Song } from './model';
+import { allPositions, cloneSong, EPS, findItem, updateItem, type Pos, type Song } from './model';
 
-/** The notes that take a syllable, in order: played notes (a tie continues the one before). */
+/**
+ * The notes that take a syllable, in order, as a "w:" line counts them: played notes (a tie
+ * continues the one before) and rests sung over (ones with words in some verse).
+ */
 export function singable(song: Song): Pos[] {
   return allPositions(song).filter((p) => {
     const it = findItem(song, p);
-    return !!it && it.sounds.length > 0 && !it.tied && it.dur > EPS;
+    if (!it || it.dur <= EPS) return false;
+    return it.sounds.length > 0 ? !it.tied : hasLyrics(it);
   });
+}
+
+/** Sets several notes' syllables in verse `verse` at once (one copy of the song, however many). */
+export function setLyrics(song: Song, changes: { pos: Pos; text: string | undefined }[], verse: number): Song {
+  if (!changes.length) return song;
+  const s = cloneSong(song);
+  for (const { pos, text } of changes) {
+    const it = findItem(s, pos);
+    if (it) setLyricOf(it, verse, text);
+  }
+  return s;
 }
 
 const same = (a: Pos, b: Pos) => a.m === b.m && Math.abs(a.start - b.start) < EPS;
@@ -112,21 +127,14 @@ export function fillLyrics(song: Song, from: Pos | null, verse: number, text: st
   const syllables = splitLyrics(text.replace(/\n/g, ' '));
   const start = lyricStart(song, from ?? undefined);
   const notes = start ? singable(song).filter((p) => p.m > start.m || (p.m === start.m && p.start >= start.start - EPS)) : [];
-  let s = song;
-  const placed: { pos: Pos; syllable: string | undefined }[] = [];
-  syllables.slice(0, notes.length).forEach((syl, k) => {
-    const syllable = syl === '*' || syl === '_' ? undefined : syl;
-    s = setLyric(s, notes[k], verse, syllable);
-    placed.push({ pos: notes[k], syllable });
-  });
+  const placed = syllables.slice(0, notes.length).map((syl, k) => ({ pos: notes[k], syllable: syl === '*' || syl === '_' ? undefined : syl }));
+  const s = setLyrics(song, placed.map((p) => ({ pos: p.pos, text: p.syllable })), verse);
   return { song: s, placed, extra: syllables.slice(notes.length).filter((x) => x !== '*' && x !== '_') };
 }
 
 /** Clears verse `verse`'s syllables on `positions` (every note when null). */
 export function clearLyrics(song: Song, positions: Pos[] | null, verse: number): Song {
-  let s = song;
-  for (const p of positions ?? allPositions(song)) if (findItem(s, p)) s = setLyric(s, p, verse, undefined);
-  return s;
+  return setLyrics(song, (positions ?? allPositions(song)).filter((p) => lyricOf(findItem(song, p) ?? {}, verse)).map((pos) => ({ pos, text: undefined })), verse);
 }
 
 /**
@@ -141,9 +149,6 @@ export function shiftLyrics(song: Song, from: Pos, verse: number, dir: 1 | -1): 
   const syls = notes.map((p) => lyricOf(findItem(song, p)!, verse));
   const moved = dir === 1 ? [undefined, ...syls.slice(0, -1)] : [...syls.slice(1), undefined];
   const lost = dir === 1 ? syls[syls.length - 1] : syls[0];
-  let s = song;
-  notes.forEach((p, k) => {
-    if (moved[k] !== syls[k]) s = setLyric(s, p, verse, moved[k]);
-  });
+  const s = setLyrics(song, notes.flatMap((pos, k) => (moved[k] !== syls[k] ? [{ pos, text: moved[k] }] : [])), verse);
   return { song: s, lost };
 }

@@ -5,7 +5,7 @@
 // chord symbols, rests, bars, lyrics (w:) and parts. Only the first tune and first
 // voice are read.
 
-import { lyricOf, setLyricOf, songVerses } from '../verses';
+import { lineShown, lyricOf, setLyricOf, songVerses } from '../verses';
 import type { Harmonica } from '../instruments';
 import { holeSoundText } from '../htab/serializer';
 import { beatsPerBar, type BarEvent, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine } from '../htab/types';
@@ -142,7 +142,8 @@ export function parseAbc(text: string): Imported {
         continue;
       }
       const target = notes[k++];
-      if (target && !target.tied) setLyricOf(target, verse, tok.replace(/\\-/g, '-').replace(/~/g, ' '));
+      // ("\-" is a literal hyphen: one ending a syllable is kept as "‐", so it isn't read as joined.)
+      if (target && !target.tied) setLyricOf(target, verse, tok.replace(/(?<=.)\\-$/, '\u2010').replace(/\\-/g, '-').replace(/~/g, ' '));
     }
     lyricRest = notes.slice(k);
   };
@@ -185,10 +186,16 @@ export function parseAbc(text: string): Imported {
       }
       lastField = f;
       if (f === 'w') {
-        // A line of harmonica holes (as HarpForge writes under the staff) is the tab, not lyrics.
+        // A line of harmonica holes (as HarpForge writes under the staff, first) is the tab, not
+        // lyrics; a line of only "*" is an empty verse, keeping its place.
         const hole = String.raw`<?(?:\\-)?\d{1,2}'{0,3}o?`;
-        const isTabLine = new RegExp(`^(?:\\*|${hole}(?:~${hole})*)(?:\\s+(?:\\*|${hole}(?:~${hole})*))*$`).test(v.trim());
-        if (isTabLine) continue;
+        const isTabLine =
+          verseCount === 0 && new RegExp(`\\d`).test(v) && new RegExp(`^(?:\\*|${hole}(?:~${hole})*)(?:\\s+(?:\\*|${hole}(?:~${hole})*))*$`).test(v.trim());
+        if (isTabLine) {
+          // ("+:" after it continues the tab, not a verse.)
+          lastField = 'w-tab';
+          continue;
+        }
         if (!currentVoice || currentVoice === firstVoice) attachLyrics(v);
         continue;
       }
@@ -514,8 +521,9 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
     const sig = keySignature(fifths);
     const parts: string[] = [];
     lastTieable = null;
-    // Each verse's syllables, a slot per note ("*": none).
-    const lyr: string[][] = verses.map(() => []);
+    // Each verse's syllables, a slot per note ("*": none). (One verse picked: a line with fewer shows its own.)
+    const lineList = lineShown(line, verses);
+    const lyr: string[][] = lineList.map(() => []);
     const tabs: string[] = [];
 
     const noteText = (midi: number): string => {
@@ -598,9 +606,11 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
         return;
       }
       if (withLyrics)
-        verses.forEach((v, k) => {
+        lineList.forEach((v, k) => {
           const syl = lyricOf(ev, v);
-          lyr[k].push(syl ? syl.trim().replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-') : '*');
+          // (A syllable that's just a hyphen, or one ending in a literal "‐", is written "\-".)
+          const text = syl?.trim();
+          lyr[k].push(!text ? '*' : text === '-' ? '\\-' : text.replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-').replace(/\u2010/g, '\\-').replace(/[*_|]/g, ''));
         });
       tabs.push(tabToken(ev));
     }
@@ -612,7 +622,8 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
     const lastVerse = withLyrics ? lyr.map((l) => l.some((t) => t !== '*')).lastIndexOf(true) : -1;
     for (const verse of lyr.slice(0, lastVerse + 1)) {
       let text = '';
-      for (const syl of verse) text += text === '' || text.endsWith('-') ? syl : ' ' + syl;
+      // (A syllable ending "-" joins the next one; a written "\-" is a hyphen, not a join.)
+      for (const syl of verse) text += text === '' || (text.endsWith('-') && !text.endsWith('\\-')) ? syl : ' ' + syl;
       out.push('w: ' + text);
     }
   });

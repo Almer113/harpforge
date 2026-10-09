@@ -1,6 +1,6 @@
 // Visual tab sheet: lines → measures → note cards, sized by duration.
 
-import { lyricOf } from '../core/verses';
+import { lineShown, lineVerse, lyricOf } from '../core/verses';
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { BarStyle, NoteEvent, RestEvent, TabEvent } from '../core/htab/types';
 import { midiToName, keySpelling, type Spelling } from '../core/pitch';
@@ -215,7 +215,10 @@ const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, m
   const { doc, score, indexByKey, harp } = parsed;
   const line = doc.lines[li];
   // More than one verse: each row is numbered at the line's first syllable of it.
-  const shown = verses.split(',').map(Number);
+  // (One verse picked: a line with fewer, a chorus, shows its own; the verse sung likewise.)
+  const shown = lineShown(line, verses.split(',').map(Number));
+  const lineList = shown.join(',');
+  const sungHere = singing >= 0 ? lineVerse(line, singing) : -1;
   const firstSung = shown.length > 1 ? shown.map((v) => line.events.findIndex((e) => e.kind !== 'bar' && !!lyricOf(e, v))) : [];
   const activeSet = indexSet(active);
   const passageSet = indexSet(inPassage);
@@ -255,8 +258,8 @@ const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, m
                     selected={idx !== undefined && idx === selected}
                     showNoteNames={showNoteNames}
                     showLyrics={showLyrics}
-                    verses={verses}
-                    singing={singing}
+                    verses={lineList}
+                    singing={sungHere}
                     numbered={shown.filter((_, k) => firstSung[k] === ei).join(',')}
                     showChords={showChords}
                     numbers={numbers}

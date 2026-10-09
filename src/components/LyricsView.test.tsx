@@ -79,7 +79,10 @@ it('shows each verse as its own numbered line; the Show menu picks one', async (
   await act(async () => s().loadText('---\ntitle: Verses\n---\n4 4 6 6 |\nw: Twin-kle twin-kle\nw: Up a-bove the\n', null));
   const words = (l: Element) => [...l.querySelectorAll('.ly-text')].map((t) => t.textContent).join('');
   expect(host.querySelectorAll('.ly-line')).toHaveLength(2);
-  expect([...host.querySelectorAll('.ly-vnum')].map((n) => n.textContent)).toEqual(['1.', '2.']);
+  expect([...host.querySelectorAll('.ly-vnum [aria-hidden]')].map((n) => n.textContent)).toEqual(['1.', '2.']);
+  expect([...host.querySelectorAll('.ly-vnum .sr-only')].map((n) => n.textContent)).toEqual(['Verse 1', 'Verse 2']);
+  // The holes over the first verse only.
+  expect(host.querySelectorAll('.ly-line')[1].classList.contains('words-only')).toBe(true);
   expect(words(host.querySelectorAll('.ly-line')[1])).toBe('Upabovethe');
   await act(async () => useApp.setState({ showVerse: 2 }));
   expect(host.querySelectorAll('.ly-line')).toHaveLength(1);
@@ -97,10 +100,13 @@ it('shows each verse as its own numbered line; the Show menu picks one', async (
 
 it('while it plays, the verse being sung stands out and the others dim', async () => {
   await act(async () => s().loadText('---\ntitle: Verses\n---\n4 4 6 6 |\nw: Twin-kle twin-kle\nw: Up a-bove the\n', null));
-  await act(async () => useApp.setState({ play: 'playing', playVerse: 1 }));
+  // (Playing straight through, without going through verses: nothing dims.)
+  await act(async () => useApp.setState({ play: 'playing', playVerse: 0, playVerses: false }));
+  expect(host.querySelector('.ly-line.not-sung')).toBeNull();
+  await act(async () => useApp.setState({ play: 'playing', playVerse: 1, playVerses: true }));
   expect([...host.querySelectorAll('.ly-line')].map((l) => l.classList.contains('not-sung'))).toEqual([true, false]);
   await act(async () => useApp.setState({ sheetView: 'tab' }));
   expect(host.querySelector('.verse-syl.sung')?.textContent).toBe('Up');
-  await act(async () => useApp.setState({ play: 'stopped', playVerse: 0 }));
+  await act(async () => useApp.setState({ play: 'stopped', playVerse: 0, playVerses: false }));
   expect(host.querySelector('.card-lyric.singing')).toBeNull();
 });

@@ -63,9 +63,9 @@ import { Inspector } from './Inspector';
 import { isTyping, keysTaken, overlayOpen } from '../../live/focus';
 import { copyText, pasteText } from '../../core/edit/clipboard';
 import { openShortcuts } from '../Shortcuts';
-import { LyricInput, LyricsButton, startLyrics, stopLyrics, VerseSwitch } from './LyricEntry';
+import { LYRIC_KEYS, LyricInput, LyricsButton, startLyrics, stopLyrics, VerseSwitch } from './LyricEntry';
 import { FillLyricsDialog } from './FillLyrics';
-import { clearLyrics, shiftLyrics } from '../../core/edit/lyrics';
+import { clearLyrics, shiftLyrics, songVerseCount } from '../../core/edit/lyrics';
 import { lyricOf } from '../../core/verses';
 
 // ---- Helpers shared with the inspector ------------------------------------------------
@@ -321,7 +321,8 @@ export function VisualEditor() {
       // Ctrl+L: lyrics mode, typing the words onto the notes.
       if (ctrl && e.code === 'KeyL' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
-        startLyrics();
+        if (st.ve.lyricAt) stopLyrics();
+        else startLyrics();
         return;
       }
       if (ctrl && e.key.toLowerCase() === 'a') {
@@ -626,7 +627,7 @@ function Toolbar({ song }: { song: Song }) {
                 <span className="mi-name">Make easier</span>
                 <span className="mi-hint">Same notes, easier holes: fewer bends and overblows, less jumping</span>
               </button>
-              <div className="mi-label">Lyrics{ve.verse ? `: verse ${ve.verse + 1}` : ''}</div>
+              <div className="mi-label">Lyrics{ve.verse || songVerseCount(song) > 1 ? `: verse ${ve.verse + 1}` : ''}</div>
               <button className="menu-item" onClick={run(() => useApp.setState({ fillLyricsOpen: true }))}>
                 <span className="mi-name">Fill lyrics from text…</span>
                 <span className="mi-hint">Paste the words; they go on note after note (with optional syllable suggestions)</span>
@@ -729,7 +730,7 @@ function StatusLine() {
   const sel = ve.selection;
   const at = sel[0] ?? ve.caret;
   const hint = ve.lyricAt
-    ? 'Lyrics: type a syllable · Space next note · - joins the next syllable · _ holds over the next note · Shift+Space back · Enter done'
+    ? LYRIC_KEYS
     : ve.step
     ? 'Play the harmonica (keys 1–0, Q–P) to write at the caret · hold keys together for a chord · Backspace takes back the last note'
     : sel.length === 1
@@ -738,8 +739,8 @@ function StatusLine() {
         ? 'Drag one to move them all · Ctrl+C / X / V copy, cut and paste'
         : 'Click a slot for the caret · double-click to add a note · drag a note to move it (Alt copies)';
   return (
-    <div className="ve-status" role="status">
-      <span>
+    <div className={`ve-status ${ve.lyricAt ? 'lyrics' : ''}`}>
+      <span role="status">
         Bar <b>{at.m + 1}</b> · beat <b>{+(at.start + 1).toFixed(2)}</b>
       </span>
       {sel.length > 0 && <span><b>{sel.length}</b> selected</span>}
@@ -750,7 +751,7 @@ function StatusLine() {
         Next: <b>{durationLabel(toolDuration(ve)).toLowerCase()}</b>
       </span>
       <span className="ve-status-hint">
-        <span className="hint-text">{hint} · </span>
+        <span className="hint-text" id={ve.lyricAt ? 'lyric-keys' : undefined}>{hint} · </span>
         <button className="link-btn" onClick={openShortcuts}>
           all shortcuts (?)
         </button>
@@ -966,6 +967,7 @@ function Score({ song, flats, showSecond, asNotes }: { song: Song; flats: Spelli
         // A click under a note (its lyric) types its syllable.
         const plain = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
         if (plain && (e.target as HTMLElement).closest('.ve-lyric')) {
+          if (item.tied) useApp.getState().notify('A tied note isn’t sung again: the words go on the next note.');
           startLyrics(pos);
           return;
         }
@@ -1283,7 +1285,7 @@ const MeasureView = memo(function MeasureView(p: MeasureProps) {
                 <span className="ve-lyric" style={{ maxWidth: lyricRoom }} title={lyric?.cut && !lod ? words : undefined}>
                   {lyric?.shown ?? ''}
                 </span>
-                {p.typing === at(it.start) && <LyricInput pos={pos} verse={p.verse} />}
+                {p.typing === at(it.start) && <LyricInput key={p.verse} pos={pos} verse={p.verse} />}
                 {it.dur > EPS && <span className="ve-resize" title="Drag to change the length" />}
               </div>
             );

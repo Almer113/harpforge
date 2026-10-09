@@ -20,6 +20,7 @@ key: G                   # key of the song (optional)
 position: 2              # optional
 tempo: 100               # beats per minute
 time: 4/4
+lang: en                 # language of the lyrics (en | id), set by the syllable suggestions
 ---
 ```
 
@@ -56,7 +57,7 @@ Aliases accepted on import: `instrument` = `harmonica`, `bpm` = `tempo`, `meter`
 | `~` (on its own) | **tie**: the previous note keeps sounding for one beat per `~`, e.g. `6~ \| ~~ 5` |
 | `\|` `\|\|` `\|]` `\|:` `:\|` | bar lines: single, double, final, repeat start/end. Also accepted: `:\|:` (end one repeat, start the next), `\|\|:`, and `:\|` right after a note (`4:\|`) |
 | `[G7]` | chord symbol shown above the next note or rest (right before a bar line: at the end of that bar) |
-| `w: Twin-kle twin-kle` | lyrics for the tab line above: one syllable per note (and per sung rest `_`); `_` or `*` skips a note; `~` joins words (`Hello~my` is one syllable) |
+| `w: Twin-kle twin-kle` | lyrics for the tab line above: one syllable per note (and per sung rest `_`); `_` or `*` skips a note; `~` joins words (`Hello~my` is one syllable); `\-` is a real hyphen (`x\-` doesn't join the next syllable). Several `w:` lines under a tab line are its verses 1, 2, 3…; an empty `w:` keeps a verse's place when the line has no words in it |
 | `@ Chorus` | section heading |
 | `# text` | comment (at line start or after whitespace) |
 
