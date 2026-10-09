@@ -13,7 +13,7 @@ import { getParsed, useApp } from './store';
  * so playback doesn't load the live inputs it listens to.
  */
 interface AlongHooks {
-  startChecking(range: Passage): void;
+  startChecking(range: Passage, looping: boolean, counted: boolean): void;
   stopChecking(): void;
   passEnded(): PassResult | null;
 }
@@ -64,7 +64,7 @@ export async function play(opts: { count?: boolean } = {}) {
   const counting = (s.countIn || (s.loop && s.countEachLoop)) && opts.count !== false;
   // Playing along without the tune: the clicks keep time instead.
   const muted = s.along && !s.alongMelody;
-  if (s.along) along?.startChecking(range ?? { start: sel?.start ?? 0, end: p.score.totalBeats });
+  if (s.along) along?.startChecking(range ?? { start: sel?.start ?? 0, end: p.score.totalBeats }, s.loop, s.loop && s.countEachLoop && counting);
   engine.playScore(p.score, {
     tempo,
     startBeat: sel?.start ?? 0,

@@ -3,6 +3,7 @@ import { Harmonica, NowPlaying } from '../components/Harmonica';
 import { InputBar } from '../components/InputBar';
 import '../state/practice';
 import { Sheet } from '../components/Sheet';
+import { PracticeReport } from '../components/PracticeReport';
 import { SongLine } from '../components/editor/SongDetails';
 import { Popover } from '../components/Popover';
 import { useHarmonicaKeyboard } from '../live/useHarmonicaKeyboard';
@@ -50,6 +51,7 @@ export function PlayPage() {
       </div>
 
       <Sheet parsed={parsed} onSelect={(i, _ev, extend) => (extend ? extendPassage(i) : selectEvent(i))} />
+      <PracticeReport />
     </section>
   );
 }

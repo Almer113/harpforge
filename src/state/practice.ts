@@ -7,6 +7,8 @@ import { MIC_ID } from '../live/inputs';
 import { onLive } from '../live/livePlayer';
 import { stop as stopPlayback } from './playback';
 import { getParsed, useApp } from './store';
+import { practiceReport } from '../core/report';
+import { showReport } from './report';
 
 function nextPlayable(from: number): number | null {
   const { score } = getParsed(useApp.getState().text);
@@ -28,11 +30,14 @@ export function startPractice() {
     return;
   }
   // (Practice and play along take turns.)
-  useApp.setState({ practice: { index: first, played: 0, mistakes: 0, startedAt: Date.now(), wrongAt: 0 }, selectedEvent: first, along: false, alongMarks: {} });
+  useApp.setState({ practice: { index: first, played: 0, mistakes: 0, startedAt: Date.now(), wrongAt: 0, mistakesAt: {} }, selectedEvent: first, along: false, alongMarks: {} });
 }
 
+/** Stops practising; after at least a note, the report shows how it went. */
 export function stopPractice() {
+  const p = useApp.getState().practice;
   useApp.setState({ practice: null });
+  if (p && p.played > 0) showReport(practiceReport(getParsed(useApp.getState().text).score, p.played, p.mistakesAt), true);
 }
 
 /** Plays the note you're supposed to play next. */
@@ -46,14 +51,12 @@ export async function hint() {
   hintUntil = Date.now() + 1200;
 }
 
+/** The last note was played: the report shows how it went. */
 function finish() {
   const s = useApp.getState();
   const p = s.practice!;
-  const secs = Math.round((Date.now() - p.startedAt) / 1000);
-  const time = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`;
-  const accuracy = Math.round((p.played / Math.max(1, p.played + p.mistakes)) * 100);
   useApp.setState({ practice: null });
-  s.notify(`Finished! ${p.played} notes in ${time} · ${p.mistakes} mistake${p.mistakes === 1 ? '' : 's'} · ${accuracy}% accuracy`);
+  showReport(practiceReport(getParsed(s.text).score, p.played, p.mistakesAt), true);
 }
 
 // A note counts when its pitch is reached while the hole is held, so bending into it
@@ -96,7 +99,7 @@ onLive((e) => {
   if (!p) return;
   if (e.type === 'release') {
     used.delete(e.id);
-    if (missed.delete(e.id)) useApp.setState({ practice: { ...p, mistakes: p.mistakes + 1, wrongAt: Date.now() } });
+    if (missed.delete(e.id)) useApp.setState({ practice: { ...p, mistakes: p.mistakes + 1, wrongAt: Date.now(), mistakesAt: { ...p.mistakesAt, [p.index]: (p.mistakesAt[p.index] ?? 0) + 1 } } });
     return;
   }
   if (e.type === 'change' && used.has(e.id)) return;

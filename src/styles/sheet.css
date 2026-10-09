@@ -97,3 +97,22 @@
 .input-card.along { gap: 10px; flex-wrap: wrap; }
 .along-status { max-width: 320px; }
 .along-warn { flex-basis: 100%; }
+/* The practice report. */
+.modal.report { width: min(620px, 94vw); display: flex; flex-direction: column; gap: 16px; }
+.modal.report h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); }
+.report-summary { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+.report-big { display: flex; flex-direction: column; }
+.report-big b { font-size: 40px; line-height: 1; color: var(--brass-2); }
+.report-facts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 14px; }
+.report-up { color: var(--ok); font-weight: 700; }
+.report-down { color: var(--danger); font-weight: 700; }
+.report-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.report-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.report-list li { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+.report-list li .btn { margin-left: auto; }
+.report-hole { font-family: var(--mono); font-size: 17px; min-width: 48px; }
+.report-clean { margin: 0; color: var(--ok); }
+.report-bars { display: flex; align-items: flex-end; gap: 6px; height: 60px; padding-bottom: 2px; border-bottom: 1px solid var(--border); }
+.report-bars span { flex: 1; max-width: 28px; border-radius: 4px 4px 0 0; background: var(--border-2); }
+.report-bars span.now { background: var(--brass); }
+@media (max-width: 560px) { .report-cols { grid-template-columns: 1fr; } }

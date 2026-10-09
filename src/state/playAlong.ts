@@ -9,6 +9,8 @@ import type { Passage } from '../core/passage';
 import { startMic } from '../live/inputs';
 import { onLive } from '../live/livePlayer';
 import { setAlongHooks, stop } from './playback';
+import { alongReport } from '../core/report';
+import { showReport } from './report';
 import { getParsed, useApp } from './store';
 
 /** The microphone's delay when it hasn't been calibrated (a typical laptop). */
@@ -18,6 +20,12 @@ const MIC_ID = 'mic';
 let checker: AlongChecker | null = null;
 let unlisten: (() => void) | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
+// The loop being checked (null: no loop), where the song was at the last look (to notice the
+// loop coming round), and whether a note played just before the wrap already began the next pass.
+let loop: Passage | null = null;
+let lastBeat = -Infinity;
+let startedEarly = false;
+let lastResult: PassResult | null = null;
 
 const bpm = () => {
   const s = useApp.getState();
@@ -31,35 +39,67 @@ function showMarks() {
   useApp.setState({ alongMarks: marks });
 }
 
-/** Starts checking the notes in `range` (the loop's passage, or from where playback starts). */
-export function startChecking(range: Passage) {
+/**
+ * Where the song is now, noticing the loop coming round (the position jumps back): that
+ * ends the pass, unless a note played just before the wrap already did.
+ */
+function now(): number | null {
+  const beat = engine.scoreBeatNow();
+  if (beat === null) return null;
+  if (loop && beat < lastBeat - 0.5) {
+    if (startedEarly) startedEarly = false;
+    else endPass();
+  }
+  lastBeat = beat;
+  // Until the wrap, a pass that began early runs a loop's length behind the song's position.
+  return startedEarly && loop ? beat - (loop.end - loop.start) : beat;
+}
+
+/**
+ * Starts checking the notes in `range`: the loop's passage when `looping`, else from where
+ * playback starts. `counted`: each pass of the loop has a count before it.
+ */
+export function startChecking(range: Passage, looping = false, counted = false) {
   stopChecking();
   checker = new AlongChecker(expectedNotes(getParsed(useApp.getState().text).score, range));
+  loop = looping ? range : null;
+  lastBeat = -Infinity;
+  startedEarly = false;
+  lastResult = null;
   useApp.setState({ alongMarks: {} });
   unlisten = onLive((e) => {
     if (e.type !== 'press' || !checker) return;
-    const now = engine.scoreBeatNow();
-    if (now === null) return;
+    const at = now();
+    if (at === null) return;
     // The microphone hears a note a moment after you play it.
     const s = useApp.getState();
     const delayMs = e.id === MIC_ID ? (s.micLatency ?? DEFAULT_MIC_LATENCY) : 0;
-    const beat = now - (delayMs / 1000) * (bpm() / 60);
-    if (checker.attack(beat, e.midi, windows(bpm()))) showMarks();
+    let beat = at - (delayMs / 1000) * (bpm() / 60);
+    const win = windows(bpm());
+    // Just before the loop comes round (with no count between passes), a note is the next
+    // pass's first one, played a little early.
+    if (loop && !counted && !startedEarly && beat > loop.end - win.ok) {
+      endPass();
+      startedEarly = true;
+      beat -= loop.end - loop.start;
+    }
+    if (checker.attack(beat, e.midi, win)) showMarks();
   });
   // Notes whose moment has passed without being played turn red as the song goes on.
   timer = setInterval(() => {
-    const beat = engine.scoreBeatNow();
+    const beat = now();
     if (checker && beat !== null && checker.missedBy(beat, windows(bpm())).length) showMarks();
   }, 100);
 }
 
 /**
- * Stops listening. Stopped part way (by you), the stretch played so far is scored too; the
- * marks stay on the notes until playback starts again.
+ * Stops listening. Stopped part way (by you), the stretch played so far is scored too, if
+ * you played in it; the marks stay on the notes until playback starts again.
  */
 export function stopChecking() {
   const beat = engine.scoreBeatNow();
-  if (checker && beat !== null && checker.marks.size) {
+  // (Only if you played something in it: stopping just after a loop came round isn't a pass.)
+  if (checker && beat !== null && [...checker.marks.values()].some((m) => m !== 'missed')) {
     const result = checker.result(beat - windows(bpm()).ok);
     if (result.total) useApp.setState((s) => ({ alongPasses: [...s.alongPasses, result].slice(-200) }));
   }
@@ -68,15 +108,30 @@ export function stopChecking() {
   if (timer !== null) clearInterval(timer);
   timer = null;
   checker = null;
+  loop = null;
 }
 
-/** A pass ended (a loop came round, or the song finished): scores it and starts the next. */
-export function passEnded(): PassResult | null {
-  if (!checker) return null;
+/** Scores the pass and starts the next. */
+function endPass() {
+  if (!checker) return;
   const result = checker.result();
   checker.reset();
+  lastResult = result;
   useApp.setState((s) => ({ alongPasses: [...s.alongPasses, result].slice(-200), alongMarks: {} }));
-  return result;
+}
+
+/**
+ * A pass ended (the loop came round, or the song finished): its result. The loop's wrap may
+ * already have been noticed (a note or the check just after it), so it isn't scored twice.
+ */
+export function passEnded(): PassResult | null {
+  if (!checker) return null;
+  if (loop) {
+    now();
+    return lastResult;
+  }
+  endPass();
+  return lastResult;
 }
 
 setAlongHooks({ startChecking, stopChecking, passEnded });
@@ -86,7 +141,10 @@ export function setAlong(on: boolean) {
   if (on) useApp.setState({ along: true, practice: null, alongPasses: [], alongMarks: {} });
   else {
     stopChecking();
+    const passes = useApp.getState().alongPasses;
     useApp.setState({ along: false, alongMarks: {} });
+    // After at least a scored pass, the report shows how the session went.
+    if (passes.length) showReport(alongReport(getParsed(useApp.getState().text).score, passes), true);
   }
 }
 

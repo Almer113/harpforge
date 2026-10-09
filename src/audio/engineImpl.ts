@@ -106,12 +106,15 @@ const scheduledVoices = new Set<Voice>();
 let metronomeId: number | null = null;
 let metronomeBpb = 4;
 let loopListener: ((time: number) => void) | null = null;
+const loopTimers = new Set<ReturnType<typeof setTimeout>>();
 // What the clicks need to know about the playing song (see clicks.ts).
 let clickInfo: ClickInfo = { offset: 0, countFrom: 0, count: 0 };
 const accented = (beat: number) => isAccent(beat, clickInfo, metronomeBpb);
 // The playing song's end, so looping can be switched on and off while it plays.
 // `loopFrom`: where each pass of a loop starts on the transport (before its count, if it has one).
-let current: { startBeat: number; loopFrom: number; end: number; offset: number; endId: number | null; onEnd?: () => void } | null = null;
+// `startsAt`: the audio time playback really starts (until then the transport still reports
+// where it was before).
+let current: { startBeat: number; loopFrom: number; end: number; offset: number; endId: number | null; onEnd?: () => void; startsAt: number } | null = null;
 let endTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**
@@ -224,14 +227,22 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
       }, beatTicks(at));
     }
     const end = until + offset;
-    current = { startBeat, loopFrom: startBeat + (opts.countEachLoop ? 0 : offset), end, offset, endId: null, onEnd: opts.onEnd };
+    current = { startBeat, loopFrom: startBeat + (opts.countEachLoop ? 0 : offset), end, offset, endId: null, onEnd: opts.onEnd, startsAt: Infinity };
     if (opts.loop && score.totalBeats > 0) setLoop(true);
     else scheduleEnd();
   }
 
   if (opts.onLoop) {
     const onLoop = opts.onLoop;
-    loopListener = (time: number) => Tone.getDraw().schedule(onLoop, time);
+    // A timer, not Tone's Draw (which waits for animation frames and drops late calls): the
+    // pass is scored and the trainer steps even when the page is in the background.
+    loopListener = (time: number) => {
+      const id = setTimeout(() => {
+        loopTimers.delete(id);
+        onLoop();
+      }, Math.max(0, (time - Tone.immediate()) * 1000));
+      loopTimers.add(id);
+    };
     t.on('loop', loopListener);
   }
   clickInfo = { offset, barStarts: opts.barStarts, countFrom: startBeat - countIn, count: countIn };
@@ -243,7 +254,9 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
   }
   // Playback starts with the count (if any) just before `startBeat`.
   t.ticks = Math.round(startBeat * ticksPerBeat());
-  t.start('+0.05');
+  const startsAt = Tone.now() + 0.05;
+  if (current) current.startsAt = startsAt;
+  t.start(startsAt);
 }
 
 // Paused in the moment between reaching the end and acting on it: finish on resume.
@@ -278,6 +291,8 @@ export function stopPlayback() {
   t.loop = false;
   if (loopListener) t.off('loop', loopListener);
   loopListener = null;
+  for (const id of loopTimers) clearTimeout(id);
+  loopTimers.clear();
   metronomeId = null;
   for (const v of scheduledVoices) v.stop(Tone.immediate());
   if (scheduledVoices.size) soundingFor(0);
@@ -290,7 +305,7 @@ export function setTempo(bpm: number) {
 
 /** Where in the song (score beats) playback is right now, or null when it isn't playing. */
 export function scoreBeatNow(): number | null {
-  if (!current || transport().state !== 'started') return null;
+  if (!current || transport().state !== 'started' || Tone.immediate() < current.startsAt) return null;
   return transportBeats() - current.offset;
 }
 

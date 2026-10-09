@@ -132,6 +132,8 @@ export interface PracticeState {
   startedAt: number;
   /** Time of the last wrong note (for a brief shake). */
   wrongAt: number;
+  /** Wrong notes tried on each note (score index), for the practice report. */
+  mistakesAt: Record<number, number>;
 }
 
 /** One undo step: the text, and where the visual editor's selection was. */
@@ -183,6 +185,8 @@ export interface AppState {
   alongMarks: Record<number, import('../core/playAlong').Mark>;
   /** Passes played along since it was turned on, newest last. */
   alongPasses: import('../core/playAlong').PassResult[];
+  /** The practice report on screen: the session, and the song's earlier sessions. */
+  report: { session: import('../core/report').SessionReport; history: import('../storage/practiceLog').LogEntry[]; title: string; at: number } | null;
   /** Playback speed multiplier (practice slow-down). */
   speed: number;
   /** Live-held sounds by input id (mouse, key codes). */
@@ -397,6 +401,7 @@ export const useApp = create<AppState>((set) => ({
   micLatency: prefs.micLatency ?? null,
   alongMarks: {},
   alongPasses: [],
+  report: null,
   speed: 1,
   held: {},
   keyOffset: 0,

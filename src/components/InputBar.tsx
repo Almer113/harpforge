@@ -8,6 +8,8 @@ import { startMic, startMidi, stopMic, stopMidi } from '../live/inputs';
 import { startRecording, stopRecording } from '../live/recorder';
 import { hint, practiceTotal, startPractice, stopPractice } from '../state/practice';
 import { calibrateMic, DEFAULT_MIC_LATENCY, describePass, setAlong } from '../state/playAlong';
+import { alongReport } from '../core/report';
+import { showReport } from '../state/report';
 import { useApp, useParsed } from '../state/store';
 
 const MicIcon = (
@@ -178,6 +180,7 @@ function AlongControl() {
   const passes = useApp((s) => s.alongPasses);
   const micOn = useApp((s) => s.mic.status === 'on');
   const latency = useApp((s) => s.micLatency);
+  const { score } = useParsed();
   const [cal, setCal] = useState<'idle' | 'running' | 'failed'>('idle');
   if (!along) {
     return (
@@ -215,6 +218,11 @@ function AlongControl() {
           title={`The microphone hears notes a moment late; calibrating measures by how much (now ${latency ?? DEFAULT_MIC_LATENCY} ms${latency === null ? ', a guess' : ''})`}
         >
           {latency === null ? 'Calibrate mic' : `Mic delay ${latency} ms`}
+        </button>
+      )}
+      {passes.length > 0 && (
+        <button className="btn small ghost" onClick={() => showReport(alongReport(score, passes), false)} title="How the session is going: the holes and bars missed most">
+          Report
         </button>
       )}
       <button className="btn small ghost" onClick={() => setAlong(false)}>Stop</button>
