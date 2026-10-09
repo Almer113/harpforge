@@ -1,5 +1,6 @@
 // Turns a TabDoc back into .htab text.
 
+import { hasLyrics, lineVerses, lyricOf } from '../verses';
 import { midiToName, type Spelling } from '../pitch';
 import type { HoleSound, Sound } from '../types';
 import { beatsPerBar, type BarEvent, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine, type TabMeta } from './types';
@@ -33,9 +34,9 @@ function chordText(sounds: Sound[], opts: SerializeOptions): string {
   return '(' + sounds.map((s) => soundText(s, opts)).join(' ') + ')';
 }
 
-/** A rest that carries a syllable: written "_" and counted by the "w:" line. */
+/** A rest that carries a syllable (in any verse): written "_" and counted by the "w:" lines. */
 function isSung(e: NoteEvent | RestEvent): boolean {
-  return e.kind === 'rest' && (!!e.lyric || !!e.sung);
+  return e.kind === 'rest' && (hasLyrics(e) || !!e.sung);
 }
 
 function eventCore(e: NoteEvent | RestEvent, opts: SerializeOptions): string {
@@ -214,22 +215,25 @@ export function eventsText(events: TabEvent[], opts: SerializeOptions = {}): str
   return out.join(' ');
 }
 
-function lyricsText(line: TabLine): string | null {
+/** A line's lyrics line for verse `verse` (0 = verse 1), or null if it has no words. */
+function lyricsText(line: TabLine, verse = 0): string | null {
   // Every note sung (not tied ones) and every sung rest ("_") takes a syllable.
   const notes = line.events.filter((e): e is NoteEvent | RestEvent => (e.kind === 'note' && !e.tied) || (e.kind === 'rest' && e.beats > EPS && isSung(e)));
-  if (!notes.some((n) => n.lyric)) return null;
+  const syllable = (e: NoteEvent | RestEvent) => lyricOf(e, verse);
+  if (!notes.some(syllable)) return null;
   let last = notes.length - 1;
-  while (last >= 0 && !notes[last].lyric) last--;
+  while (last >= 0 && !syllable(notes[last])) last--;
   const parts: string[] = [];
   for (let k = 0; k <= last; k++) {
-    const syl = notes[k].lyric ?? '*';
+    const syl = syllable(notes[k]) ?? '*';
     // A syllable that is just a hyphen is written "\-" (a bare "-" would join two syllables).
     if (syl.trim() === '-') {
       parts.push('\\-');
       continue;
     }
     // Hyphens inside a syllable are literal ("round-up"); a trailing one joins to the next syllable.
-    parts.push(syl.trim().replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-') || '*');
+    // ("‐", a literal hyphen kept from "\-", is written that way again.)
+    parts.push(syl.trim().replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-').replace(/‐/g, '\\-') || '*');
   }
   // Join: syllables ending with "-" glue to the next one.
   let text = '';
@@ -254,11 +258,15 @@ export function headerText(meta: TabMeta): string {
   return ['---', ...lines, '---'].join('\n');
 }
 
-/** One line of tab and its lyrics line, if any (without the section heading). */
+/**
+ * One line of tab and its lyrics lines, a verse each (without the section heading). A verse
+ * with no words on this line, before one that has some, is an empty "w:" keeping its place.
+ */
 export function lineText(line: TabLine, opts: SerializeOptions = {}): string[] {
   if (!line.events.length) return [];
-  const lyr = lyricsText(line);
-  return lyr ? [eventsText(line.events, opts), lyr] : [eventsText(line.events, opts)];
+  const out = [eventsText(line.events, opts)];
+  for (let v = 0; v < lineVerses(line); v++) out.push(lyricsText(line, v) ?? 'w:');
+  return out;
 }
 
 export function bodyText(lines: TabLine[], opts: SerializeOptions = {}): string {

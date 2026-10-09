@@ -148,7 +148,8 @@
 /* ---------- Lyrics view: words like a chord sheet, the holes small above ---------- */
 .lyricsview { display: flex; flex-direction: column; gap: 14px; }
 .ly-none { margin: 0; }
-.ly-block .tab-section { margin-bottom: 4px; }
+.ly-block { display: flex; flex-direction: column; gap: 10px; }
+.ly-block .tab-section { margin-bottom: -4px; }
 .ly-line { display: flex; flex-wrap: wrap; align-items: flex-end; column-gap: 0.55em; row-gap: 12px; font-size: 21px; }
 .ly-word { display: inline-flex; align-items: flex-end; }
 .ly-syl { display: inline-flex; flex-direction: column; align-items: stretch; }
@@ -188,3 +189,12 @@
 /* Holes hidden: the words' holes go; notes without words stay, faint, so a break still shows. */
 .lyricsview.no-holes .ly-syl:not(.fill) .ly-hole { display: none; }
 .lyricsview.no-holes .ly-syl.fill .ly-note { font-size: 12px; opacity: 0.6; }
+
+/* ---------- Verses: stacked under the notes, numbered at each line's first words ---------- */
+.card-lyric.verses { display: flex; flex-direction: column; align-items: stretch; }
+.verse-syl { position: relative; min-height: 1.3em; }
+.verse-syl[data-n]::before {
+  content: attr(data-n); position: absolute; right: 100%; margin-right: 3px;
+  font-style: normal; font-size: 10px; font-weight: 700; color: var(--faint);
+}
+.ly-vnum { align-self: flex-end; font-size: 0.65em; font-weight: 700; color: var(--faint); line-height: 2; margin-right: -0.25em; }

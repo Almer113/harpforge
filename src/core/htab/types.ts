@@ -13,7 +13,10 @@ export interface NoteEvent {
   beats: number;
   /** Chord symbol shown above, e.g. "G7". */
   chord?: string;
+  /** The syllable sung on it (verse 1); a trailing "-" joins it to the next one. */
   lyric?: string;
+  /** Its syllables in verses 2, 3… (verses[0] is verse 2); see verses.ts. */
+  verses?: (string | undefined)[];
   /**
    * Tied from the previous note: it keeps sounding instead of being played again
    * (written as a bare "~", e.g. "6~ | ~~ 5"). Its sounds are the previous note's.
@@ -28,6 +31,7 @@ export interface RestEvent {
   chord?: string;
   /** Lyrics over a rest: used by chord sheets, where chords have no melody yet. */
   lyric?: string;
+  verses?: (string | undefined)[];
   /** Written "_": the harp rests while a syllable is sung (the "w:" line counts it like a note). */
   sung?: boolean;
   src?: Span;

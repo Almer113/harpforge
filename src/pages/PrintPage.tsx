@@ -2,7 +2,7 @@
 // print. "Print" opens the browser's print dialog, where "Save as PDF" makes a PDF.
 
 import { lazy, Suspense, useEffect } from 'react';
-import { ReadAsSwitch, ShowMenu } from '../components/Sheet';
+import { ReadAsSwitch, ShowMenu, useShownVerses } from '../components/Sheet';
 import { LyricsView } from '../components/LyricsView';
 import { SimpleTabView } from '../components/SimpleTabView';
 import { TabView } from '../components/TabView';
@@ -37,6 +37,7 @@ export function PrintPage() {
   const show = useApp((s) => s.sheetShow);
   const names = useApp((s) => s.showNoteNames);
   const readAs = useApp((s) => s.readAs);
+  const verses = useShownVerses(parsed);
   const set = (patch: Partial<PrintPrefs>) => useApp.setState((s) => ({ printPrefs: { ...s.printPrefs, ...patch } }));
   const { meta } = parsed.doc;
   const harp = parsed.harp;
@@ -127,12 +128,12 @@ export function PrintPage() {
         )}
         <div className="paper-body">
           {prefs.view === 'lyrics' ? (
-            <LyricsView parsed={parsed} activeEvents={[]} selectedEvent={null} readAs={readAs} show={show.lyrics} />
+            <LyricsView parsed={parsed} activeEvents={[]} selectedEvent={null} readAs={readAs} show={show.lyrics} verses={verses} />
           ) : prefs.view === 'simple' ? (
             <SimpleTabView parsed={parsed} activeEvents={[]} selectedEvent={null} readAs={readAs} />
           ) : prefs.view === 'staff' ? (
             <Suspense fallback={<p>Loading the staff…</p>}>
-              <StaffView parsed={parsed} activeEvents={[]} selectedEvent={null} show={show.staff} oneSvgPerLine />
+              <StaffView parsed={parsed} activeEvents={[]} selectedEvent={null} show={show.staff} verses={verses} oneSvgPerLine />
             </Suspense>
           ) : (
             <TabView
@@ -141,6 +142,7 @@ export function PrintPage() {
               selectedEvent={null}
               showNoteNames={prefs.view === 'numbers' ? show.numbers.holes : readAs === 'notes' ? show.tab.holes : names}
               showLyrics={prefs.view === 'numbers' ? show.numbers.lyrics : show.tab.lyrics}
+              verses={verses}
               showChords={prefs.view === 'numbers' ? show.numbers.chords : show.tab.chords}
               notation={prefs.view === 'numbers' ? 'numbers' : 'holes'}
               readAs={readAs}

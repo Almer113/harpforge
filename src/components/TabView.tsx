@@ -1,5 +1,6 @@
 // Visual tab sheet: lines → measures → note cards, sized by duration.
 
+import { lyricOf } from '../core/verses';
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { BarStyle, NoteEvent, RestEvent, TabEvent } from '../core/htab/types';
 import { midiToName, keySpelling, type Spelling } from '../core/pitch';
@@ -22,6 +23,8 @@ interface Props {
   showNoteNames: boolean;
   /** Lyrics under the notes and chord symbols above them (both shown unless turned off). */
   showLyrics?: boolean;
+  /** The verses to show, stacked (0-based; default verse 1). */
+  verses?: number[];
   showChords?: boolean;
   /** `extend`: Shift was held (the passage runs to this card). */
   onCardClick?: (scoreIndex: number, ev: NoteEvent | RestEvent, extend?: boolean) => void;
@@ -79,7 +82,7 @@ export function useStableClick<A extends unknown[]>(fn: ((...args: A) => void) |
   return useCallback((...args: A) => latest.current?.(...args), []);
 }
 
-export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, showLyrics = true, showChords = true, onCardClick, passage, loopRange, marks, marksPrev, onBarClick, follow = true, notation = 'holes', readAs = 'holes' }: Props) {
+export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, showLyrics = true, verses = [0], showChords = true, onCardClick, passage, loopRange, marks, marksPrev, onBarClick, follow = true, notation = 'holes', readAs = 'holes' }: Props) {
   const { doc, score, harp } = parsed;
   const flats = keySpelling(doc.meta.key ?? harp.spec.key);
   const numbers = notation === 'numbers';
@@ -130,6 +133,7 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, sh
           selected={selectedLine === li ? selectedEvent : null}
           showNoteNames={showNoteNames}
           showLyrics={showLyrics}
+          verses={verses.join(',')}
           showChords={showChords}
           numbers={numbers}
           asNotes={asNotes}
@@ -157,6 +161,8 @@ interface TabLineProps {
   selected: number | null;
   showNoteNames: boolean;
   showLyrics: boolean;
+  /** The verses shown ("0,1"). */
+  verses: string;
   showChords: boolean;
   numbers: boolean;
   asNotes: boolean;
@@ -200,9 +206,12 @@ export function markClass(mark: string | undefined): { cls: string; words: strin
 }
 
 /** One line of the sheet (redrawn only when something in it changes). */
-const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, marks, selected, showNoteNames, showLyrics, showChords, numbers, asNotes, flats, doPc, onCardClick, onBarClick }: TabLineProps) {
+const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, marks, selected, showNoteNames, showLyrics, verses, showChords, numbers, asNotes, flats, doPc, onCardClick, onBarClick }: TabLineProps) {
   const { doc, score, indexByKey, harp } = parsed;
   const line = doc.lines[li];
+  // More than one verse: each row is numbered at the line's first syllable of it.
+  const shown = verses.split(',').map(Number);
+  const firstSung = shown.length > 1 ? shown.map((v) => line.events.findIndex((e) => e.kind !== 'bar' && !!lyricOf(e, v))) : [];
   const activeSet = indexSet(active);
   const passageSet = indexSet(inPassage);
   const loopSet = indexSet(inLoop);
@@ -241,6 +250,8 @@ const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, m
                     selected={idx !== undefined && idx === selected}
                     showNoteNames={showNoteNames}
                     showLyrics={showLyrics}
+                    verses={verses}
+                    numbered={shown.filter((_, k) => firstSung[k] === ei).join(',')}
                     showChords={showChords}
                     numbers={numbers}
                     asNotes={asNotes}
@@ -273,6 +284,8 @@ const TabCard = memo(function TabCard({
   selected,
   showNoteNames,
   showLyrics,
+  verses,
+  numbered,
   showChords,
   numbers,
   asNotes,
@@ -291,6 +304,9 @@ const TabCard = memo(function TabCard({
   selected: boolean;
   showNoteNames: boolean;
   showLyrics: boolean;
+  verses: string;
+  /** The verses whose number this card shows (its line's first syllable of them). */
+  numbered: string;
   showChords: boolean;
   numbers: boolean;
   asNotes: boolean;
@@ -340,7 +356,17 @@ const TabCard = memo(function TabCard({
           {numbers || asNotes ? sev.sounds.map((snd) => (snd.type === 'hole' ? holeSoundText(snd) : '')).join(' ') : sev.midis.map((x) => (x === null ? '?' : midiToName(x, flats))).join(' ')}
         </span>
       )}
-      {showLyrics && <span className="card-lyric">{ev.lyric ?? ''}</span>}
+      {showLyrics && verses === '0' ? (
+        <span className="card-lyric">{ev.lyric ?? ''}</span>
+      ) : showLyrics ? (
+        <span className="card-lyric verses">
+          {verses.split(',').map((v) => (
+            <span key={v} className="verse-syl" data-n={numbered.split(',').includes(v) ? `${Number(v) + 1}.` : undefined}>
+              {lyricOf(ev, Number(v)) ?? ''}
+            </span>
+          ))}
+        </span>
+      ) : null}
     </button>
   );
 });

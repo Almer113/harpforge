@@ -27,14 +27,19 @@ interface Props {
   readAs?: ReadAs;
   /** The holes (or notes) above the words, and the chords above them. */
   show?: { holes: boolean; chords: boolean };
+  /** The verses to show (0-based; default verse 1): a line of words each. */
+  verses?: number[];
 }
 
-export function LyricsView({ parsed, activeEvents, selectedEvent, onSelect, passage, loopRange, marks, marksPrev, readAs = 'holes', show = { holes: true, chords: true } }: Props) {
+/** An event's syllables in every verse. */
+const lyricsIn = (e: NoteEvent | RestEvent) => [e.lyric, ...(e.verses ?? [])];
+
+export function LyricsView({ parsed, activeEvents, selectedEvent, onSelect, passage, loopRange, marks, marksPrev, readAs = 'holes', show = { holes: true, chords: true }, verses = [0] }: Props) {
   const { doc, score, harp } = parsed;
   const flats = keySpelling(doc.meta.key ?? harp.spec.key);
   const root = useRef<HTMLDivElement>(null);
   const click = useStableClick(onSelect);
-  const anyWords = useMemo(() => doc.lines.some((l) => l.events.some((e) => e.kind !== 'bar' && !!e.lyric?.trim())), [doc]);
+  const anyWords = useMemo(() => doc.lines.some((l) => l.events.some((e) => e.kind !== 'bar' && lyricsIn(e).some((x) => !!x?.trim()))), [doc]);
 
   // Following goes by the syllable (always shown, even with the holes hidden).
   useEffect(() => {
@@ -67,6 +72,7 @@ export function LyricsView({ parsed, activeEvents, selectedEvent, onSelect, pass
           asNotes={readAs === 'notes'}
           chords={show.chords}
           holes={show.holes}
+          verses={verses.join(',')}
           flats={flats}
           onSelect={onSelect ? click : undefined}
         />
@@ -87,6 +93,7 @@ const LyricsLine = memo(function LyricsLine({
   asNotes,
   chords,
   holes,
+  verses,
   flats,
   onSelect,
 }: {
@@ -100,20 +107,29 @@ const LyricsLine = memo(function LyricsLine({
   asNotes: boolean;
   chords: boolean;
   holes: boolean;
+  /** The verses shown ("0,1"). */
+  verses: string;
   flats: Spelling;
   /** None on paper (Print): nothing to click. */
   onSelect?: (scoreIndex: number, ev: NoteEvent | RestEvent, extend?: boolean) => void;
 }) {
   const { doc, indexByKey, score } = parsed;
   const line = doc.lines[li];
-  const words = useMemo(() => lyricsLine(line), [line]);
+  // Each verse shown that has words here (verse 1 always: a line without words is fills).
+  const rows = useMemo(() => {
+    const shown = verses.split(',').map(Number);
+    const all = shown.map((v) => ({ v, words: lyricsLine(line, v) }));
+    const sung = all.filter((r) => hasWords(r.words));
+    return sung.length ? sung : all.slice(0, 1);
+  }, [line, verses]);
+  const numbered = verses.includes(',');
   const set = (list: string) => new Set(list ? list.split(',').map(Number) : []);
   const activeSet = set(active);
   const passageSet = set(inPassage);
   const loopSet = set(inLoop);
   const markOf = markMap(marks);
   // A chord row only where the line has chords, so lines without stay compact.
-  const chordRow = chords && words.some((w) => w.syllables.some((s) => s.notes.some((n) => n.chord)));
+  const chordRow = chords && rows.some((r) => r.words.some((w) => w.syllables.some((s) => s.notes.some((n) => n.chord))));
   const indexOf = (n: LyNote) => indexByKey.get(eventKey(li, n.ei));
   /** A note's states, as classes ("selected in-loop mark-late"), and its mark in words. */
   const states = (idx: number | undefined) => {
@@ -159,8 +175,9 @@ const LyricsLine = memo(function LyricsLine({
   return (
     <div className="ly-block">
       {line.section !== undefined && <div className="tab-section ly-section">{line.section}</div>}
-      {words.length > 0 && (
-        <div className={`ly-line ${hasWords(words) ? '' : 'ly-fills'}`}>
+      {rows.map(({ v, words }) => words.length > 0 && (
+        <div key={v} className={`ly-line ${hasWords(words) ? '' : 'ly-fills'}`}>
+          {numbered && hasWords(words) && <span className="ly-vnum" aria-label={`Verse ${v + 1}`}>{v + 1}.</span>}
           {words.map((w, wi) => (
             <span className="ly-word" key={wi}>
               {w.syllables.map((s, si) => {
@@ -202,7 +219,7 @@ const LyricsLine = memo(function LyricsLine({
             </span>
           ))}
         </div>
-      )}
+      ))}
     </div>
   );
 });

@@ -5,6 +5,7 @@
 // chord symbols, rests, bars, lyrics (w:) and parts. Only the first tune and first
 // voice are read.
 
+import { lyricOf, songVerses } from '../verses';
 import type { Harmonica } from '../instruments';
 import { holeSoundText } from '../htab/serializer';
 import { beatsPerBar, type BarEvent, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine } from '../htab/types';
@@ -432,6 +433,8 @@ export interface AbcExportOptions {
   /** Add the harmonica tab as a lyric line under the staff. */
   tabLine?: boolean;
   lyrics?: boolean;
+  /** Which verses' lyrics (0-based; default every one), a "w:" line each. */
+  verses?: number[];
   /** Chord symbols above the staff (default true). */
   chords?: boolean;
   /** Title, composer and tempo marking (default true; the staff view can leave them out). */
@@ -481,6 +484,7 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
   const { meta } = doc;
   const tabLine = opts.tabLine ?? false;
   const withLyrics = opts.lyrics ?? true;
+  const verses = opts.verses ?? Array.from({ length: Math.max(1, songVerses(doc)) }, (_, k) => k);
   const withChords = opts.chords ?? true;
   const withHeader = opts.header ?? true;
   const fifths = keyFifths(meta.key) ?? 0;
@@ -505,7 +509,8 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
     const sig = keySignature(fifths);
     const parts: string[] = [];
     lastTieable = null;
-    const lyr: string[] = [];
+    // Each verse's syllables, a slot per note ("*": none).
+    const lyr: string[][] = verses.map(() => []);
     const tabs: string[] = [];
 
     const noteText = (midi: number): string => {
@@ -583,20 +588,26 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
       lastTieable = parts.length - 1;
       if (ev.tied) {
         // Tied notes aren't sung or tabbed again, but keep their slot under the staff.
-        if (withLyrics) lyr.push('*');
+        if (withLyrics) for (const l of lyr) l.push('*');
         tabs.push('*');
         return;
       }
-      if (withLyrics) lyr.push(ev.lyric ? ev.lyric.trim().replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-') : '*');
+      if (withLyrics)
+        verses.forEach((v, k) => {
+          const syl = lyricOf(ev, v);
+          lyr[k].push(syl ? syl.trim().replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-') : '*');
+        });
       tabs.push(tabToken(ev));
     }
 
     out.push(parts.join(' '));
     prevLine = { parts, at: out.length - 1, tieable: lastTieable };
     if (tabLine && tabs.some((t) => t !== '*')) out.push('w: ' + tabs.join(' '));
-    if (withLyrics && lyr.some((t) => t !== '*')) {
+    // Each verse up to the last with words here (an empty one keeps its row: "w: * *").
+    const lastVerse = withLyrics ? lyr.map((l) => l.some((t) => t !== '*')).lastIndexOf(true) : -1;
+    for (const verse of lyr.slice(0, lastVerse + 1)) {
       let text = '';
-      for (const syl of lyr) text += text === '' || text.endsWith('-') ? syl : ' ' + syl;
+      for (const syl of verse) text += text === '' || text.endsWith('-') ? syl : ' ' + syl;
       out.push('w: ' + text);
     }
   });

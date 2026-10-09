@@ -7,6 +7,7 @@
 // Edits are pure functions Song → Song; the editor converts to and from TabDoc so
 // the .htab text stays the single source of truth.
 
+import { hasLyrics } from '../verses';
 import { beatsPerBar, type BarStyle, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine, type TabMeta } from '../htab/types';
 import type { Sound } from '../types';
 
@@ -19,6 +20,8 @@ export interface Item {
   sounds: Sound[];
   chord?: string;
   lyric?: string;
+  /** Syllables in verses 2, 3… (see verses.ts). */
+  verses?: (string | undefined)[];
   /** Tied from the item before it (same sound, keeps sounding across the gap/bar). */
   tied?: boolean;
 }
@@ -135,8 +138,9 @@ export function fromDoc(doc: TabDoc): Song {
       const chord = ev.chord ?? pendingChord;
       pendingChord = undefined;
       const sounds = ev.kind === 'note' ? ev.sounds : [];
-      if (sounds.length || chord || ev.lyric) {
+      if (sounds.length || chord || hasLyrics(ev)) {
         const item: Item = { start: t, dur: ev.beats, sounds, chord, lyric: ev.lyric };
+        if (ev.verses) item.verses = [...ev.verses];
         if (ev.kind === 'note' && ev.tied) item.tied = true;
         cur.items.push(item);
       }
@@ -235,11 +239,13 @@ function itemEvent(it: Item, tie = false): TabEvent {
     const ev: NoteEvent = { kind: 'note', sounds: it.sounds, beats: it.dur };
     if (it.chord) ev.chord = it.chord;
     if (it.lyric) ev.lyric = it.lyric;
+    if (it.verses?.some(Boolean)) ev.verses = [...it.verses];
     return ev;
   }
   const r: RestEvent = { kind: 'rest', beats: it.dur };
   if (it.chord) r.chord = it.chord;
   if (it.lyric) r.lyric = it.lyric;
+  if (it.verses?.some(Boolean)) r.verses = [...it.verses];
   return r;
 }
 
@@ -282,6 +288,7 @@ export function placeItem(song: Song, m: number, item: Item): Song {
       piece.tied = true;
       delete piece.chord;
       delete piece.lyric;
+      delete piece.verses;
     }
     s = placeOne(s, at.m, piece);
     left -= take;
@@ -382,6 +389,7 @@ export function updateItem(song: Song, pos: Pos, patch: Partial<Omit<Item, 'star
   Object.assign(target, own);
   if (!target.chord) delete target.chord;
   if (!target.lyric) delete target.lyric;
+  if (!target.verses?.some(Boolean)) delete target.verses;
   if (!target.tied) delete target.tied;
   return s;
 }
@@ -550,6 +558,7 @@ export function setTie(song: Song, pos: Pos, on: boolean): Song {
   const s2 = cloneSong(s);
   findItem(s2, pos)!.tied = true;
   delete findItem(s2, pos)!.lyric;
+  delete findItem(s2, pos)!.verses;
   return s2;
 }
 
@@ -710,6 +719,7 @@ function rebar(
       if (!firstPiece) {
         delete piece.chord;
         delete piece.lyric;
+        delete piece.verses;
         if (!piece.sounds.length) break;
         piece.tied = true;
       }

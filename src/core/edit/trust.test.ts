@@ -21,11 +21,12 @@ const lyricsOf = (text: string) => parseHtab(text).doc.lines.map((l) => l.events
 describe('extra verses', () => {
   const text = doc('4 5 6 7 |\nw: a b c d\nw: e f g h');
 
-  it('use only the first lyrics line, and say the others are kept', () => {
+  it('are read as verses 2, 3… of their line', () => {
     const { doc: d, issues } = parseHtab(text);
     expect(lyricsOf(text)).toEqual([['a', 'b', 'c', 'd']]);
     expect(d.lines).toHaveLength(1);
-    expect(issues).toEqual([expect.objectContaining({ severity: 'info', message: expect.stringContaining('Verse 2') })]);
+    expect(d.lines[0].events.map((e) => (e.kind === 'bar' ? null : e.verses?.[0])).filter(Boolean)).toEqual(['e', 'f', 'g', 'h']);
+    expect(issues).toEqual([]);
   });
 
   it('stay under their line when it is edited', () => {
@@ -154,7 +155,8 @@ describe('review fixes', () => {
   it('a line merged into the one before keeps its extra verses', () => {
     const text = doc('4 5 6 7 |\nw: a b c d\n-4 -5 -6 -7 |\nw: e f g h\nw: E F G H');
     const merge = (s: Song) => ({ ...s, measures: s.measures.map((m, i) => (i === 1 ? { ...m, lineBreak: false } : m)) });
-    expect(edit(text, merge)).toBe('4 5 6 7 | -4 -5 -6 -7 |\nw: a b c d e f g h\nw: E F G H');
+    // (Verse 2 was only on the second line: it starts there.)
+    expect(edit(text, merge)).toBe('4 5 6 7 | -4 -5 -6 -7 |\nw: a b c d e f g h\nw: * * * * E F G H');
   });
 
   it('reports kept text once, not again on later edits', () => {

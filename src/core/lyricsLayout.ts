@@ -2,6 +2,7 @@
 // with the notes sung on it (its own note first, then any held over it). Notes before the
 // line's first syllable, or in a line with no words, are fills: one group per bar.
 
+import { lyricOf } from './verses';
 import type { TabLine } from './htab/types';
 
 /** A column above a syllable: a played note, or a rest that's sung or carries a chord. */
@@ -24,7 +25,8 @@ export interface LyWord {
   syllables: LySyllable[];
 }
 
-export function lyricsLine(line: TabLine): LyWord[] {
+/** A line's words in verse `verse` (0 = verse 1). */
+export function lyricsLine(line: TabLine, verse = 0): LyWord[] {
   const words: LyWord[] = [];
   let word: LyWord | null = null;
   let syl: LySyllable | null = null;
@@ -34,19 +36,20 @@ export function lyricsLine(line: TabLine): LyWord[] {
       if (syl && !syl.text) syl = null;
       return;
     }
+    const lyric = ev.kind === 'note' || ev.kind === 'rest' ? lyricOf(ev, verse) : undefined;
     const col: LyNote | null =
       ev.kind === 'note'
         ? ev.tied
           ? ev.chord ? { ei, kind: 'tie', chord: ev.chord } : null
           : { ei, kind: 'note', chord: ev.chord }
-        : ev.lyric !== undefined || ev.sung || ev.chord
+        : lyric !== undefined || ev.sung || ev.chord
           ? { ei, kind: 'rest', chord: ev.chord }
           : null;
     if (!col) return;
     // (A syllable of only "~", a joined space, is no words.)
-    if (ev.lyric !== undefined && ev.lyric.trim() !== '') {
-      const joined = ev.lyric.endsWith('-') && ev.lyric.length > 1;
-      const next: LySyllable = { notes: [col], text: joined ? ev.lyric.slice(0, -1) : ev.lyric, joined };
+    if (lyric !== undefined && lyric.trim() !== '') {
+      const joined = lyric.endsWith('-') && lyric.length > 1;
+      const next: LySyllable = { notes: [col], text: joined ? lyric.slice(0, -1) : lyric, joined };
       if (syl?.joined && word) word.syllables.push(next);
       else {
         word = { syllables: [next] };

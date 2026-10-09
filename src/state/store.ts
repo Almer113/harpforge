@@ -229,6 +229,8 @@ export interface AppState {
   soundMode: 'samples' | 'synth';
   /** What the Tab and Numbers views show besides the notes (note names in Tab = showNoteNames). */
   sheetShow: SheetShow;
+  /** The verse the sheet shows (1, 2…), or 0 for all of them. */
+  showVerse: number;
   /** The harmonicas you own (remembered): import ranks them first. */
   ownedHarps: import('../core/instruments').HarmonicaSpec[];
   /** Plain-text export: open, and its choices (remembered). */
@@ -452,6 +454,7 @@ export const useApp = create<AppState>((set) => ({
   recordGrid: 0.5,
   toast: null,
   sheetView: 'tab',
+  showVerse: 0,
   importDraft: null,
   mic: { status: 'off', level: 0, reading: null },
   micSensitivity: 0.7,

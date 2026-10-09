@@ -1,8 +1,9 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+import { lazy, Suspense, useMemo, type ReactNode } from 'react';
+import { shownVerses, songVerses } from '../core/verses';
 import { Popover } from './Popover';
 import { HolesIcon, NotesIcon } from './icons';
 import type { NoteEvent, RestEvent } from '../core/htab/types';
-import { useApp, type Parsed, type ReadAs, type SheetShow, type SheetView } from '../state/store';
+import { useApp, useParsed, type Parsed, type ReadAs, type SheetShow, type SheetView } from '../state/store';
 import { doPitchClass } from '../core/formats/jianpu';
 import { pitchClassName, keyUsesFlats } from '../core/pitch';
 import { LyricsView } from './LyricsView';
@@ -43,6 +44,7 @@ export function Sheet({
   const show = useApp((s) => s.sheetShow);
   const readAs = useApp((s) => s.readAs);
   const notes = readAs === 'notes';
+  const verses = useShownVerses(parsed);
   // "Do" of the key: the song key's relative major, else the harmonica's key.
   const doName = pitchClassName(doPitchClass(parsed.doc.meta.key ?? parsed.harp.spec.key.replace(/^(Low|High)\s+/i, '')), keyUsesFlats(parsed.doc.meta.key ?? parsed.harp.spec.key));
 
@@ -69,7 +71,7 @@ export function Sheet({
       {/* (The staff is drawn to the width it's given: it's made bigger by giving it less.) */}
       <div className="sheet-body" style={scale !== 1 && view !== 'staff' ? { zoom: scale } : undefined}>
       {view === 'lyrics' ? (
-        <LyricsView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} passage={passage} loopRange={loopRange} marks={marks} marksPrev={marksPrev} readAs={readAs} show={show.lyrics} />
+        <LyricsView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} passage={passage} loopRange={loopRange} marks={marks} marksPrev={marksPrev} readAs={readAs} show={show.lyrics} verses={verses} />
       ) : view === 'simple' ? (
         <SimpleTabView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} passage={passage} loopRange={loopRange} marks={marks} marksPrev={marksPrev} readAs={readAs} />
       ) : view !== 'staff' ? (
@@ -79,6 +81,7 @@ export function Sheet({
           selectedEvent={selectedEvent}
           showNoteNames={view === 'numbers' ? show.numbers.holes : notes ? show.tab.holes : showNoteNames}
           showLyrics={view === 'numbers' ? show.numbers.lyrics : show.tab.lyrics}
+          verses={verses}
           showChords={view === 'numbers' ? show.numbers.chords : show.tab.chords}
           onCardClick={onSelect}
           passage={passage}
@@ -91,7 +94,7 @@ export function Sheet({
         />
       ) : (
         <Suspense fallback={<p className="muted">Loading sheet music…</p>}>
-          <StaffView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onNoteClick={(i) => onSelect(i, eventAt(i))} show={show.staff} staffWidth={Math.round(760 / scale)} />
+          <StaffView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onNoteClick={(i) => onSelect(i, eventAt(i))} show={show.staff} verses={verses} staffWidth={Math.round(760 / scale)} />
         </Suspense>
       )}
       </div>
@@ -152,10 +155,40 @@ export function ShowMenu({ view }: { view: ShowView }) {
 
 type ShowView = 'tab' | 'numbers' | 'staff' | 'lyrics';
 
+/** The verses the sheet shows (0-based), from the Show menu's choice. */
+export function useShownVerses(parsed: Parsed): number[] {
+  const pick = useApp((s) => s.showVerse);
+  const count = useMemo(() => songVerses(parsed.doc), [parsed.doc]);
+  return useMemo(() => shownVerses(count, pick), [count, pick]);
+}
+
+/** "Verses: All / 1 / 2…", for a song with more than one. */
+function VersePicker() {
+  const { doc } = useParsed();
+  const pick = useApp((s) => s.showVerse);
+  const count = songVerses(doc);
+  if (count < 2) return null;
+  return (
+    <label className="show-item verse-pick">
+      <span>
+        <b>Verses</b>
+        <span className="mi-hint">All of them under the notes, or just one</span>
+      </span>
+      <select value={pick >= 1 && pick <= count ? pick : 0} onChange={(e) => useApp.setState({ showVerse: Number(e.target.value) })} aria-label="Verses shown">
+        <option value={0}>All</option>
+        {Array.from({ length: count }, (_, k) => (
+          <option key={k} value={k + 1}>Verse {k + 1}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 /** The Show menu's choices, as checkboxes (in the menu, or in performance mode's view menu). */
 export function ShowItems({ view }: { view: ShowView }) {
   return (
     <>
+      <VersePicker />
       {useShowItems(view).map((it) => (
         <label key={it.label} className="show-item">
           <input type="checkbox" checked={it.on} onChange={(e) => it.toggle(e.target.checked)} />

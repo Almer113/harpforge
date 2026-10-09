@@ -96,18 +96,22 @@ function tailOf(rawLine: string, at: number, text: string, issues: ParseIssue[])
 }
 
 /**
- * The rewritten lines of a chunk: the new tab line with its comment, the lines that were
- * between it and its lyrics, the new lyrics, then the rest (more verses) as written.
+ * The rewritten lines of a chunk: the new tab line with its comment, then the lines that
+ * followed it (blank lines, comments) with each verse's new lyrics where its old lyrics line
+ * was (`hadLyrics`: the old line had any); verses it didn't have before come after them.
  */
-function rewritten(text: string[], tail: string, before: string[], after: string[]): string[] {
+function rewritten(text: string[], tail: string, before: string[], after: string[], hadLyrics: boolean): string[] {
   const [tab, ...lyrics] = text;
   const out: string[] = [];
   if (tab !== undefined) out.push(tail ? `${tab} ${tail}` : tab);
   else if (tail) out.push(tail);
-  out.push(...before, ...lyrics);
-  // Verse 1 is gone but more verses follow: an empty lyrics line keeps them in their places.
-  if (after.some(isLyrics) && !lyrics.length) out.push('w:');
-  return [...out, ...after];
+  // (The first lyrics line sits between `before` and `after`.)
+  let k = 0;
+  for (const raw of hadLyrics ? [...before, 'w:', ...after] : before) {
+    if (!isLyrics(raw)) out.push(raw);
+    else if (k < lyrics.length) out.push(lyrics[k++]);
+  }
+  return [...out, ...lyrics.slice(k)];
 }
 
 /** Whether to spell pitches with flats: as the text already does, else from the key. */
@@ -171,7 +175,7 @@ export function replaceLines(oldText: string, lines: TabLine[], flats?: Spelling
     const chunk = chunkEnd(raw, from);
     const { tail, kept } = tailOf(raw[from], bodyStart + starts[from], oldText, issues);
     report?.kept.push(...kept);
-    replace.set(from, { to: chunk.to, text: rewritten(after, tail, chunk.before, chunk.after) });
+    replace.set(from, { to: chunk.to, text: rewritten(after, tail, chunk.before, chunk.after, chunk.to > from) });
   });
   const out: string[] = [];
   for (let i = 0; i < raw.length; i++) {
@@ -228,9 +232,8 @@ export function spliceBody(oldText: string, song: Song, report?: SpliceReport): 
   const oldSong = fromDoc(oldDoc);
   const oldCanon = new Map<number, string>();
   for (const c of canonicalLines(oldSong, opts)) if (c.whole) oldCanon.set(c.first!, c.text.join('\n'));
-  // Source lines that had music, and those whose music is still in the song.
+  // Source lines that had music.
   const hadMusic = new Set(oldSong.measures.map((m) => m.src));
-  const hasMusic = new Set(song.measures.map((m) => m.src));
 
   const out: string[] = [];
   const used = new Set<number>();
@@ -254,9 +257,8 @@ export function spliceBody(oldText: string, song: Song, report?: SpliceReport): 
         out.push(c.tail);
         tell(c.kept);
       }
-      // Merged into the line before: its extra verses follow that line's lyrics. Deleted: only comments stay.
-      const merged = hasMusic.has(k);
-      out.push(...c.before.filter(isComment), ...c.after.filter((a) => isComment(a) || (merged && isLyrics(a))));
+      // Merged into the line before (whose lyrics now hold its verses) or deleted: only comments stay.
+      out.push(...c.before.filter(isComment), ...c.after.filter(isComment));
     }
   };
 
@@ -283,7 +285,7 @@ export function spliceBody(oldText: string, song: Song, report?: SpliceReport): 
     }
     if (verbatim) out.push(...raw.slice(chunk!.from, chunk!.to + 1));
     else if (chunk && L !== undefined && !emitted.has(L)) {
-      out.push(...rewritten(c.text, chunk.tail, chunk.before, chunk.after));
+      out.push(...rewritten(c.text, chunk.tail, chunk.before, chunk.after, chunk.to > chunk.from));
       tell(chunk.kept);
     } else out.push(...c.text);
     if (L !== undefined) emitted.add(L);

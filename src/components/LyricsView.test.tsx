@@ -74,3 +74,23 @@ it('Show → Holes off leaves the words and chords', async () => {
 it('notes are named for screen readers', () => {
   expect(host.querySelector('.ly-syl:not(.fill) .ly-note')?.getAttribute('aria-label')).toBe('C5');
 });
+
+it('shows each verse as its own numbered line; the Show menu picks one', async () => {
+  await act(async () => s().loadText('---\ntitle: Verses\n---\n4 4 6 6 |\nw: Twin-kle twin-kle\nw: Up a-bove the\n', null));
+  const words = (l: Element) => [...l.querySelectorAll('.ly-text')].map((t) => t.textContent).join('');
+  expect(host.querySelectorAll('.ly-line')).toHaveLength(2);
+  expect([...host.querySelectorAll('.ly-vnum')].map((n) => n.textContent)).toEqual(['1.', '2.']);
+  expect(words(host.querySelectorAll('.ly-line')[1])).toBe('Upabovethe');
+  await act(async () => useApp.setState({ showVerse: 2 }));
+  expect(host.querySelectorAll('.ly-line')).toHaveLength(1);
+  expect(host.querySelector('.ly-vnum')).toBeNull();
+  expect(words(host.querySelector('.ly-line')!)).toBe('Upabovethe');
+  // The Tab view stacks them under the notes, numbered at the line's first words.
+  await act(async () => useApp.setState({ showVerse: 0, sheetView: 'tab' }));
+  const first = host.querySelector('.card .card-lyric.verses');
+  expect([...first!.querySelectorAll('.verse-syl')].map((x) => [x.textContent, x.getAttribute('data-n')])).toEqual([
+    ['Twin-', '1.'],
+    ['Up', '2.'],
+  ]);
+  useApp.setState({ showVerse: 0 });
+});

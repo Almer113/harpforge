@@ -19,9 +19,11 @@ interface Props {
   oneSvgPerLine?: boolean;
   /** The width the staff is laid out to (it's then scaled to fit): less is bigger. */
   staffWidth?: number;
+  /** Which verses' lyrics (0-based; default all). */
+  verses?: number[];
 }
 
-export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, show = { holes: true, lyrics: true, chords: true, header: true }, oneSvgPerLine = false, staffWidth = 760 }: Props) {
+export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, show = { holes: true, lyrics: true, chords: true, header: true }, oneSvgPerLine = false, staffWidth = 760, verses }: Props) {
   const host = useRef<HTMLDivElement>(null);
   // k-th rendered note/rest → its SVG elements and score index.
   const map = useRef<{ elems: SVGElement[][]; scoreIndex: (number | undefined)[]; abcElems: unknown[] }>({ elems: [], scoreIndex: [], abcElems: [] });
@@ -31,9 +33,10 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
   });
 
   const { holes, lyrics, chords, header } = show;
+  const versesKey = verses?.join(',');
   const abc = useMemo(
-    () => writeAbc(parsed.doc, parsed.harp, { tabLine: holes, lyrics, chords, header }),
-    [parsed, holes, lyrics, chords, header],
+    () => writeAbc(parsed.doc, parsed.harp, { tabLine: holes, lyrics, chords, header, verses: versesKey === undefined ? undefined : versesKey.split(',').map(Number) }),
+    [parsed, holes, lyrics, chords, header, versesKey],
   );
 
   useEffect(() => {

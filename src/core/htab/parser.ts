@@ -3,6 +3,7 @@
 // The parser is forgiving: it never throws, collects issues with source spans,
 // and accepts common internet tab spellings (+4, 4D, -3b, <5 ...).
 
+import { setLyricOf } from '../verses';
 import { parseNoteName } from '../pitch';
 import type { Breath, HoleSound, Sound } from '../types';
 import {
@@ -347,16 +348,18 @@ export function splitLyrics(text: string): string[] {
   const out: string[] = [];
   for (const word of text.trim().split(/\s+/)) {
     if (!word) continue;
-    // "~" joins words into one syllable and "\-" is a literal hyphen, as in ABC.
+    // "~" joins words into one syllable and "\-" is a literal hyphen, as in ABC. One ending a
+    // syllable is kept as the hyphen character "‐" (U+2010), so it isn't read as joined.
     // (U+0001 stands in for "\-" while splitting: it never occurs in typed text.)
     const parts = word.replace(/\\-/g, '\u0001').split(/(?<=-)/);
     // oxlint-disable-next-line no-control-regex
-    for (const p of parts) if (p && p !== '-') out.push(p.replace(/~/g, ' ').replace(/\u0001/g, '-'));
+    for (const p of parts) if (p && p !== '-') out.push(p.replace(/~/g, ' ').replace(/(?<=.)\u0001$/, '‐').replace(/\u0001/g, '-'));
   }
   return out;
 }
 
-function attachLyrics(line: TabLine, text: string) {
+/** Puts a lyrics line's syllables on a tab line's notes, as verse `verse` (0 = verse 1). */
+function attachLyrics(line: TabLine, text: string, verse: number) {
   const syllables = splitLyrics(text);
   let k = 0;
   for (const ev of line.events) {
@@ -364,7 +367,7 @@ function attachLyrics(line: TabLine, text: string) {
     if (!((ev.kind === 'note' && !ev.tied) || (ev.kind === 'rest' && ev.sung))) continue;
     if (k >= syllables.length) break;
     const syl = syllables[k++];
-    if (syl !== '*' && syl !== '_') ev.lyric = syl;
+    if (syl !== '*' && syl !== '_') setLyricOf(ev, verse, syl);
   }
 }
 
@@ -424,7 +427,7 @@ export function parseHtab(text: string): ParseResult {
   const lines: TabLine[] = [];
   let pendingSection: string | undefined;
   let lastLine: TabLine | undefined;
-  // Lyrics lines after the last tab line: the first is its lyrics, more are extra verses (kept, not shown).
+  // Lyrics lines after the last tab line: verse 1, then verses 2, 3…
   let verses = 0;
 
   let offset = bodyStart;
@@ -442,9 +445,7 @@ export function parseHtab(text: string): ParseResult {
       continue;
     }
     if (/^w:/i.test(trimmed)) {
-      if (lastLine && verses++ === 0) attachLyrics(lastLine, trimmed.slice(2));
-      else if (lastLine)
-        issues.push({ message: `Verse ${verses} is kept as written; only the first verse is shown and played`, span: { start: lineStart, end: lineStart + line.length }, severity: 'info' });
+      if (lastLine) attachLyrics(lastLine, trimmed.slice(2), verses++);
       else issues.push({ message: 'Lyrics line "w:" must follow a tab line', span: { start: lineStart, end: lineStart + line.length }, severity: 'warning' });
       continue;
     }
