@@ -60,7 +60,7 @@ export function retabSelection(shift: number) {
 }
 
 /** Writes a song back into the text as one undo step ('typing' groups keystrokes). */
-export function commitSong(song: Song, kind: 'edit' | 'typing' = 'edit') {
+export function commitSong(song: Song, kind: 'edit' | 'typing' | `typing:${string}` = 'edit') {
   const report: SpliceReport = { kept: [] };
   useApp.getState().setText(songText(song, report), { kind });
   const kept = keptMessage(report);

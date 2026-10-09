@@ -63,6 +63,8 @@ import { Inspector } from './Inspector';
 import { isTyping, keysTaken, overlayOpen } from '../../live/focus';
 import { copyText, pasteText } from '../../core/edit/clipboard';
 import { openShortcuts } from '../Shortcuts';
+import { LyricInput, LyricsButton, startLyrics, stopLyrics, VerseSwitch } from './LyricEntry';
+import { lyricOf } from '../../core/verses';
 
 // ---- Helpers shared with the inspector ------------------------------------------------
 
@@ -314,6 +316,12 @@ export function VisualEditor() {
       const sel = v.selection;
       const ctrl = e.ctrlKey || e.metaKey;
 
+      // Ctrl+L: lyrics mode, typing the words onto the notes.
+      if (ctrl && e.code === 'KeyL' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        startLyrics();
+        return;
+      }
       if (ctrl && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         const all = allPositions(s);
@@ -560,16 +568,18 @@ function Toolbar({ song }: { song: Song }) {
         <button className={`pal-btn mod ${on(shown.dotted)}`} aria-pressed={shown.dotted} onClick={() => setDuration(shown.base ?? ve.dur, !shown.dotted, false)} title={`Dotted: 1½ × as long (N or .)${what}`}>·</button>
         <button className={`pal-btn mod ${on(shown.triplet)}`} aria-pressed={shown.triplet} onClick={() => setDuration(shown.base ?? ve.dur, false, !shown.triplet)} title={`Triplet: three in the time of two (M)${what}`}>3</button>
       </div>
-      <div className="pal" role="group" aria-label="Rest and tie">
+      <div className="pal" role="group" aria-label="Rest, tie and lyrics">
         <button className="pal-btn" onClick={insertRest} title="Rest at the caret (/)" aria-label="Rest">𝄽</button>
         <button className={`pal-btn ${selTied ? 'on' : ''}`} disabled={sel.length !== 1} onClick={toggleTie} aria-pressed={selTied} aria-label="Tie" title="Tie: the selected note continues the note before it, across bar lines too (L)">
           ⁀
         </button>
+        <LyricsButton />
       </div>
       <span className="tb-sep" />
       <button className={`btn small step-btn ${ve.step ? 'on' : ''}`} aria-pressed={ve.step} aria-label="Step entry" onClick={() => setVe({ step: !ve.step, justEntered: undefined })} title="Step entry: every hole you play (keyboard, mouse, MIDI, mic) is written at the caret">
         <span className="rec-dot" /> <span className="step-label">Step</span>
       </button>
+
       <div className="seg icons" role="radiogroup" aria-label="Writing over or in between">
         <button role="radio" aria-checked={!ve.insert} aria-label="Overwrite" className={ve.insert ? '' : 'on'} onClick={() => setVe({ insert: false })} title="Overwrite: new notes replace what’s there (Ins switches)">
           {OverwriteIcon}
@@ -687,10 +697,14 @@ function Dock() {
 /** Where the caret is, what mode the editor is in, and a hint for what to do next. */
 function StatusLine() {
   const ve = useApp((s) => s.ve);
+  const parsed = useParsed();
+  const song = useMemo(() => fromDoc(parsed.doc), [parsed]);
   const setVe = useApp((s) => s.setVe);
   const sel = ve.selection;
   const at = sel[0] ?? ve.caret;
-  const hint = ve.step
+  const hint = ve.lyricAt
+    ? 'Lyrics: type a syllable · Space next note · - joins the next syllable · _ holds over the next note · Shift+Space back · Enter done'
+    : ve.step
     ? 'Play the harmonica (keys 1–0, Q–P) to write at the caret · hold keys together for a chord · Backspace takes back the last note'
     : sel.length === 1
       ? '↑ ↓ change the note · play a hole to replace it · drag its right edge to change the length'
@@ -705,6 +719,7 @@ function StatusLine() {
       {sel.length > 0 && <span><b>{sel.length}</b> selected</span>}
       <span className={ve.step ? 'live' : ''}>{ve.step ? '● Step entry' : 'Step entry off'}</span>
       <span>{ve.insert ? 'Insert' : 'Overwrite'}</span>
+      <VerseSwitch song={song} />
       <span>
         Next: <b>{durationLabel(toolDuration(ve)).toLowerCase()}</b>
       </span>
@@ -803,6 +818,8 @@ function Score({ song, flats, showSecond, asNotes }: { song: Song; flats: Spelli
   const caret = useApp((s) => s.ve.caret);
   const justEntered = useApp((s) => s.ve.justEntered);
   const current = useApp((s) => s.ve.measure);
+  const verse = useApp((s) => s.ve.verse);
+  const lyricAt = useApp((s) => s.ve.lyricAt);
   const clickGridNow = useApp((s) => clickGrid(s.ve));
   const activeEvents = useApp((s) => s.activeEvents);
   const loopRange = useApp((s) => (s.loop ? s.loopRange : null));
@@ -920,6 +937,13 @@ function Score({ song, flats, showSecond, asNotes }: { song: Song; flats: Spelli
         if (e.button !== 0) return;
         e.stopPropagation();
         e.preventDefault();
+        // A click under a note (its lyric) types its syllable.
+        const plain = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+        if (plain && (e.target as HTMLElement).closest('.ve-lyric')) {
+          startLyrics(pos);
+          return;
+        }
+        if (useApp.getState().ve.lyricAt) stopLyrics();
         const { song, zoom } = live.current;
         const resize = (e.target as HTMLElement).classList.contains('ve-resize');
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -962,6 +986,7 @@ function Score({ song, flats, showSecond, asNotes }: { song: Song; flats: Spelli
       },
       laneDown: (e, m) => {
         if (e.button !== 0 || (e.target as HTMLElement).closest('.ve-item')) return;
+        if (useApp.getState().ve.lyricAt) stopLyrics();
         const { song, zoom } = live.current;
         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
         const g = clickGrid(useApp.getState().ve);
@@ -1079,6 +1104,8 @@ function Score({ song, flats, showSecond, asNotes }: { song: Song; flats: Spelli
             ghosts={ghosts.get(mi)}
             resizes={resizes.get(mi)}
             fading={fading?.m === mi ? +fading.start.toFixed(4) : null}
+            verse={verse}
+            typing={lyricAt?.m === mi ? +lyricAt.start.toFixed(4) : null}
             handlers={handlers}
           />
         ))}
@@ -1124,6 +1151,9 @@ interface MeasureProps {
   resizes?: Piece[];
   /** Start of the note being dragged (shown faded). */
   fading: number | null;
+  /** The verse its lyrics show (0 = verse 1), and the note whose syllable is being typed. */
+  verse: number;
+  typing: number | null;
   handlers: MeasureHandlers;
 }
 
@@ -1186,11 +1216,13 @@ const MeasureView = memo(function MeasureView(p: MeasureProps) {
             const pos = { m: mi, start: it.start };
             // Chords and lyrics run on past a narrow card, up to the next chord or lyric.
             const laneEnd = Math.max(cap, len);
-            const nextWith = (key: 'chord' | 'lyric') => meas.items.reduce((best, o) => (o.start > it.start + EPS && o[key] !== undefined && o.start < best ? o.start : best), laneEnd);
+            const has = (o: Item, key: 'chord' | 'lyric') => (key === 'chord' ? o.chord : lyricOf(o, p.verse)) !== undefined;
+            const nextWith = (key: 'chord' | 'lyric') => meas.items.reduce((best, o) => (o.start > it.start + EPS && has(o, key) && o.start < best ? o.start : best), laneEnd);
             const w = cardW(it.dur);
             const lod = it.dur <= EPS ? '' : detailLevel(w, glyphEms(it.sounds, it.sounds.map((s) => (s.type === 'pitch' ? s.midi : soundPitch(harp, s))), asNotes, flats), it.sounds.length > 1);
             const lyricRoom = (nextWith('lyric') - it.start) * zoom - 6;
-            const lyric = it.lyric ? fitLyric(it.lyric, lyricRoom) : undefined;
+            const words = lyricOf(it, p.verse);
+            const lyric = words ? fitLyric(words, lyricRoom) : undefined;
             const isSelected = selected.has(at(it.start));
             const just = !isSelected && p.just === at(it.start);
             const isPlaying = playing.has(at(it.start));
@@ -1222,9 +1254,10 @@ const MeasureView = memo(function MeasureView(p: MeasureProps) {
                     {asNotes ? it.sounds.map((s) => (s.type === 'hole' ? holeSoundText(s) : '–')).join(' ') : midis.map((x) => (x === null ? '?' : midiToName(x, flats))).join(' ')}
                   </span>
                 )}
-                <span className="ve-lyric" style={{ maxWidth: lyricRoom }} title={lyric?.cut && !lod ? it.lyric : undefined}>
+                <span className="ve-lyric" style={{ maxWidth: lyricRoom }} title={lyric?.cut && !lod ? words : undefined}>
                   {lyric?.shown ?? ''}
                 </span>
+                {p.typing === at(it.start) && <LyricInput pos={pos} verse={p.verse} />}
                 {it.dur > EPS && <span className="ve-resize" title="Drag to change the length" />}
               </div>
             );

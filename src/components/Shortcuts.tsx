@@ -48,6 +48,8 @@ const COLUMNS: Group[][] = [
         ['M', 'Triplet'],
         ['L', 'Tie to the previous note'],
         ['/', 'Rest at the caret'],
+        ['Ctrl+L', 'Lyrics: type the words onto the notes (or click under a note)'],
+        ['Space / - / _', 'In lyrics: next note · join the next syllable · hold over the next note'],
         ['↑ ↓', 'Note up / down (Shift: a semitone)'],
         ['Del', 'Delete the selection'],
         ['Backspace', 'Step entry: take back the last note'],

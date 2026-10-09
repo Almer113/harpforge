@@ -1,5 +1,7 @@
 // Inspector for the visual editor: edits the selected note(s) and the current measure.
 
+import { setLyric } from '../../core/edit/lyrics';
+import { lyricOf } from '../../core/verses';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   advance,
@@ -172,6 +174,7 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
   };
 
   const insert = useApp((s) => s.ve.insert);
+  const verse = useApp((s) => s.ve.verse);
 
   return (
     <section className="insp-card">
@@ -294,8 +297,8 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
         </label>
         {!item.tied ? (
           <label className="field">
-            <span>Lyric</span>
-            <LiveInput value={item.lyric ?? ''} placeholder="syl-" onCommit={(v) => commitSong(updateItem(song, pos, { lyric: v || undefined }), 'typing')} />
+            <span>Lyric{verse ? ` (verse ${verse + 1})` : ''}</span>
+            <LiveInput value={lyricOf(item, verse) ?? ''} placeholder="syl-" onCommit={(v) => commitSong(setLyric(song, pos, verse, v || undefined), 'typing')} />
           </label>
         ) : (
           <div className="field">

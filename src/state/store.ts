@@ -93,6 +93,10 @@ export interface VisualState {
   panel?: 'note' | 'measure';
   /** The note step entry wrote last (outlined; it isn't selected, so length keys set the next note). */
   justEntered?: import('../core/edit/model').Pos;
+  /** The verse the lyrics under the notes show and edit (0 = verse 1). */
+  verse: number;
+  /** Lyrics mode: the note whose syllable is being typed. */
+  lyricAt?: import('../core/edit/model').Pos;
 }
 
 /** A file or pasted text waiting in the import dialog. */
@@ -496,6 +500,7 @@ export const useApp = create<AppState>((set) => ({
     step: false,
     insert: false,
     lastSounds: [{ type: 'hole', hole: 4, breath: 'blow', bend: 0, over: false, slide: false }],
+    verse: 0,
   },
   // A new selection takes the inspector back to following it (unless the patch picks a tab).
   setVe: (patch) => set((s) => ({ ve: { ...s.ve, ...('selection' in patch && !('panel' in patch) ? { panel: undefined } : {}), ...patch } })),
@@ -535,7 +540,7 @@ export const useApp = create<AppState>((set) => ({
   loadSeq: 0,
   loadText: (text, docId = null, saved = false) =>
     // A different tab: the editor's caret and selection start over (they belonged to the old one).
-    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0 }, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, passage: null, loopRange: null, loop: s.loopRange ? false : s.loop, training: null, alongMarks: {}, alongPrev: {}, alongPasses: [], activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
+    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0, verse: 0, lyricAt: undefined }, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, passage: null, loopRange: null, loop: s.loopRange ? false : s.loop, training: null, alongMarks: {}, alongPrev: {}, alongPasses: [], activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
   markSaved: (docId, text) => set((s) => ({ docId, savedText: text ?? s.text })),
   notify: (message) => set({ toast: { message, id: Date.now() } }),
 }));
