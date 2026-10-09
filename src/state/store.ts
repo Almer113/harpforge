@@ -171,6 +171,18 @@ export interface AppState {
   trainer: TrainerSettings;
   /** The tempo trainer while it runs: passes played, and whether it's holding the speed. */
   training: { pass: number; holding: boolean } | null;
+  /** The trainer speeds up only after a pass played cleanly (when playing along). Remembered. */
+  trainerCleanOnly: boolean;
+  /** Play along, checked: what you play during playback is matched to the song's notes. */
+  along: boolean;
+  /** Hear the tune while playing along (off: only the clicks, so the microphone hears just you). Remembered. */
+  alongMelody: boolean;
+  /** The microphone's delay in ms, from a calibration (null: not calibrated). Remembered. */
+  micLatency: number | null;
+  /** This pass's marks, by score index. */
+  alongMarks: Record<number, import('../core/playAlong').Mark>;
+  /** Passes played along since it was turned on, newest last. */
+  alongPasses: import('../core/playAlong').PassResult[];
   /** Playback speed multiplier (practice slow-down). */
   speed: number;
   /** Live-held sounds by input id (mouse, key codes). */
@@ -292,6 +304,9 @@ function loadPrefs(): {
   countIn?: boolean;
   countEachLoop?: boolean;
   trainer?: Partial<TrainerSettings>;
+  trainerCleanOnly?: boolean;
+  alongMelody?: boolean;
+  micLatency?: number;
 } {
   let raw: unknown;
   try {
@@ -317,6 +332,9 @@ function loadPrefs(): {
     countIn: bool(p.countIn),
     countEachLoop: bool(p.countEachLoop),
     trainer: trainerFrom(p.trainer),
+    trainerCleanOnly: bool(p.trainerCleanOnly),
+    alongMelody: bool(p.alongMelody),
+    micLatency: typeof p.micLatency === 'number' && p.micLatency >= 0 && p.micLatency <= 600 ? Math.round(p.micLatency) : undefined,
     readAs: p.readAs === 'notes' ? 'notes' : p.readAs === 'holes' ? 'holes' : undefined,
     sheetShow: { tab: like(sheet.tab, SHOW_ALL.tab), numbers: like(sheet.numbers, SHOW_ALL.numbers), staff: like(sheet.staff, SHOW_ALL.staff) },
     printPrefs: print as Partial<import('../pages/PrintPage').PrintPrefs>,
@@ -373,6 +391,12 @@ export const useApp = create<AppState>((set) => ({
   countEachLoop: prefs.countEachLoop ?? false,
   trainer: { ...DEFAULT_TRAINER, ...prefs.trainer },
   training: null,
+  trainerCleanOnly: prefs.trainerCleanOnly ?? false,
+  along: false,
+  alongMelody: prefs.alongMelody ?? true,
+  micLatency: prefs.micLatency ?? null,
+  alongMarks: {},
+  alongPasses: [],
   speed: 1,
   held: {},
   keyOffset: 0,
@@ -455,16 +479,16 @@ export const useApp = create<AppState>((set) => ({
   loadSeq: 0,
   loadText: (text, docId = null, saved = false) =>
     // A different tab: the editor's caret and selection start over (they belonged to the old one).
-    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0 }, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, passage: null, loopRange: null, loop: s.loopRange ? false : s.loop, training: null, activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
+    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0 }, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, passage: null, loopRange: null, loop: s.loopRange ? false : s.loop, training: null, alongMarks: {}, alongPasses: [], activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
   markSaved: (docId, text) => set((s) => ({ docId, savedText: text ?? s.text })),
   notify: (message) => set({ toast: { message, id: Date.now() } }),
 }));
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.ve.zoom === prev.ve.zoom && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps && s.countIn === prev.countIn && s.countEachLoop === prev.countEachLoop && s.trainer === prev.trainer) return;
+  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.ve.zoom === prev.ve.zoom && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps && s.countIn === prev.countIn && s.countEachLoop === prev.countEachLoop && s.trainer === prev.trainer && s.trainerCleanOnly === prev.trainerCleanOnly && s.alongMelody === prev.alongMelody && s.micLatency === prev.micLatency) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, zoom: s.ve.zoom, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps, countIn: s.countIn, countEachLoop: s.countEachLoop, trainer: s.trainer }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, zoom: s.ve.zoom, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps, countIn: s.countIn, countEachLoop: s.countEachLoop, trainer: s.trainer, trainerCleanOnly: s.trainerCleanOnly, alongMelody: s.alongMelody, micLatency: s.micLatency ?? undefined }));
   } catch {
     /* storage unavailable */
   }

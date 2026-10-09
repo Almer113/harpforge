@@ -272,6 +272,7 @@ function TrainerButton() {
   const training = useApp((s) => s.training);
   const speed = useApp((s) => s.speed);
   const recording = useApp((s) => s.recording);
+  const cleanOnly = useApp((s) => s.trainerCleanOnly);
   const set = (patch: Partial<TrainerSettings>) => useApp.setState((s) => ({ trainer: { ...s.trainer, ...patch } }));
   const choice = (key: keyof TrainerSettings, label: string, show: (x: number) => string) => (
     <label className="pb-row">
@@ -300,6 +301,10 @@ function TrainerButton() {
             {choice('step', 'Speed up by', (x) => `+${Math.round(x * 100)}%`)}
             {choice('every', 'Every', (x) => (x === 1 ? 'pass' : `${x} passes`))}
             {choice('goal', 'Up to', pct)}
+            <label className="check" title="Playing along (below the harmonica), a pass with a missed note doesn't count">
+              <input type="checkbox" checked={cleanOnly} onChange={(e) => useApp.setState({ trainerCleanOnly: e.target.checked })} />
+              Only after a clean pass (playing along)
+            </label>
             <div className="pb-row trainer-actions">
               {training ? (
                 <button className="btn small" onClick={() => { stopTrainer(); close(); }}>Stop the trainer</button>

@@ -151,6 +151,11 @@ export function setMetronome(beatsPerBar: number | null) {
   impl?.setMetronome(beatsPerBar);
 }
 
+/** Where in the song (score beats) playback is right now, or null when it isn't playing. */
+export function scoreBeatNow(): number | null {
+  return impl?.scoreBeatNow() ?? null;
+}
+
 /** Transport position in beats right now. */
 export function transportBeats(): number {
   return impl?.transportBeats() ?? 0;

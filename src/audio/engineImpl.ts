@@ -96,6 +96,8 @@ export interface PlaybackOptions {
   beatsPerBar?: number;
   /** Called as each pass of a loop ends and the next begins (in time with what's heard). */
   onLoop?: () => void;
+  /** Plays without the melody (its notes still light up): playing along with the microphone. */
+  muted?: boolean;
   onEvent?: (index: number, on: boolean) => void;
   onEnd?: () => void;
 }
@@ -204,7 +206,7 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
         // The note sounds through its ties; ties themselves only move the highlight.
         const soundDur = Tone.Time(beatTicks(Math.min(head.end, until) - from)).toSeconds();
         const soundGap = Math.min(0.06, soundDur * 0.12);
-        if (sounds) ev.midis.forEach((m, k) => {
+        if (sounds && !opts.muted) ev.midis.forEach((m, k) => {
           if (m === null) return;
           const s = ev.sounds[k];
           const glide = s.type === 'hole' && s.bend > 0 ? m + s.bend : undefined;
@@ -284,6 +286,12 @@ export function stopPlayback() {
 
 export function setTempo(bpm: number) {
   transport().bpm.value = bpm;
+}
+
+/** Where in the song (score beats) playback is right now, or null when it isn't playing. */
+export function scoreBeatNow(): number | null {
+  if (!current || transport().state !== 'started') return null;
+  return transportBeats() - current.offset;
 }
 
 /** Transport position in beats right now (what's being heard, not the scheduling lookahead). */

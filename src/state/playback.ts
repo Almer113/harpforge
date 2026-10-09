@@ -5,7 +5,22 @@ import { beatsPerBar } from '../core/htab/types';
 import { soundPitch } from '../core/instruments';
 import { barStarts, eventPassage, joinPassages, type Passage } from '../core/passage';
 import { findItem, fromDoc, realBeat } from '../core/edit/model';
+import type { PassResult } from '../core/playAlong';
 import { getParsed, useApp } from './store';
+
+/**
+ * Play along (playAlong.ts) checks the notes while the song plays. It plugs itself in here,
+ * so playback doesn't load the live inputs it listens to.
+ */
+interface AlongHooks {
+  startChecking(range: Passage): void;
+  stopChecking(): void;
+  passEnded(): PassResult | null;
+}
+let along: AlongHooks | null = null;
+export function setAlongHooks(hooks: AlongHooks) {
+  along = hooks;
+}
 
 function onEvent(index: number, on: boolean) {
   useApp.setState((st) => ({
@@ -47,6 +62,9 @@ export async function play(opts: { count?: boolean } = {}) {
   const tempo = p.doc.meta.tempo * s.speed;
   // A loop that counts in before each pass counts in before the first one too.
   const counting = (s.countIn || (s.loop && s.countEachLoop)) && opts.count !== false;
+  // Playing along without the tune: the clicks keep time instead.
+  const muted = s.along && !s.alongMelody;
+  if (s.along) along?.startChecking(range ?? { start: sel?.start ?? 0, end: p.score.totalBeats });
   engine.playScore(p.score, {
     tempo,
     startBeat: sel?.start ?? 0,
@@ -57,9 +75,14 @@ export async function play(opts: { count?: boolean } = {}) {
     barStarts: barStarts(p.score),
     beatsPerBar: bpb,
     onLoop: loopPassed,
-    metronomeBeatsPerBar: s.metronome ? bpb : undefined,
+    muted,
+    metronomeBeatsPerBar: s.metronome || muted ? bpb : undefined,
     onEvent,
-    onEnd: () => useApp.setState({ play: 'stopped', activeEvents: [] }),
+    onEnd: () => {
+      if (useApp.getState().along) along?.passEnded();
+      along?.stopChecking();
+      useApp.setState({ play: 'stopped', activeEvents: [] });
+    },
   });
   useApp.setState({ play: 'playing', activeEvents: [] });
 }
@@ -77,6 +100,7 @@ export function onBeforeStop(fn: () => void) {
 
 export function stop() {
   beforeStop?.();
+  along?.stopChecking();
   generation++;
   engine.stopPlayback();
   useApp.setState({ play: 'stopped', activeEvents: [] });
@@ -273,12 +297,15 @@ export function holdTrainer(holding: boolean) {
 
 /** A pass of the loop ended: count it, and speed up when it's time. */
 export function loopPassed() {
+  const result = useApp.getState().along ? (along?.passEnded() ?? null) : null;
   const s = useApp.getState();
   const t = s.training;
   if (!t) return;
   const pass = t.pass + 1;
   const { step, every, goal } = s.trainer;
-  const due = !t.holding && pass % every === 0 && s.speed < goal - 1e-9;
+  // Playing along, the trainer can wait for a pass played cleanly.
+  const clean = !s.along || !s.trainerCleanOnly || !!result?.clean;
+  const due = clean && !t.holding && pass % every === 0 && s.speed < goal - 1e-9;
   useApp.setState({ training: { ...t, pass }, ...(due ? { speed: roundSpeed(Math.min(goal, s.speed + step)) } : {}) });
 }
 

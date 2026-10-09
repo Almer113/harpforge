@@ -5,6 +5,7 @@ import type { BarStyle, NoteEvent, RestEvent, TabEvent } from '../core/htab/type
 import { midiToName, keySpelling, type Spelling } from '../core/pitch';
 import { eventKey } from '../core/score';
 import { barNumberAt, barPassage, barStarts, eventsIn, type Passage } from '../core/passage';
+import type { Mark } from '../core/playAlong';
 import type { HoleSound, Sound } from '../core/types';
 import type { Parsed, ReadAs } from '../state/store';
 import { doPitchClass, midiToDegree } from '../core/formats/jianpu';
@@ -27,6 +28,8 @@ interface Props {
   /** The chosen passage and the looped one, shown as bands behind their cards. */
   passage?: Passage | null;
   loopRange?: Passage | null;
+  /** Play-along marks by score index (in time, early, late, missed). */
+  marks?: Record<number, Mark>;
   /** Clicking a bar number (shown only with this): that bar, or with Shift up to it. */
   onBarClick?: (bar: Passage, extend: boolean) => void;
   /** Follow the play-head by scrolling. */
@@ -75,7 +78,7 @@ export function useStableClick<A extends unknown[]>(fn: ((...args: A) => void) |
   return useCallback((...args: A) => latest.current?.(...args), []);
 }
 
-export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, showLyrics = true, showChords = true, onCardClick, passage, loopRange, onBarClick, follow = true, notation = 'holes', readAs = 'holes' }: Props) {
+export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, showLyrics = true, showChords = true, onCardClick, passage, loopRange, marks, onBarClick, follow = true, notation = 'holes', readAs = 'holes' }: Props) {
   const { doc, score, harp } = parsed;
   const flats = keySpelling(doc.meta.key ?? harp.spec.key);
   const numbers = notation === 'numbers';
@@ -110,6 +113,7 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, sh
   const activeByLine = indexesByLine(score, activeEvents);
   const passageByLine = indexesByLine(score, passage ? eventsIn(score, passage) : []);
   const loopByLine = indexesByLine(score, loopRange ? eventsIn(score, loopRange) : []);
+  const marksByLine = marksPerLine(score, marks);
   const selectedLine = selectedEvent !== null ? score.events[selectedEvent]?.line : undefined;
   return (
     <div className="tabview" ref={root}>
@@ -121,6 +125,7 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, sh
           active={activeByLine.get(li) ?? ''}
           inPassage={passageByLine.get(li) ?? ''}
           inLoop={loopByLine.get(li) ?? ''}
+          marks={marksByLine.get(li) ?? ''}
           selected={selectedLine === li ? selectedEvent : null}
           showNoteNames={showNoteNames}
           showLyrics={showLyrics}
@@ -145,6 +150,8 @@ interface TabLineProps {
   /** Score indexes in the chosen passage and in the looped one ("3,4"). */
   inPassage: string;
   inLoop: string;
+  /** Play-along marks in this line ("3:hit,4:missed"). */
+  marks: string;
   /** The selected score index, if it's in this line. */
   selected: number | null;
   showNoteNames: boolean;
@@ -160,13 +167,28 @@ interface TabLineProps {
 
 const indexSet = (list: string) => new Set(list ? list.split(',').map(Number) : []);
 
+/** Play-along marks per line ("3:hit,4:missed"), so each line only hears about its own notes. */
+export function marksPerLine(score: Parsed['score'], marks: Record<number, Mark> | undefined): Map<number, string> {
+  const out = new Map<number, string[]>();
+  for (const [i, m] of Object.entries(marks ?? {})) {
+    const line = score.events[Number(i)]?.line;
+    if (line !== undefined) out.set(line, [...(out.get(line) ?? []), `${i}:${m}`]);
+  }
+  return new Map([...out].map(([line, list]) => [line, list.join(',')]));
+}
+
+export function markMap(list: string): Map<number, Mark> {
+  return new Map(list ? list.split(',').map((p) => { const [i, m] = p.split(':'); return [Number(i), m as Mark]; }) : []);
+}
+
 /** One line of the sheet (redrawn only when something in it changes). */
-const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, selected, showNoteNames, showLyrics, showChords, numbers, asNotes, flats, doPc, onCardClick, onBarClick }: TabLineProps) {
+const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, marks, selected, showNoteNames, showLyrics, showChords, numbers, asNotes, flats, doPc, onCardClick, onBarClick }: TabLineProps) {
   const { doc, score, indexByKey, harp } = parsed;
   const line = doc.lines[li];
   const activeSet = indexSet(active);
   const passageSet = indexSet(inPassage);
   const loopSet = indexSet(inLoop);
+  const markOf = markMap(marks);
   const starts = onBarClick ? barStarts(score) : [];
   return (
     <div className="tab-line-wrap">
@@ -197,6 +219,7 @@ const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, s
                     active={idx !== undefined && activeSet.has(idx)}
                     inPassage={idx !== undefined && passageSet.has(idx)}
                     inLoop={idx !== undefined && loopSet.has(idx)}
+                    mark={idx !== undefined ? markOf.get(idx) : undefined}
                     selected={idx !== undefined && idx === selected}
                     showNoteNames={showNoteNames}
                     showLyrics={showLyrics}
@@ -228,6 +251,7 @@ const TabCard = memo(function TabCard({
   active,
   inPassage,
   inLoop,
+  mark,
   selected,
   showNoteNames,
   showLyrics,
@@ -245,6 +269,7 @@ const TabCard = memo(function TabCard({
   active: boolean;
   inPassage: boolean;
   inLoop: boolean;
+  mark: Mark | undefined;
   selected: boolean;
   showNoteNames: boolean;
   showLyrics: boolean;
@@ -264,7 +289,7 @@ const TabCard = memo(function TabCard({
   return (
     <button
       data-index={idx}
-      className={`card ${breath} ${ev.kind === 'note' && ev.tied ? 'tied' : ''} ${active ? 'active' : ''} ${selected ? 'selected' : ''} ${inPassage ? 'in-passage' : ''} ${inLoop ? 'in-loop' : ''} ${bad ? 'bad' : ''} ${ev.beats < 1 ? 'short' : ''}`}
+      className={`card ${breath} ${ev.kind === 'note' && ev.tied ? 'tied' : ''} ${active ? 'active' : ''} ${selected ? 'selected' : ''} ${inPassage ? 'in-passage' : ''} ${inLoop ? 'in-loop' : ''} ${mark ? `mark-${mark}` : ''} ${bad ? 'bad' : ''} ${ev.beats < 1 ? 'short' : ''}`}
       style={{ minWidth: width }}
       onClick={(e) => idx !== undefined && onCardClick(idx, ev, e.shiftKey)}
       title={sev && !sev.rest ? sev.midis.map((x) => (x === null ? 'not playable' : midiToName(x, flats))).join(' + ') : 'rest'}

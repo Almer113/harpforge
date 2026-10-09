@@ -27,7 +27,8 @@ export function startPractice() {
     s.notify('Nothing to practise yet — this tab has no playable notes.');
     return;
   }
-  useApp.setState({ practice: { index: first, played: 0, mistakes: 0, startedAt: Date.now(), wrongAt: 0 }, selectedEvent: first });
+  // (Practice and play along take turns.)
+  useApp.setState({ practice: { index: first, played: 0, mistakes: 0, startedAt: Date.now(), wrongAt: 0 }, selectedEvent: first, along: false, alongMarks: {} });
 }
 
 export function stopPractice() {

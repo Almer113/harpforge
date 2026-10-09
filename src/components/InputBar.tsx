@@ -7,6 +7,7 @@ import { midiToName, keySpelling } from '../core/pitch';
 import { startMic, startMidi, stopMic, stopMidi } from '../live/inputs';
 import { startRecording, stopRecording } from '../live/recorder';
 import { hint, practiceTotal, startPractice, stopPractice } from '../state/practice';
+import { calibrateMic, DEFAULT_MIC_LATENCY, describePass, setAlong } from '../state/playAlong';
 import { useApp, useParsed } from '../state/store';
 
 const MicIcon = (
@@ -23,6 +24,12 @@ const KeysIcon = (
 );
 const RecIcon = <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="7" fill="currentColor" /></svg>;
 const StopIcon = <svg viewBox="0 0 24 24" width="14" height="14"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" /></svg>;
+const AlongIcon = (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 17l4-4 3 3 7-8" />
+    <path d="M14 8h4v4" />
+  </svg>
+);
 const TargetIcon = (
   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="12" cy="12" r="8" />
@@ -34,6 +41,7 @@ export function InputBar() {
   return (
     <div className="inputbar">
       <PracticeControl />
+      <AlongControl />
       <MicControl />
       <MidiControl />
       <RecordControl />
@@ -156,6 +164,60 @@ export function MidiControl() {
       {miss && <span className="input-error">{miss}</span>}
       {midi.status === 'unsupported' && <span className="input-error">This browser has no MIDI support (try Chrome or Edge).</span>}
       {midi.status === 'error' && <span className="input-error">MIDI access was blocked.</span>}
+    </div>
+  );
+}
+
+/**
+ * Play along, checked: play with the song while it plays; each note lights up green (in
+ * time), amber (early or late) or red (missed). Shows how the last pass went.
+ */
+function AlongControl() {
+  const along = useApp((s) => s.along);
+  const melody = useApp((s) => s.alongMelody);
+  const passes = useApp((s) => s.alongPasses);
+  const micOn = useApp((s) => s.mic.status === 'on');
+  const latency = useApp((s) => s.micLatency);
+  const [cal, setCal] = useState<'idle' | 'running' | 'failed'>('idle');
+  if (!along) {
+    return (
+      <div className="input-card">
+        <button className="t-btn toggle" onClick={() => setAlong(true)} title="Play along with the song as it plays: each note you play (keys, MIDI or microphone) is checked for time">
+          {AlongIcon} <span>Play along</span>
+        </button>
+      </div>
+    );
+  }
+  const last = passes[passes.length - 1];
+  const clean = passes.filter((p) => p.clean).length;
+  const calibrate = async () => {
+    setCal('running');
+    const ms = await calibrateMic();
+    setCal(ms === null ? 'failed' : 'idle');
+  };
+  return (
+    <div className="input-card on along">
+      <span className="practice-label">Play along</span>
+      <span className="input-status along-status" role="status">
+        {cal === 'running' ? 'Play any note with each click after the first bar…' : cal === 'failed' ? 'Didn’t hear enough notes on the clicks. Try again.' : last ? `Last pass: ${describePass(last)}` : 'Press Play, then play with it'}
+      </span>
+      {passes.length > 1 && <span className="input-status">{clean} of {passes.length} clean</span>}
+      <label className="check" title="Off: only the clicks play, so the microphone hears just you">
+        <input type="checkbox" checked={melody} onChange={(e) => useApp.setState({ alongMelody: e.target.checked })} />
+        Hear the tune
+      </label>
+      {micOn && melody && <span className="input-error along-warn">With the microphone, turn the tune off so it hears only you.</span>}
+      {micOn && (
+        <button
+          className="btn small ghost"
+          disabled={cal === 'running'}
+          onClick={() => void calibrate()}
+          title={`The microphone hears notes a moment late; calibrating measures by how much (now ${latency ?? DEFAULT_MIC_LATENCY} ms${latency === null ? ', a guess' : ''})`}
+        >
+          {latency === null ? 'Calibrate mic' : `Mic delay ${latency} ms`}
+        </button>
+      )}
+      <button className="btn small ghost" onClick={() => setAlong(false)}>Stop</button>
     </div>
   );
 }

@@ -9,7 +9,8 @@ import { eventsIn, type Passage } from '../core/passage';
 import type { Parsed, ReadAs } from '../state/store';
 import { midiToName, keySpelling, type Spelling } from '../core/pitch';
 import { followTo } from './follow';
-import { indexesByLine, useStableClick } from './TabView';
+import { indexesByLine, markMap, marksPerLine, useStableClick } from './TabView';
+import type { Mark } from '../core/playAlong';
 
 interface Props {
   parsed: Parsed;
@@ -20,6 +21,8 @@ interface Props {
   /** The chosen passage and the looped one, shown as bands behind their notes. */
   passage?: Passage | null;
   loopRange?: Passage | null;
+  /** Play-along marks by score index. */
+  marks?: Record<number, Mark>;
   /** Notes mode: note names (C5) instead of holes. */
   readAs?: ReadAs;
 }
@@ -99,7 +102,7 @@ export function SimpleTabPreview({ doc, lines = 2 }: { doc: TabDoc; lines?: numb
   );
 }
 
-export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect, passage, loopRange, readAs = 'holes' }: Props) {
+export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect, passage, loopRange, marks, readAs = 'holes' }: Props) {
   const { doc, score, harp } = parsed;
   const flats = keySpelling(doc.meta.key ?? harp.spec.key);
   const root = useRef<HTMLDivElement>(null);
@@ -117,11 +120,12 @@ export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect, p
   const activeByLine = indexesByLine(score, activeEvents);
   const passageByLine = indexesByLine(score, passage ? eventsIn(score, passage) : []);
   const loopByLine = indexesByLine(score, loopRange ? eventsIn(score, loopRange) : []);
+  const marksByLine = marksPerLine(score, marks);
   const selectedLine = selectedEvent !== null ? score.events[selectedEvent]?.line : undefined;
   return (
     <div className={`simpletab ${readAs === 'notes' ? 'as-notes' : ''}`} ref={root}>
       {lines.map(({ li }) => (
-        <SimpleLine key={li} parsed={parsed} li={li} active={activeByLine.get(li) ?? ''} inPassage={passageByLine.get(li) ?? ''} inLoop={loopByLine.get(li) ?? ''} selected={selectedLine === li ? selectedEvent : null} asNotes={readAs === 'notes'} flats={flats} onSelect={click} />
+        <SimpleLine key={li} parsed={parsed} li={li} active={activeByLine.get(li) ?? ''} inPassage={passageByLine.get(li) ?? ''} inLoop={loopByLine.get(li) ?? ''} marks={marksByLine.get(li) ?? ''} selected={selectedLine === li ? selectedEvent : null} asNotes={readAs === 'notes'} flats={flats} onSelect={click} />
       ))}
     </div>
   );
@@ -134,6 +138,7 @@ const SimpleLine = memo(function SimpleLine({
   active,
   inPassage,
   inLoop,
+  marks,
   selected,
   asNotes,
   flats,
@@ -144,6 +149,7 @@ const SimpleLine = memo(function SimpleLine({
   active: string;
   inPassage: string;
   inLoop: string;
+  marks: string;
   selected: number | null;
   asNotes: boolean;
   flats: Spelling;
@@ -154,6 +160,7 @@ const SimpleLine = memo(function SimpleLine({
   const activeSet = set(active);
   const passageSet = set(inPassage);
   const loopSet = set(inLoop);
+  const markOf = markMap(marks);
   return (
     <div className="st-line">
       {measuresOf(doc.lines[li].events).map((m, mi) => (
@@ -162,7 +169,8 @@ const SimpleLine = memo(function SimpleLine({
             const idx = indexByKey.get(eventKey(li, ei));
             const isActive = idx !== undefined && activeSet.has(idx);
             const isSelected = idx !== undefined && idx === selected;
-            const band = idx === undefined ? '' : `${passageSet.has(idx) ? 'in-passage' : ''} ${loopSet.has(idx) ? 'in-loop' : ''}`;
+            const mark = idx !== undefined ? markOf.get(idx) : undefined;
+            const band = idx === undefined ? '' : `${passageSet.has(idx) ? 'in-passage' : ''} ${loopSet.has(idx) ? 'in-loop' : ''} ${mark ? `mark-${mark}` : ''}`;
             return (
               <button
                 key={ei}
