@@ -16,6 +16,8 @@ const COLUMNS: Group[][] = [
         ['Enter', 'Play / pause'],
         ['Esc', 'Stop, or stop recording; when stopped, end the loop or trainer, then let go of the passage'],
         ['L', 'Loop the chosen passage, or the whole song (Shift+L in the editor)'],
+        ['F', 'Performance mode: the music fills the screen (Play); F or Esc leaves'],
+        ['Ctrl+= / Ctrl+−', 'Performance mode: bigger / smaller music (Ctrl+0: the usual size)'],
         ['Shift+click', 'Choose a passage, from the selected note (Play: Tab, Simple and Numbers views)'],
         ['Bar number', 'Click: choose that bar; Shift+click: up to it (Play: Tab and Numbers views)'],
         ['Ctrl+S', 'Save to your library'],

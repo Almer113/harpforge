@@ -17,9 +17,11 @@ interface Props {
   show?: { holes: boolean; lyrics: boolean; chords: boolean; header: boolean };
   /** One drawing per line, so printed pages can break between lines. */
   oneSvgPerLine?: boolean;
+  /** The width the staff is laid out to (it's then scaled to fit): less is bigger. */
+  staffWidth?: number;
 }
 
-export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, show = { holes: true, lyrics: true, chords: true, header: true }, oneSvgPerLine = false }: Props) {
+export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, show = { holes: true, lyrics: true, chords: true, header: true }, oneSvgPerLine = false, staffWidth = 760 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   // k-th rendered note/rest → its SVG elements and score index.
   const map = useRef<{ elems: SVGElement[][]; scoreIndex: (number | undefined)[]; abcElems: unknown[] }>({ elems: [], scoreIndex: [], abcElems: [] });
@@ -48,7 +50,7 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
       paddingbottom: 8,
       paddingleft: 4,
       paddingright: 4,
-      staffwidth: 760,
+      staffwidth: staffWidth,
       format: {
         gchordfont: 'Inter 13 bold',
         vocalfont: 'JetBrains Mono 12',
@@ -93,7 +95,7 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
         first.setAttribute('font-weight', 'bold');
       }
     }
-  }, [abc, parsed, oneSvgPerLine, holes]);
+  }, [abc, parsed, oneSvgPerLine, holes, staffWidth]);
 
   // Highlight sounding + selected notes.
   useEffect(() => {

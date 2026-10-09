@@ -1,4 +1,5 @@
 import { Transport } from '../components/Controls';
+import { PerformBar } from '../components/PerformBar';
 import { Harmonica, NowPlaying } from '../components/Harmonica';
 import { InputBar } from '../components/InputBar';
 import '../state/practice';
@@ -8,6 +9,7 @@ import { SongLine } from '../components/editor/SongDetails';
 import { Popover } from '../components/Popover';
 import { useHarmonicaKeyboard } from '../live/useHarmonicaKeyboard';
 import { extendPassage, selectEvent } from '../state/playback';
+import { enterPerform } from '../state/perform';
 import { useApp, useParsed, type HarpSize } from '../state/store';
 import type { Harmonica as HarmonicaT } from '../core/instruments';
 
@@ -23,8 +25,22 @@ export function PlayPage() {
   const recording = useApp((s) => s.recording);
   const harpSize = useApp((s) => s.harpSize);
   const practising = useApp((s) => !!s.practice);
+  const performing = useApp((s) => s.performing);
+  const performSize = useApp((s) => s.performSize);
   // Practising with the harmonica hidden: the slim one shows, so the next hole can be seen.
   const shown = harpSize === 'hidden' && practising ? 'slim' : harpSize;
+  const onSelect = (i: number, _ev: unknown, extend?: boolean) => (extend ? extendPassage(i) : selectEvent(i));
+
+  // Performance mode: the music alone, under one bar.
+  if (performing) {
+    return (
+      <section className="page play-page perform-page">
+        <PerformBar />
+        <Sheet parsed={parsed} onSelect={onSelect} bare scale={performSize} />
+        <PracticeReport />
+      </section>
+    );
+  }
 
   return (
     <section className="page play-page">
@@ -50,7 +66,18 @@ export function PlayPage() {
         <InputBar />
       </div>
 
-      <Sheet parsed={parsed} onSelect={(i, _ev, extend) => (extend ? extendPassage(i) : selectEvent(i))} />
+      <Sheet
+        parsed={parsed}
+        onSelect={onSelect}
+        actions={
+          <button className="btn small ghost perform-btn" onClick={enterPerform} disabled={!!recording} title="Performance mode (F): the music fills the screen, bigger">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+            </svg>
+            Perform
+          </button>
+        }
+      />
       <PracticeReport />
     </section>
   );
@@ -69,7 +96,7 @@ function KeyHelp({ harp }: { harp: HarmonicaT }) {
       {hasSlide && <span><kbd>Space</kbd> slide</span>}
       {holes > 12 && <span><kbd>←</kbd><kbd>→</kbd> move keys</span>}
       <span>Mouse: drag sideways to glide{bendable ? ', drag out to bend' : ''}</span>
-      <span><kbd>Enter</kbd> play / pause · <kbd>Esc</kbd> stop</span>
+      <span><kbd>Enter</kbd> play / pause · <kbd>Esc</kbd> stop · <kbd>F</kbd> performance mode</span>
       <span><kbd>L</kbd> loop · <kbd>Shift</kbd>+click a note, or click a bar number (Tab and Numbers views), to choose a passage</span>
     </Popover>
   );

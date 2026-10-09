@@ -7,6 +7,7 @@ import { guessTonic, harpForPosition, octaveOptions, positionFor, positionName }
 import { mod12, transposeKey } from '../core/pitch';
 import { describePassage } from '../core/passage';
 import { currentPassage, endPassageLoop, extendPassage, holdTrainer, playFrom, startTrainer, stop, stopTrainer, toggleLoop, togglePlay, trainerLabel } from '../state/playback';
+import { exitPerform, performResize, togglePerform } from '../state/perform';
 import { TRAINER_CHOICES, useApp, useParsed, type TrainerSettings } from '../state/store';
 import { Popover } from './Popover';
 
@@ -375,11 +376,58 @@ function TrainerButton() {
  * `compact` (the editor, whose bar starts with PlayStop): the sound menu (with the speed) and the harmonica.
  */
 export function Transport({ compact = false }: { compact?: boolean }) {
+  useTransportKeys();
+
+  if (compact) {
+    return (
+      <div className="transport compact">
+        <SoundMenu withSpeed />
+        <HarmonicaChip />
+      </div>
+    );
+  }
+
+  return (
+    <div className="transport">
+      <PlayStop />
+      <SpeedControl />
+      <div className="t-group t-harp">
+        <SoundMenu />
+        <HarmonicaChip />
+      </div>
+    </div>
+  );
+}
+
+/** The speed slider, with the speed and the tempo it gives. */
+export function SpeedControl() {
   const speed = useApp((s) => s.speed);
   const { doc } = useParsed();
   const bpm = Math.round(doc.meta.tempo * speed);
+  return (
+    <div className="t-group speed">
+      <span className="t-label">Speed</span>
+      <input
+        type="range"
+        min={0.4}
+        max={1.6}
+        step={0.05}
+        value={speed}
+        aria-label="Speed"
+        onChange={(e) => useApp.setState({ speed: parseFloat(e.target.value) })}
+        onDoubleClick={() => useApp.setState({ speed: 1 })}
+        title="Double-click to reset"
+      />
+      <span className="t-value">{Math.round(speed * 100)}% · {bpm} bpm</span>
+    </div>
+  );
+}
 
-  // Global space-free shortcut: Enter toggles playback (Space belongs to the harmonica slide).
+/**
+ * The playback keys, wherever there's a transport (Play, the editor, performance mode):
+ * Enter plays (Space belongs to the harmonica slide), Esc stops, L loops, F performs.
+ */
+export function useTransportKeys() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // (A key event aimed at the window or document, not an element, counts as the page's.)
@@ -396,6 +444,19 @@ export function Transport({ compact = false }: { compact?: boolean }) {
         return;
       }
       const st = useApp.getState();
+      const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
+      // F: performance mode (on Play).
+      if (e.code === 'KeyF' && !e.repeat && plain && !e.shiftKey && st.page === 'play') {
+        e.preventDefault();
+        togglePerform();
+        return;
+      }
+      // Performing: Ctrl+= / Ctrl+− size the music (not the whole page), Ctrl+0 resets it.
+      if (st.performing && (e.ctrlKey || e.metaKey) && !e.altKey && ['Equal', 'NumpadAdd', 'Minus', 'NumpadSubtract', 'Digit0', 'Numpad0'].includes(e.code)) {
+        e.preventDefault();
+        performResize(e.code === 'Digit0' || e.code === 'Numpad0' ? 0 : e.code === 'Minus' || e.code === 'NumpadSubtract' ? -1 : 1);
+        return;
+      }
       // L loops (Shift+L in the editor, where L ties notes).
       if (e.code === 'KeyL' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && e.shiftKey === (st.page === 'editor')) {
         e.preventDefault();
@@ -406,7 +467,9 @@ export function Transport({ compact = false }: { compact?: boolean }) {
         e.preventDefault();
         togglePlay();
       } else if (e.code === 'Escape') {
-        if (st.recording) stopRecording();
+        // (In full screen the browser takes Esc itself, and leaving it ends performance mode.)
+        if (st.performing) exitPerform();
+        else if (st.recording) stopRecording();
         else if (st.play !== 'stopped') stop();
         // Stopped: Escape lets go of the passage loop, then of the chosen passage.
         else if (st.loop && st.loopRange) endPassageLoop();
@@ -417,43 +480,6 @@ export function Transport({ compact = false }: { compact?: boolean }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-
-  if (compact) {
-    return (
-      <div className="transport compact">
-        <SoundMenu withSpeed />
-        <HarmonicaChip />
-      </div>
-    );
-  }
-
-  return (
-    <div className="transport">
-      <PlayStop />
-
-      <div className="t-group speed">
-        <span className="t-label">Speed</span>
-        <input
-          type="range"
-          min={0.4}
-          max={1.6}
-          step={0.05}
-          value={speed}
-          aria-label="Speed"
-          onChange={(e) => useApp.setState({ speed: parseFloat(e.target.value) })}
-          onDoubleClick={() => useApp.setState({ speed: 1 })}
-          title="Double-click to reset"
-        />
-        <span className="t-value">{Math.round(speed * 100)}% · {bpm} bpm</span>
-      </div>
-
-      <div className="t-group t-harp">
-        <SoundMenu />
-        <HarmonicaChip />
-      </div>
-
-    </div>
-  );
 }
 
 /** "C Diatonic · 1st position ▾": opens the harmonica picker. Lives in the transport. */

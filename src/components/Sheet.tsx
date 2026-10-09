@@ -1,8 +1,8 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { Popover } from './Popover';
 import { HolesIcon, NotesIcon } from './icons';
 import type { NoteEvent, RestEvent } from '../core/htab/types';
-import { useApp, type Parsed, type ReadAs, type SheetShow } from '../state/store';
+import { useApp, type Parsed, type ReadAs, type SheetShow, type SheetView } from '../state/store';
 import { doPitchClass } from '../core/formats/jianpu';
 import { pitchClassName, keyUsesFlats } from '../core/pitch';
 import { SimpleTabView } from './SimpleTabView';
@@ -12,15 +12,24 @@ import { selectBar } from '../state/playback';
 // Sheet music pulls in abcjs; load it only when the staff view is opened.
 const StaffView = lazy(() => import('./StaffView').then((m) => ({ default: m.StaffView })));
 
-/** The song sheet with a Tab / Staff switch. */
+/**
+ * The song sheet with a Tab / Staff switch. `actions`: more buttons in its header. `bare`
+ * (performance mode, whose bar has the switches): no header, no panel. `scale`: how big.
+ */
 export function Sheet({
   parsed,
   onSelect,
   title = 'Tab',
+  actions,
+  bare = false,
+  scale = 1,
 }: {
   parsed: Parsed;
   onSelect: (scoreIndex: number, ev?: NoteEvent | RestEvent, extend?: boolean) => void;
   title?: string;
+  actions?: ReactNode;
+  bare?: boolean;
+  scale?: number;
 }) {
   const passage = useApp((s) => s.passage);
   const marks = useApp((s) => s.alongMarks);
@@ -43,8 +52,8 @@ export function Sheet({
   };
 
   return (
-    <div className="sheet">
-      <div className="sheet-head">
+    <div className={`sheet ${bare ? 'bare' : ''}`}>
+      {!bare && <div className="sheet-head">
         <h2>
           {view === 'numbers' ? 'Numbered notation' : view === 'staff' ? 'Staff notation' : notes ? (view === 'simple' ? 'Simple notes' : 'Notes') : view === 'simple' ? 'Simple tab' : title}
           {view === 'numbers' && <span className="chip plain jp-key">1={doName}</span>}
@@ -52,40 +61,12 @@ export function Sheet({
         <div className="tb-group">
           {view !== 'simple' && <ShowMenu view={view} />}
           {(view === 'tab' || view === 'simple') && <ReadAsSwitch />}
-          <div className="seg" role="radiogroup" aria-label="Sheet view">
-            <button
-              role="radio"
-              aria-checked={view === 'simple'}
-              className={view === 'simple' ? 'on' : ''}
-              onClick={() => useApp.setState({ sheetView: 'simple' })}
-              title="Just the holes, all the same size"
-            >
-              Simple Tab
-            </button>
-            <button role="radio" aria-checked={view === 'tab'} className={view === 'tab' ? 'on' : ''} onClick={() => useApp.setState({ sheetView: 'tab' })}>
-              Tab
-            </button>
-            <button
-              role="radio"
-              aria-checked={view === 'staff'}
-              className={view === 'staff' ? 'on' : ''}
-              onClick={() => useApp.setState({ sheetView: 'staff' })}
-              title="Standard notation, with the holes underneath"
-            >
-              Staff
-            </button>
-            <button
-              role="radio"
-              aria-checked={view === 'numbers'}
-              className={view === 'numbers' ? 'on' : ''}
-              onClick={() => useApp.setState({ sheetView: 'numbers' })}
-              title="Numbered notation (jianpu): 1 = do of the key"
-            >
-              Numbers
-            </button>
-          </div>
+          <ViewSwitch />
+          {actions}
         </div>
-      </div>
+      </div>}
+      {/* (The staff is drawn to the width it's given: it's made bigger by giving it less.) */}
+      <div className="sheet-body" style={scale !== 1 && view !== 'staff' ? { zoom: scale } : undefined}>
       {view === 'simple' ? (
         <SimpleTabView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} passage={passage} loopRange={loopRange} marks={marks} marksPrev={marksPrev} readAs={readAs} />
       ) : view !== 'staff' ? (
@@ -107,9 +88,31 @@ export function Sheet({
         />
       ) : (
         <Suspense fallback={<p className="muted">Loading sheet music…</p>}>
-          <StaffView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onNoteClick={(i) => onSelect(i, eventAt(i))} show={show.staff} />
+          <StaffView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onNoteClick={(i) => onSelect(i, eventAt(i))} show={show.staff} staffWidth={Math.round(760 / scale)} />
         </Suspense>
       )}
+      </div>
+    </div>
+  );
+}
+
+const VIEWS: { id: SheetView; label: string; short: string; title?: string }[] = [
+  { id: 'simple', label: 'Simple Tab', short: 'Simple', title: 'Just the holes, all the same size' },
+  { id: 'tab', label: 'Tab', short: 'Tab' },
+  { id: 'staff', label: 'Staff', short: 'Staff', title: 'Standard notation, with the holes underneath' },
+  { id: 'numbers', label: 'Numbers', short: 'Numbers', title: 'Numbered notation (jianpu): 1 = do of the key' },
+];
+
+/** Simple Tab | Tab | Staff | Numbers. `short`: shorter names (performance mode's bar). */
+export function ViewSwitch({ short = false }: { short?: boolean }) {
+  const view = useApp((s) => s.sheetView);
+  return (
+    <div className="seg" role="radiogroup" aria-label="Sheet view">
+      {VIEWS.map((v) => (
+        <button key={v.id} role="radio" aria-checked={view === v.id} className={view === v.id ? 'on' : ''} onClick={() => useApp.setState({ sheetView: v.id })} title={v.title}>
+          {short ? v.short : v.label}
+        </button>
+      ))}
     </div>
   );
 }
