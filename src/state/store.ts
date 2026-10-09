@@ -178,7 +178,8 @@ export interface AppState {
   /** The tempo trainer's settings (remembered): speeds as multipliers, step after `every` passes. */
   trainer: TrainerSettings;
   /** The tempo trainer while it runs: passes played, and whether it's holding the speed. */
-  training: { pass: number; holding: boolean } | null;
+  /** `counted`: the passes that count towards speeding up (only the clean ones, when it waits for those). */
+  training: { pass: number; holding: boolean; counted?: number } | null;
   /** The trainer speeds up only after a pass played cleanly (when playing along). Remembered. */
   trainerCleanOnly: boolean;
   /** Play along, checked: what you play during playback is matched to the song's notes. */

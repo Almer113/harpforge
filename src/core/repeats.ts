@@ -9,7 +9,7 @@
 
 import type { TabDoc } from './htab/types';
 import type { Score, ScoreEvent } from './score';
-import { lineVerses, songVerses } from './verses';
+import { lineVerses } from './verses';
 
 const EPS = 1e-6;
 
@@ -105,41 +105,51 @@ const cache = new WeakMap<Score, Map<string, PlaybackScore>>();
 export function playbackScore(doc: TabDoc, score: Score, opts: { repeats?: boolean; allVerses?: boolean } = {}): PlaybackScore {
   const repeats = opts.repeats ?? true;
   const order = repeats ? playOrder(doc, score.totalBeats) : [{ from: 0, to: score.totalBeats }];
-  // The most times a note is played in one time through (2 in a repeat): that many verses a
-  // time through, so all verses take as many times through as that needs.
-  const timesThrough = maxPass(score, order);
-  const rounds = opts.allVerses ? Math.max(1, Math.ceil(songVerses(doc) / timesThrough)) : 1;
+  // Each line sings the next verse each time it's played: as many verses a time through as
+  // the line is played (2 in a repeat), so all verses take as many times through as the line
+  // that needs the most.
+  const times = linePasses(score, order);
+  const versesOf = doc.lines.map(lineVerses);
+  let rounds = 1;
+  if (opts.allVerses) versesOf.forEach((n, line) => n > 1 && (rounds = Math.max(rounds, Math.ceil(n / (times.get(line) ?? 1)))));
   const key = `${repeats}:${rounds}`;
   const hit = cache.get(score)?.get(key);
   if (hit) return hit;
-  const result = rounds === 1 && order.length === 1 && order[0].from < EPS ? writtenScore(score) : unroll(doc, score, order, rounds, timesThrough);
+  const result = rounds === 1 && order.length === 1 && order[0].from < EPS ? writtenScore(score) : unroll(score, order, rounds, times, versesOf);
   if (!cache.has(score)) cache.set(score, new Map());
   cache.get(score)!.set(key, result);
   return result;
 }
 
-/** The most times any note is played in one time through `order`. */
-function maxPass(score: Score, order: { from: number; to: number }[]): number {
-  let most = 1;
+/** Each line → the most times any of its notes is played in one time through `order`. */
+function linePasses(score: Score, order: { from: number; to: number }[]): Map<number, number> {
+  const most = new Map<number, number>();
   for (const ev of score.events) {
     const n = order.filter(({ from, to }) => ev.start >= from - EPS && ev.start < to - EPS).length;
-    if (n > most) most = n;
+    if (n > (most.get(ev.line) ?? 1)) most.set(ev.line, n);
   }
   return most;
 }
 
-function unroll(doc: TabDoc, score: Score, order: { from: number; to: number }[], rounds: number, timesThrough: number): PlaybackScore {
+function unroll(score: Score, order: { from: number; to: number }[], rounds: number, times: Map<number, number>, versesOf: number[]): PlaybackScore {
   const events: ScoreEvent[] = [];
   const orig: number[] = [];
   const pass: number[] = [];
   const round: number[] = [];
   const verse: number[] = [];
   const bars: number[] = [];
-  const versesOf = doc.lines.map(lineVerses);
   let at = 0;
+  /** The verse a note sings the `n`-th time through its line in round `r` (past its line's last when it's all been sung). */
+  const verseAt = (ev: ScoreEvent, r: number, n: number) => r * (times.get(ev.line) ?? 1) + n - 1;
   for (let r = 0; r < rounds; r++) {
     const seen = new Map<number, number>();
     for (const { from, to } of order) {
+      // In the last time through, a stretch whose words have all been sung (a third verse
+      // that only fills half of a repeat) isn't played again.
+      if (r > 0 && r === rounds - 1) {
+        const sung = score.events.filter((ev) => ev.start >= from - EPS && ev.start < to - EPS && (versesOf[ev.line] ?? 1) > 1);
+        if (sung.length && sung.every((ev) => verseAt(ev, r, (seen.get(ev.index) ?? 0) + 1) >= versesOf[ev.line])) continue;
+      }
       if (at > EPS) bars.push(at);
       for (const b of score.bars) if (b > from + EPS && b < to - EPS) bars.push(at + b - from);
       for (const ev of score.events) {
@@ -154,9 +164,9 @@ function unroll(doc: TabDoc, score: Score, order: { from: number; to: number }[]
         orig.push(ev.index);
         pass.push(n);
         round.push(r);
-        // The verse sung: the next each time through a repeat, and on from there each time
+        // The verse sung: the next each time through its line, and on from there each time
         // through the song (all verses) — a line without that many verses sings its last.
-        verse.push(Math.max(0, Math.min(r * timesThrough + n - 1, (versesOf[ev.line] ?? 1) - 1)));
+        verse.push(Math.max(0, Math.min(verseAt(ev, r, n), (versesOf[ev.line] ?? 1) - 1)));
       }
       at += to - from;
     }

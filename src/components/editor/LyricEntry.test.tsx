@@ -35,8 +35,9 @@ async function change(value: string) {
     box().dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
-async function key(k: string, shiftKey = false, altKey = false) {
-  await act(async () => box().dispatchEvent(new KeyboardEvent('keydown', { key: k, shiftKey, altKey, bubbles: true, cancelable: true })));
+async function key(k: string, shiftKey = false, altKey = false, ctrlKey = false) {
+  const code = k === ' ' ? 'Space' : undefined;
+  await act(async () => box().dispatchEvent(new KeyboardEvent('keydown', { key: k, code, shiftKey, altKey, ctrlKey, bubbles: true, cancelable: true })));
 }
 
 beforeEach(async () => {
@@ -143,5 +144,28 @@ describe('words and chords on rests (empty space)', () => {
     await act(async () => startLyrics());
     await key(' ');
     expect(s().ve.lyricAt).toEqual({ m: 0, start: 2 });
+  });
+
+  it('Alt+Space over empty beats left empty goes on beat by beat (Ctrl+→ too)', async () => {
+    await act(async () => s().loadText('---\ntitle: T\n---\n4 . . 6 |\n', null));
+    await act(async () => startLyrics());
+    await key(' ', false, true);
+    expect(s().ve.restDraft?.pos).toEqual({ m: 0, start: 1 });
+    await key('ArrowRight', false, false, true);
+    expect(s().ve.restDraft?.pos).toEqual({ m: 0, start: 2 });
+    await key(' ', false, true);
+    expect(s().ve.lyricAt).toEqual({ m: 0, start: 3 });
+    expect(s().ve.restDraft).toBeUndefined();
+  });
+
+  it('a chord typed above a rest is kept when something else takes over', async () => {
+    await act(async () => openRestBlock({ m: 0, start: 1 }, 1, 'chord'));
+    await act(async () => {
+      const el = host.querySelector<HTMLInputElement>('.ve-chord-input')!;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, 'Am');
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => startLyrics({ m: 0, start: 0 }));
+    expect(lineOf()[0]).toBe('4 [Am] . 5 6 |');
   });
 });

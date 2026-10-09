@@ -123,10 +123,11 @@ export function LyricInput({ pos, verse, draft }: { pos: Pos; verse: number; dra
       st.setVe({ lyricAt: undefined, restDraft: undefined });
       return;
     }
-    // Alt+Space: on to the next beat even when it's a rest (a rest block is made there to sing on).
+    // Alt+Space (Ctrl+→): on to the next beat even when it's a rest (a rest block is made there to sing on).
     if (key === 'beat') {
       const { song } = write('next');
-      const at = findItem(song, pos) ? nextBeat(song, pos, toolDuration(st.ve)) : null;
+      // (A rest block left empty isn't made: on from where it would have ended.)
+      const at = nextBeat(song, pos, toolDuration(st.ve), draft);
       word++;
       if (at?.dur !== undefined) {
         st.setVe({ lyricAt: at.pos, restDraft: { pos: at.pos, dur: at.dur, field: 'lyric' }, selection: [], measure: at.pos.m });
@@ -205,7 +206,9 @@ export function LyricInput({ pos, verse, draft }: { pos: Pos; verse: number; dra
           return;
         }
         let action: LyricKey | 'cancel' | 'beat' | null = null;
-        if (key === ' ' && e.altKey) action = 'beat';
+        // (By the key's place: Option+Space on a Mac types a non-breaking space. Ctrl+→ too,
+        // where the system takes Alt+Space for itself.)
+        if ((e.code === 'Space' && e.altKey) || (ctrl && key === 'ArrowRight')) action = 'beat';
         else if (key === ' ' || key === 'Tab') action = e.shiftKey ? 'prev' : 'next';
         else if (key === '-') action = 'join';
         else if (key === '_') action = 'hold';
@@ -284,7 +287,7 @@ export function VerseSwitch({ song }: { song: Song }) {
 }
 
 /** The keys of lyrics mode, said once for screen readers (the box points here). */
-export const LYRIC_KEYS = 'Space: next note · - joins the next syllable · _ holds over the next note · Alt+Space: the next beat, even a rest · Shift+Space or Backspace: back · Enter: done · Esc: leave · Ctrl+Space: a space in the syllable · Ctrl+-: a real hyphen';
+export const LYRIC_KEYS = 'Space: next note · - joins the next syllable · _ holds over the next note · Alt+Space or Ctrl+→: the next beat, even a rest · Shift+Space or Backspace: back · Enter: done · Esc: leave · Ctrl+Space: a space in the syllable · Ctrl+-: a real hyphen';
 
 // Leaving the editor (or its visual view) leaves lyrics mode, keeping what's typed.
 useApp.subscribe((s) => {
@@ -299,6 +302,10 @@ useApp.subscribe((s) => {
 export function RestChordInput({ pos, dur }: { pos: Pos; dur: number }) {
   const [text, setText] = useState('');
   const box = useRef<HTMLInputElement>(null);
+  const live = useRef(text);
+  useEffect(() => {
+    live.current = text;
+  });
   useEffect(() => {
     box.current?.focus({ preventScroll: true });
   }, []);
@@ -306,7 +313,7 @@ export function RestChordInput({ pos, dur }: { pos: Pos; dur: number }) {
     const st = useApp.getState();
     const draft = st.ve.restDraft;
     if (!draft || !samePos(draft.pos, pos)) return;
-    const chord = text.trim();
+    const chord = live.current.trim();
     if (keep && chord) {
       const song = currentSong();
       if (!findItem(song, pos)) commitSong(placeItem(song, pos.m, { start: pos.start, dur, sounds: [], chord }));
@@ -315,6 +322,14 @@ export function RestChordInput({ pos, dur }: { pos: Pos; dur: number }) {
     }
     st.setVe({ restDraft: undefined });
   };
+  // Something else taking over (a click elsewhere, Ctrl+L) puts the chord typed there first.
+  useEffect(() => {
+    const flush = () => done(true);
+    flushOpen = flush;
+    return () => {
+      if (flushOpen === flush) flushOpen = null;
+    };
+  });
   return (
     <input
       ref={box}

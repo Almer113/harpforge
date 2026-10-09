@@ -57,7 +57,8 @@ export class AlongChecker {
   /**
    * The unplayed note a note played at `beat` would be: of that pitch, within the window.
    * Late is preferred over early: a note played after an unplayed note's moment is that note
-   * (so playing steadily a little late doesn't push every note onto the next one).
+   * (so playing steadily a little late doesn't push every note onto the next one) — the
+   * nearest of them, so one missed note doesn't make every note after it late.
    */
   match(beat: number, midi: number, win: { ok: number }): Expected | null {
     const pitch = Math.round(midi);
@@ -65,7 +66,9 @@ export class AlongChecker {
     let ahead: Expected | null = null;
     for (const e of this.expected) {
       if (this.marks.has(e.index) || !e.midis.includes(pitch) || Math.abs(beat - e.start) > win.ok + 1e-9) continue;
-      if (e.start <= beat + 1e-9) behind ??= e;
+      if (e.start <= beat + 1e-9) {
+        if (!behind || e.start > behind.start) behind = e;
+      }
       else if (!ahead || e.start < ahead.start) ahead = e;
     }
     return behind ?? ahead;

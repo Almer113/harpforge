@@ -41,7 +41,7 @@ function onEvent(index: number, on: boolean, pass?: number, verse?: number) {
 let playing: PlaybackScore | null = null;
 let playingAt = -1;
 // What the sound was started with: changed since (even while paused), it starts again.
-let startedWith: { muted: boolean; played: PlaybackScore | null } = { muted: false, played: null };
+let startedWith: { muted: boolean; played: PlaybackScore | null; along: boolean } = { muted: false, played: null, along: false };
 
 /**
  * Where the visual editor plays from, as you see it there: several notes selected, just
@@ -124,9 +124,9 @@ export function startLabel(s: AppState): string {
 
 /** Whether the tune would be left out, and what would be played, if playback started now. */
 function wanted(s: AppState): typeof startedWith {
-  return { muted: tuneMuted(s), played: playedScore(s) };
+  return { muted: tuneMuted(s), played: playedScore(s), along: s.along };
 }
-const sameStart = (a: typeof startedWith, b: typeof startedWith) => a.muted === b.muted && a.played === b.played;
+const sameStart = (a: typeof startedWith, b: typeof startedWith) => a.muted === b.muted && a.played === b.played && a.along === b.along;
 
 /**
  * Starts playback again from where it is: the same note, the same time through a repeat.
@@ -167,15 +167,15 @@ export async function play(opts: { count?: boolean; from?: number; pass?: number
   await engine.ensureAudio();
   if (gen !== generation) return;
   if (s.play === 'paused') {
-    // (Silent or repeats changed while paused: from the same note, the new way.)
-    if (!sameStart(wanted(s), startedWith)) {
-      restartHere(false);
-      return;
-    }
     // (A new place chosen while paused: from there, not on from the old one.)
     if (startKey(s) !== startedKey) {
       stop();
       void play(opts);
+      return;
+    }
+    // (Silent, repeats or play along changed while paused: from the same note, the new way.)
+    if (!sameStart(wanted(s), startedWith)) {
+      restartHere(false);
       return;
     }
     engine.resumePlayback();
@@ -211,7 +211,7 @@ export async function play(opts: { count?: boolean; from?: number; pass?: number
   if (s.along) along?.startChecking(range ?? { start: startBeat, end: pb.score.totalBeats }, s.loop, eachLoop, pb);
   playing = pb;
   playingAt = selAt ?? 0;
-  startedWith = { muted, played: pb };
+  startedWith = { muted, played: pb, along: s.along };
   startedKey = startKey(s);
   engine.playScore(pb.score, {
     tempo,
@@ -264,16 +264,26 @@ export function togglePlay() {
   else void play();
 }
 
-/** Plays a single score event immediately (clicking a card) and selects it. */
 /** Plays from event `index` (clicking a card while playing jumps there). */
 export function playFrom(index: number) {
   const s = useApp.getState();
   if (s.recording) return;
-  // (Mid-song, in a repeat's second time or a later verse: that time, not back to the first.)
-  const now = s.play !== 'stopped' && playing ? { pass: playing.pass[playingAt], round: playing.round[playingAt] } : {};
-  stop();
+  // (Mid-song, the time it's played nearest to where the song is: in a repeat's second time
+  // or a later verse, that time, not back to the first — but a later repeat's first time.)
+  const near = s.play !== 'stopped' && playing ? nearestPlay(playing, index, playingAt) : undefined;
+  const now = near !== undefined && playing ? { pass: playing.pass[near], round: playing.round[near] } : {};
+  stop({ record: false });
   useApp.setState({ selectedEvent: index });
   void play({ count: false, from: index, ...now });
+}
+
+/** Where written note `index` is played nearest to playback index `at`, the later on a tie (undefined if it isn't). */
+export function nearestPlay(p: PlaybackScore, index: number, at: number): number | undefined {
+  let best: number | undefined;
+  for (let i = 0; i < p.orig.length; i++) {
+    if (p.orig[i] === index && (best === undefined || Math.abs(i - at) <= Math.abs(best - at))) best = i;
+  }
+  return best;
 }
 
 /**
@@ -352,6 +362,13 @@ useApp.subscribe((s, prev) => {
   if (s.loop !== prev.loop && s.play !== 'stopped') engine.setLoop(s.loop);
   if (s.text !== prev.text) {
     if (s.play !== 'stopped' && !s.recording) stop();
+    // The note chosen to play from stays the note at that beat (an edit before it moves the
+    // numbering along); with none starting there any more, playback starts from the start.
+    if (s.selectedEvent !== null && s.selectedEvent === prev.selectedEvent && s.loadSeq === prev.loadSeq) {
+      const was = getParsed(prev.text).score.events[s.selectedEvent];
+      const now = was && getParsed(s.text).score.events.find((ev) => Math.abs(ev.start - was.start) < 1e-6);
+      if (now?.index !== s.selectedEvent) useApp.setState({ selectedEvent: now ? now.index : null });
+    }
     // An edit can leave the chosen passage (or the looped one) past the end of the song.
     const total = getParsed(s.text).score.totalBeats;
     const passage = s.passage && usablePassage(s.passage, total);
@@ -505,10 +522,12 @@ export function loopPassed() {
   if (!t) return;
   const pass = t.pass + 1;
   const { step, every, goal } = s.trainer;
-  // Playing along, the trainer can wait for a pass played cleanly.
-  const clean = !s.along || !s.trainerCleanOnly || !!result?.clean;
-  const due = clean && !t.holding && pass % every === 0 && s.speed < goal - 1e-9;
-  useApp.setState({ training: { ...t, pass }, ...(due ? { speed: roundSpeed(Math.min(goal, s.speed + step)) } : {}) });
+  // Playing along, the trainer can wait for passes played cleanly: then every `every` clean ones.
+  const cleanOnly = s.along && s.trainerCleanOnly;
+  const counts = !cleanOnly || !!result?.clean;
+  const counted = (t.counted ?? t.pass) + (counts ? 1 : 0);
+  const due = counts && !t.holding && counted % every === 0 && s.speed < goal - 1e-9;
+  useApp.setState({ training: { ...t, pass, counted }, ...(due ? { speed: roundSpeed(Math.min(goal, s.speed + step)) } : {}) });
 }
 
 /** "Pass 3 · 70%", or "At 100% ✓" once at the goal. */

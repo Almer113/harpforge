@@ -169,12 +169,13 @@ export function restSlot(song: Song, pos: Pos, wanted: number): { pos: Pos; dur:
 /**
  * What comes right after the note at `pos` (lyrics mode's Alt+Space): the next note or rest
  * block, or a rest block to make in the empty space there (`dur`: as long as `wanted`).
+ * `here`: how long what's at `pos` is when nothing is there yet (a rest block not made).
  */
-export function nextBeat(song: Song, pos: Pos, wanted: number): { pos: Pos; dur?: number } | null {
-  const it = findItem(song, pos);
-  if (!it) return null;
+export function nextBeat(song: Song, pos: Pos, wanted: number, here?: number): { pos: Pos; dur?: number } | null {
+  const len = findItem(song, pos)?.dur ?? here;
+  if (len === undefined) return null;
   let m = pos.m;
-  let start = pos.start + it.dur;
+  let start = pos.start + len;
   // (Past the bar's end: the next bar's start; a note tied on is skipped, it isn't sung again.)
   for (let guard = 0; guard < 64; guard++) {
     const meas = song.measures[m];

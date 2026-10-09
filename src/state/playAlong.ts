@@ -12,6 +12,7 @@ import { onLive } from '../live/livePlayer';
 import { setAlongHooks, stop } from './playback';
 import { alongReport } from '../core/report';
 import { showReport } from './report';
+import { logSession } from '../storage/practiceLog';
 import { getParsed, useApp } from './store';
 
 /** The microphone's delay when it hasn't been calibrated (a typical laptop). */
@@ -56,6 +57,9 @@ function showMarks() {
   for (const [i, m] of checker.marks) marks[written(i)] = m;
   useApp.setState({ alongMarks: marks });
 }
+
+/** How far behind (in beats) the microphone hears what you play. */
+const micLag = () => ((useApp.getState().micLatency ?? DEFAULT_MIC_LATENCY) / 1000) * (bpm() / 60);
 
 const loopLength = () => (loop ? loop.end - loop.start : 0);
 const playedSomething = (c: AlongChecker) => [...c.marks.values()].some((m) => m !== 'missed');
@@ -104,10 +108,10 @@ export function startChecking(range: Passage, looping = false, withCount = false
     const at = now();
     if (at === null) return;
     // The microphone hears a note a moment after you play it.
-    const s = useApp.getState();
-    const delayMs = e.id === MIC_ID ? (s.micLatency ?? DEFAULT_MIC_LATENCY) : 0;
-    let beat = at - (delayMs / 1000) * (bpm() / 60);
+    let beat = at - (e.id === MIC_ID ? micLag() : 0);
     const win = windows(bpm());
+    // Heard just after the loop came round, but played before: the last pass's, already scored.
+    if (loop && beat < loop.start - win.ok && !startedEarly) return;
     // Just before the loop comes round (with no count between passes), a note that isn't one
     // of this pass's but is the loop's first is the next pass's, played a little early.
     if (loop && !counted && !startedEarly && beat > loop.end - win.ok && !checker.match(beat, e.midi, win)) {
@@ -122,10 +126,12 @@ export function startChecking(range: Passage, looping = false, withCount = false
     }
     if (checker.attack(beat, e.midi, win)) showMarks();
   });
-  // Notes whose moment has passed without being played turn red as the song goes on.
+  // Notes whose moment has passed without being played turn red as the song goes on — with
+  // the microphone listening, only once it would have heard them.
   timer = setInterval(() => {
     const beat = now();
-    if (checker && beat !== null && checker.missedBy(beat, windows(bpm())).length) showMarks();
+    const lag = useApp.getState().mic.status === 'on' ? micLag() : 0;
+    if (checker && beat !== null && checker.missedBy(beat - lag, windows(bpm())).length) showMarks();
   }, 100);
 }
 
@@ -192,11 +198,13 @@ useApp.subscribe((s, prev) => {
   }
 });
 
-// An edit (or another song) ends the session's checking without scoring it: its notes
-// (and their marks) belong to the old text.
+// An edit (or another song) ends the session's checking without scoring the pass under way:
+// its notes (and their marks) belong to the old text. The passes played so far join the
+// song's history.
 useApp.subscribe((s, prev) => {
   if (s.text === prev.text) return;
   if (checker) stopChecking(false);
+  if (prev.along && prev.alongPasses.length && prev.docId) logSession(prev.docId, alongReport(getParsed(prev.text).score, prev.alongPasses));
   if (Object.keys(s.alongMarks).length || Object.keys(s.alongPrev).length || s.alongPasses.length) useApp.setState({ alongMarks: {}, alongPrev: {}, alongPasses: [] });
 });
 

@@ -52,7 +52,7 @@ const COLUMNS: Group[][] = [
         ['Space · - · _', 'In lyrics: next note · join the next syllable · hold over the next note'],
         ['Shift+Space · Enter · Esc', 'In lyrics: back a note (or Backspace in an empty box) · done · leave without this syllable'],
         ['Ctrl+Space · Ctrl+-', 'In lyrics: a space inside the syllable · a real hyphen'],
-        ['Alt+Space', 'In lyrics: the next beat, even a rest (to sing over it)'],
+        ['Alt+Space / Ctrl+→', 'In lyrics: the next beat, even a rest (to sing over it)'],
         ['Click under / above a rest', 'Words or a chord on a rest (empty space)'],
         ['↑ ↓', 'Note up / down (Shift: a semitone)'],
         ['Del', 'Delete the selection'],
