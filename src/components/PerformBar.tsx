@@ -33,6 +33,7 @@ export function PerformBar() {
     return now ?? lastPlayed ?? s.selectedEvent;
   });
   const starts = useMemo(() => barStarts(score), [score]);
+  const second = useApp((s) => s.play !== 'stopped' && s.playPass === 2);
   const ev = at !== null && at !== undefined ? score.events[at] : undefined;
   const bar = ev ? barAt(score, ev.start, starts) + 1 : null;
 
@@ -82,7 +83,7 @@ export function PerformBar() {
       </button>
       <SpeedControl />
       <span className="pf-where t-value" aria-live="off">
-        {bar ? `Bar ${bar} of ${starts.length}` : `${starts.length} bars`}
+        {bar ? `Bar ${bar} of ${starts.length}${second ? ' · 2nd time' : ''}` : `${starts.length} bars`}
       </span>
       <div className="pf-group">
         {view !== 'simple' && <ShowMenu view={view} />}

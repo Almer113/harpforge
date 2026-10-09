@@ -216,7 +216,7 @@ html.performing { scroll-padding-top: calc(var(--perform-bar-h, 56px) + 12px); }
 .pf-title { font-weight: 700; font-size: 15px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .perform-bar .speed input[type='range'] { width: 80px; }
 .pf-view-menu { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px; right: 0; left: auto; width: 260px; }
-.pf-where { min-width: 92px; font-variant-numeric: tabular-nums; }
+.pf-where { min-width: 92px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pf-group { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .pf-size button { min-width: 36px; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .perform-bar { transition: none; } }

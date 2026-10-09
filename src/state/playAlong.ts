@@ -6,6 +6,7 @@
 import * as engine from '../audio/engine';
 import { AlongChecker, expectedNotes, latencyFrom, windows, type Mark, type PassResult } from '../core/playAlong';
 import type { Passage } from '../core/passage';
+import { writtenScore, type PlaybackScore } from '../core/repeats';
 import { startMic } from '../live/inputs';
 import { onLive } from '../live/livePlayer';
 import { setAlongHooks, stop } from './playback';
@@ -37,6 +38,11 @@ let startedEarly = false;
 let endedAhead = 0;
 let jumpPending = false;
 let lastResult: PassResult | null = null;
+// The notes are checked as they're played (repeats twice); marks and results name the written ones.
+let written: (i: number) => number = (i) => i;
+
+/** A pass's result with its notes named as written (a repeat's notes count each time). */
+const asWritten = (r: PassResult): PassResult => ({ ...r, missedAt: r.missedAt.map(written), offAt: r.offAt.map(written) });
 
 const bpm = () => {
   const s = useApp.getState();
@@ -46,7 +52,8 @@ const bpm = () => {
 function showMarks() {
   if (!checker) return;
   const marks: Record<number, Mark> = {};
-  for (const [i, m] of checker.marks) marks[i] = m;
+  // (A repeated note shows how it went the latest time.)
+  for (const [i, m] of checker.marks) marks[written(i)] = m;
   useApp.setState({ alongMarks: marks });
 }
 
@@ -77,9 +84,11 @@ function now(): number | null {
  * Starts checking the notes in `range`: the loop's passage when `looping`, else from where
  * playback starts. `withCount`: each pass of the loop has a count before it.
  */
-export function startChecking(range: Passage, looping = false, withCount = false) {
+export function startChecking(range: Passage, looping = false, withCount = false, played?: PlaybackScore) {
   stopChecking(false);
-  checker = new AlongChecker(expectedNotes(getParsed(useApp.getState().text).score, range));
+  const p = played ?? writtenScore(getParsed(useApp.getState().text).score);
+  written = (i) => p.orig[i] ?? i;
+  checker = new AlongChecker(expectedNotes(p.score, range));
   loop = looping ? range : null;
   counted = withCount;
   checkedText = useApp.getState().text;
@@ -127,7 +136,7 @@ export function startChecking(range: Passage, looping = false, withCount = false
 export function stopChecking(record = true) {
   const at = now() ?? lastAt;
   if (record && checker && at !== null && playedSomething(checker) && useApp.getState().text === checkedText) {
-    const result = checker.result(at - windows(bpm()).ok);
+    const result = asWritten(checker.result(at - windows(bpm()).ok));
     if (result.total) useApp.setState((s) => ({ alongPasses: [...s.alongPasses, result].slice(-200) }));
   }
   unlisten?.();
@@ -144,7 +153,7 @@ export function stopChecking(record = true) {
  */
 function endPass(wrap: boolean) {
   if (!checker) return;
-  const result = checker.result();
+  const result = asWritten(checker.result());
   const marks = useApp.getState().alongMarks;
   checker.reset();
   if (result.total === 0) return;

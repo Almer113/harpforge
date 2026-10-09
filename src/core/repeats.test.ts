@@ -1,0 +1,62 @@
+import { expect, it } from 'vitest';
+import { parseHtab } from './htab/parser';
+import { buildScore, harmonicaFromMeta } from './score';
+import { playbackIndexOf, playbackScore, playOrder } from './repeats';
+
+const parse = (tab: string) => {
+  const { doc } = parseHtab(`---\ntitle: R\n---\n${tab}\n`);
+  return { doc, score: buildScore(doc, harmonicaFromMeta(doc.meta)).score };
+};
+const order = (tab: string) => {
+  const { doc, score } = parse(tab);
+  return playOrder(doc, score.totalBeats).map((s) => `${s.from}-${s.to}`).join(' ');
+};
+/** The holes in the order played. */
+const played = (tab: string) => {
+  const { doc, score } = parse(tab);
+  return playbackScore(doc, score).score.events.map((ev) => (ev.rest ? '.' : ev.sounds.map((s) => (s.type === 'hole' ? `${s.breath === 'draw' ? '-' : ''}${s.hole}` : '?')).join(''))).join(' ');
+};
+
+it('plays a |: … :| section twice', () => {
+  expect(order('4 4 | 5 5 |: 6 6 | -6 -6 :| 7 7 |')).toBe('0-8 4-8 8-10');
+  expect(played('4 | 5 |: 6 | -6 :| 7 |')).toBe('4 5 6 -6 6 -6 7');
+});
+
+it('a :| with no |: goes back to the start, or to the last repeat', () => {
+  expect(played('4 | 5 :| 6 |')).toBe('4 5 4 5 6');
+  expect(played('4 :| 5 :| 6')).toBe('4 4 5 5 6');
+});
+
+it(':|: ends one repeat and starts the next', () => {
+  expect(played('|: 4 :|: 5 :| 6')).toBe('4 4 5 5 6');
+});
+
+it('without a :| it plays as written', () => {
+  const { doc, score } = parse('|: 4 5 | 6 |');
+  const p = playbackScore(doc, score);
+  expect(p.repeats).toBe(false);
+  expect(p.score).toBe(score);
+});
+
+it('knows each played note’s written note and whether it’s the repeat; bars follow', () => {
+  const { doc, score } = parse('4 |: 5 6 :| 7');
+  const p = playbackScore(doc, score);
+  expect(p.orig).toEqual([0, 1, 2, 1, 2, 3]);
+  expect(p.pass).toEqual([1, 1, 1, 2, 2, 1]);
+  expect(p.score.events.map((e) => e.start)).toEqual([0, 1, 2, 3, 4, 5]);
+  expect(p.score.events.map((e) => e.index)).toEqual([0, 1, 2, 3, 4, 5]);
+  expect(p.score.totalBeats).toBe(6);
+  expect([...p.score.bars].sort((a, b) => a - b)).toEqual([1, 3, 5]);
+  expect(playbackIndexOf(p, 1)).toBe(1);
+  expect(playbackIndexOf(p, 1, 2)).toBe(3);
+  expect(playbackIndexOf(p, 3, 2)).toBe(5);
+});
+
+it('a note tied over the :| doesn’t hold through the jump back', () => {
+  const { doc, score } = parse('|: 4 5~ :| ~ 6');
+  const p = playbackScore(doc, score);
+  // Written: the 5 (2 beats) sounds 3, tied into the next bar.
+  expect(score.events[1].soundBeats).toBe(3);
+  // Played: the first 5 is followed by the jump back, the second by its tie.
+  expect(p.score.events.map((e) => e.soundBeats)).toEqual([1, 2, 1, 3, 1, 1]);
+});

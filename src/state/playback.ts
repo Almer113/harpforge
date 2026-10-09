@@ -6,6 +6,7 @@ import { soundPitch } from '../core/instruments';
 import { barAt, barPassage, barStarts, eventPassage, joinPassages, type Passage } from '../core/passage';
 import { findItem, fromDoc, realBeat } from '../core/edit/model';
 import type { PassResult } from '../core/playAlong';
+import { playbackIndexOf, playbackScore, writtenScore, type PlaybackScore } from '../core/repeats';
 import { getParsed, useApp, type AppState } from './store';
 
 /**
@@ -13,7 +14,8 @@ import { getParsed, useApp, type AppState } from './store';
  * so playback doesn't load the live inputs it listens to.
  */
 interface AlongHooks {
-  startChecking(range: Passage, looping: boolean, counted: boolean): void;
+  /** `range` is in the beats of `played`, the score as it's played (with its repeats). */
+  startChecking(range: Passage, looping: boolean, counted: boolean, played: PlaybackScore): void;
   stopChecking(record?: boolean): void;
   passEnded(reason?: 'loop' | 'end'): PassResult | null;
 }
@@ -22,11 +24,16 @@ export function setAlongHooks(hooks: AlongHooks) {
   along = hooks;
 }
 
-function onEvent(index: number, on: boolean) {
+/** A written note starts or stops sounding (`pass`: 2 when it's the repeat). */
+function onEvent(index: number, on: boolean, pass?: number) {
   useApp.setState((st) => ({
     activeEvents: on ? [...st.activeEvents.filter((x) => x !== index), index] : st.activeEvents.filter((x) => x !== index),
+    ...(on && pass !== undefined && pass !== st.playPass ? { playPass: pass } : {}),
   }));
 }
+
+// The score being played: the written one with its repeats played (see repeats.ts).
+let playing: PlaybackScore | null = null;
 
 // Bumped by stop(): a play() still waiting for the audio to start then doesn't go ahead.
 let generation = 0;
@@ -43,7 +50,7 @@ export function countBeats(bpb: number, bpm: number): number {
  * Starts (or resumes) playback. `count: false` skips the count-in (jumping to a note mid-play),
  * `count: true` counts in whatever the setting (a drill).
  */
-export async function play(opts: { count?: boolean } = {}) {
+export async function play(opts: { count?: boolean; pass?: number } = {}) {
   const s = useApp.getState();
   if (s.recording) return;
   // Playing ends a microphone calibration that's still listening.
@@ -61,8 +68,12 @@ export async function play(opts: { count?: boolean } = {}) {
     s.notify('Nothing to play yet — add some tab first.');
     return;
   }
-  const sel = s.selectedEvent !== null ? p.score.events[s.selectedEvent] : undefined;
   const range = (s.loop && s.loopRange && usablePassage(s.loopRange, p.score.totalBeats)) || undefined;
+  // Repeats play when the song plays through (a looped passage is its own repeat). The
+  // selected note starts it: its `pass`-th time when it's in a repeat (restarting there).
+  const pb = s.playRepeats && !range ? playbackScore(p.doc, p.score) : writtenScore(p.score);
+  const selAt = s.selectedEvent !== null ? playbackIndexOf(pb, s.selectedEvent, opts.pass) : undefined;
+  const sel = selAt !== undefined ? pb.score.events[selAt] : undefined;
   const bpb = beatsPerBar(p.doc.meta);
   const tempo = p.doc.meta.tempo * s.speed;
   // A loop that counts in before each pass counts in before the first one too (also when
@@ -72,27 +83,28 @@ export async function play(opts: { count?: boolean } = {}) {
   // Playing along without the tune: the clicks keep time instead.
   const alongMuted = s.along && !s.alongMelody;
   const muted = tuneMuted(s);
-  if (s.along) along?.startChecking(range ?? { start: sel?.start ?? 0, end: p.score.totalBeats }, s.loop, eachLoop);
-  engine.playScore(p.score, {
+  if (s.along) along?.startChecking(range ?? { start: sel?.start ?? 0, end: pb.score.totalBeats }, s.loop, eachLoop, pb);
+  playing = pb;
+  engine.playScore(pb.score, {
     tempo,
     startBeat: sel?.start ?? 0,
     range,
     loop: s.loop,
     countIn: counting ? countBeats(bpb, tempo) : 0,
     countEachLoop: eachLoop,
-    barStarts: barStarts(p.score),
+    barStarts: barStarts(pb.score),
     beatsPerBar: bpb,
     onLoop: loopPassed,
     muted,
     metronomeBeatsPerBar: s.metronome || alongMuted ? bpb : undefined,
-    onEvent,
+    onEvent: (i, on) => onEvent(pb.orig[i] ?? i, on, pb.pass[i]),
     onEnd: () => {
       if (useApp.getState().along) along?.passEnded('end');
       along?.stopChecking(false);
-      useApp.setState({ play: 'stopped', activeEvents: [] });
+      useApp.setState({ play: 'stopped', activeEvents: [], playPass: 1 });
     },
   });
-  useApp.setState({ play: 'playing', activeEvents: [] });
+  useApp.setState({ play: 'playing', activeEvents: [], playPass: sel ? pb.pass[sel.index] : 1 });
 }
 
 export function pause() {
@@ -111,7 +123,7 @@ export function stop() {
   along?.stopChecking();
   generation++;
   engine.stopPlayback();
-  useApp.setState({ play: 'stopped', activeEvents: [] });
+  useApp.setState({ play: 'stopped', activeEvents: [], playPass: 1 });
 }
 
 export function togglePlay() {
@@ -215,13 +227,14 @@ useApp.subscribe((s, prev) => {
   }
   // Play along (or its tune) switched while playing, or the tune went silent or came back
   // (performance mode): playback starts again from where it was, so the checking and the sound match.
-  if ((s.along !== prev.along || (s.along && s.alongMelody !== prev.alongMelody) || tuneMuted(s) !== tuneMuted(prev)) && s.play === 'playing') {
+  // Repeats switched on or off: the same, from the same note.
+  if ((s.along !== prev.along || (s.along && s.alongMelody !== prev.alongMelody) || tuneMuted(s) !== tuneMuted(prev) || s.playRepeats !== prev.playRepeats) && s.play === 'playing') {
     const beat = engine.scoreBeatNow();
-    const { score } = getParsed(s.text);
-    const at = beat === null ? undefined : [...score.events].reverse().find((ev) => ev.start <= beat + 1e-6);
+    const pb = playing ?? writtenScore(getParsed(s.text).score);
+    const at = beat === null ? undefined : [...pb.score.events].reverse().find((ev) => ev.start <= beat + 1e-6);
     stop();
-    useApp.setState({ selectedEvent: at?.index ?? s.selectedEvent });
-    void play({ count: false });
+    useApp.setState({ selectedEvent: at ? (pb.orig[at.index] ?? s.selectedEvent) : s.selectedEvent });
+    void play({ count: false, pass: at ? pb.pass[at.index] : undefined });
   }
 });
 

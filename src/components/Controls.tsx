@@ -172,14 +172,15 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
   const samplesStatus = useApp((s) => s.samplesStatus);
   const countIn = useApp((s) => s.countIn);
   const countEachLoop = useApp((s) => s.countEachLoop);
+  const playRepeats = useApp((s) => s.playRepeats);
   const { doc } = useParsed();
   const showSpeed = withSpeed && speed !== 1;
   return (
     <Popover
       label={`♫ ${soundMode === 'samples' ? 'Real' : 'Synth'}${showSpeed ? ` · ${Math.round(speed * 100)}%` : ''} ▾`}
       buttonClass="btn small ghost"
-      title={withSpeed ? 'Sound, speed and counting in: the real harmonica (recordings) or a synthesized reed' : 'Sound and counting in: the real harmonica (recordings) or a synthesized reed'}
-      ariaLabel={withSpeed ? 'Sound, speed and counting in' : 'Sound and counting in'}
+      title={withSpeed ? 'Sound, speed, counting in and repeats' : 'Sound, counting in and repeats'}
+      ariaLabel={withSpeed ? 'Sound, speed, counting in and repeats' : 'Sound, counting in and repeats'}
       kind="panel"
       panelClass="menu pb-menu"
     >
@@ -212,6 +213,12 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
           Count in before each pass
         </label>
         <span className="mi-hint pb-hint">A breath between passes when looping</span>
+        <span className="pb-head">Repeats</span>
+        <label className="check">
+          <input type="checkbox" checked={playRepeats} onChange={(e) => useApp.setState({ playRepeats: e.target.checked })} />
+          Play repeats
+        </label>
+        <span className="mi-hint pb-hint">Sections between |: and :| play twice (not when looping a passage)</span>
       </div>
     </Popover>
   );
