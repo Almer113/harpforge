@@ -108,9 +108,27 @@ w: one two three four five six se-ven
   it('writes the tab as a lyric line and handles triplets', () => {
     const doc = parseHtab('{4 5 6} -4~ |').doc;
     const { text } = writeAbc(doc, C, { tabLine: true });
-    expect(text).toMatch(/\(3c e g d'?4?/);
+    // (The triplet's notes beamed together.)
+    expect(text).toMatch(/\(3ceg d4/);
     expect(text).toContain('w: 4 5 6 \\-4');
     expect(flat(parseAbc(text).doc)).toEqual(['C5:0.333', 'E5:0.333', 'G5:0.333', 'D5:2']);
+  });
+});
+
+describe('staff beams', () => {
+  /** The music line of a one-line tab, as ABC. */
+  const abcOf = (body: string, time = '4/4') => writeAbc(parseHtab(`---\ntime: ${time}\n---\n${body}\n`).doc, C).text.split('\n').find((l) => l.includes('|'))!;
+  it('beams the eighths and sixteenths in each beat, not across beats, rests or longer notes', () => {
+    expect(abcOf('{4 5} {6 -6} 4 {5 .} |')).toBe('ce ga c2 e z |');
+    expect(abcOf('{4 5 6 -6} {4 5} 6~ |')).toBe('c/e/g/a/ ce g4 |');
+  });
+  it('in 6/8, three eighths a beam (a dotted-quarter beat)', () => {
+    expect(abcOf('{4 5 6}~~/2 {-6 4 5}~~/2 |', '6/8')).toBe('ceg ace |');
+  });
+  it('the words stay on their notes', () => {
+    const doc = parseHtab('---\ntitle: B\n---\n{4 5} {6 -6} |\nw: a b c d\n').doc;
+    const back = parseAbc(writeAbc(doc, C).text).doc;
+    expect(back.lines[0].events.filter((e) => e.kind === 'note').map((e) => (e.kind === 'note' ? e.lyric : ''))).toEqual(['a', 'b', 'c', 'd']);
   });
 });
 

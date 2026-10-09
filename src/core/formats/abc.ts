@@ -512,7 +512,16 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
   const order: [number, number][] = [];
   let lastTieable: number | null = null;
   // The previous line's notes, and where it is in `out`: a tie from its last note is marked there.
-  let prevLine: { parts: string[]; at: number; tieable: number | null } | null = null;
+  let prevLine: { parts: string[]; glued: Set<number>; at: number; tieable: number | null } | null = null;
+  // Beams: notes shorter than a beat are written touching ("cd", not "c d") within a beat — a
+  // dotted quarter in 3/8, 6/8, 9/8 and 12/8 — so the staff beams them; rests and longer notes
+  // break the beam. `pos` is where in the bar the next note starts (in quarter beats).
+  const [timeTop, timeBottom] = (/^(\d+)\s*\/\s*(\d+)$/.exec(meta.time) ?? []).slice(1).map(Number);
+  const beamBeat = timeBottom === 8 && timeTop % 3 === 0 ? 1.5 : 1;
+  let pos = 0;
+  let beam: { group: number; end: number } | null = null;
+  /** The parts written, as a line: a part in `glued` touches the one before it (a beam). */
+  const lineOf = (parts: string[], glued: Set<number>) => parts.map((p, k) => (k === 0 || glued.has(k) ? p : ' ' + p)).join('');
 
   doc.lines.forEach((line, li) => {
     if (line.section) out.push(`P:${line.section}`);
@@ -520,6 +529,9 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
     let barAcc: Record<string, number> = {};
     const sig = keySignature(fifths);
     const parts: string[] = [];
+    const glued = new Set<number>();
+    // (A beam doesn't go on from one line to the next.)
+    beam = null;
     lastTieable = null;
     // Each verse's syllables, a slot per note ("*": none). (One verse picked: a line with fewer shows its own.)
     const lineList = lineShown(line, verses);
@@ -548,6 +560,8 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
       if (e.kind === 'bar') {
         parts.push({ single: '|', double: '||', final: '|]', 'repeat-start': '|:', 'repeat-end': ':|' }[e.style]);
         barAcc = {};
+        pos = 0;
+        beam = null;
         i++;
         continue;
       }
@@ -578,23 +592,33 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
       const len = lengthText(ev.beats * sc, unit);
       const chord = ev.chord && withChords ? `"${ev.chord.replace(/"/g, '')}"` : '';
       order.push([l, ei]);
+      const start = pos;
+      pos += ev.beats;
       if (ev.kind === 'rest') {
         parts.push(`${prefix}${chord}z${len}`);
         lastTieable = null;
+        beam = null;
         return;
       }
       const midis = eventMidis(ev, harp);
       if (!midis.length) {
         parts.push(`${prefix}${chord}z${len}`);
         lastTieable = null;
+        beam = null;
         return;
       }
+      // Shorter than a beat: beamed to the note before when it's in the same beat and follows on.
+      const group = Math.floor((start + 1e-6) / beamBeat);
+      if (ev.beats < 1 - 1e-6) {
+        if (beam && beam.group === group && Math.abs(beam.end - start) < 1e-6) glued.add(parts.length);
+        beam = { group, end: pos };
+      } else beam = null;
       const body = midis.length === 1 ? noteText(midis[0]) : `[${midis.map(noteText).join('')}]`;
       if (ev.tied && lastTieable !== null) parts[lastTieable] += '-';
       else if (ev.tied && lastTieable === null && !parts.some((p) => /[A-Ga-gz]/.test(p)) && prevLine?.tieable != null) {
         // A tie over the line break: the "-" goes on the last note of the line before.
         prevLine.parts[prevLine.tieable] += '-';
-        out[prevLine.at] = prevLine.parts.join(' ');
+        out[prevLine.at] = lineOf(prevLine.parts, prevLine.glued);
         prevLine.tieable = null;
       }
       parts.push(`${prefix}${chord}${body}${len}`);
@@ -615,8 +639,8 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
       tabs.push(tabToken(ev));
     }
 
-    out.push(parts.join(' '));
-    prevLine = { parts, at: out.length - 1, tieable: lastTieable };
+    out.push(lineOf(parts, glued));
+    prevLine = { parts, glued, at: out.length - 1, tieable: lastTieable };
     if (tabLine && tabs.some((t) => t !== '*')) out.push('w: ' + tabs.join(' '));
     // Each verse up to the last with words here (an empty one keeps its row: "w: * *").
     const lastVerse = withLyrics ? lyr.map((l) => l.some((t) => t !== '*')).lastIndexOf(true) : -1;
