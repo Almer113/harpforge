@@ -9,7 +9,7 @@ import { setMetaFields } from '../core/htab/meta';
 import { parseHtab, splitHeader } from '../core/htab/parser';
 import { allOptions, canOver, maxBend, soundPitch, type Harmonica } from '../core/instruments';
 import type { HoleSound, Sound } from '../core/types';
-import { getParsed, useApp } from './store';
+import { getParsed, useApp, type VisualState } from './store';
 
 export function currentSong(): Song {
   return fromDoc(getParsed(useApp.getState().text).doc);
@@ -57,6 +57,11 @@ export function retabSelection(shift: number) {
   const also = kept ? ` ${kept}` : '';
   if (shift === 0) st.notify(`Made ${what} easier: ${r.changed} note${r.changed === 1 ? '' : 's'} changed (${tech(r.before)} → ${tech(r.after)}).${also}`);
   else st.notify(`Moved ${what} ${Math.abs(shift) === 12 ? 'an octave' : `${Math.abs(shift)} semitone${Math.abs(shift) === 1 ? '' : 's'}`} ${shift > 0 ? 'up' : 'down'}${lost}.${also}`);
+}
+
+/** The length a new note (or rest block) gets: the length tool, dotted or triplet. */
+export function toolDuration(ve: VisualState): number {
+  return ve.dur * (ve.dotted ? 1.5 : 1) * (ve.triplet ? 2 / 3 : 1);
 }
 
 /** Writes a song back into the text as one undo step ('typing' groups keystrokes). */

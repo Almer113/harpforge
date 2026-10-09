@@ -251,3 +251,17 @@
 .fill-blocks { font-size: 13px; }
 .fill-gap:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 @media (max-width: 760px) { .fill-grid { grid-template-columns: 1fr; } }
+
+/* ---------- Rest blocks: words or a chord on a rest ---------- */
+/* Over empty space, the lyrics and chord rows say what a click there does. */
+.ve-lane[data-hint]::after {
+  content: attr(data-hint); position: absolute; left: var(--hint-x); width: var(--hint-w); height: 15px; z-index: 1; pointer-events: none;
+  display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap;
+  border: 1px dashed rgba(227, 169, 72, 0.6); border-radius: 4px; color: var(--brass-2); font-size: 10px; font-weight: 600;
+}
+.ve-lane[data-hint-row='lyric']::after { bottom: 4px; }
+.ve-lane[data-hint-row='chord']::after { top: 4px; }
+.ve-lane[data-hint] { cursor: text; }
+/* The rest block being made: dashed, until it has its words or chord. */
+.ve-item.ghost-rest { border-style: dashed; border-color: var(--brass-2); background: rgba(227, 169, 72, 0.06); z-index: 3; }
+.ve-chord-input { top: 1px; bottom: auto; font-style: normal; font-weight: 700; }

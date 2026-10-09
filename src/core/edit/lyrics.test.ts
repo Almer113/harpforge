@@ -105,3 +105,19 @@ it('moves lyrics a note later or earlier from a note on', () => {
   expect(words(earlier.song)).toEqual(['b', 'c', '', '']);
   expect(earlier.lost).toBe('a');
 });
+
+it('a rest block fits the empty space it’s made in', async () => {
+  const { restSlot, nextBeat } = await import('./lyrics');
+  const s = song('4 . . 5 |');
+  // On the first empty beat: a quarter as asked; asked for more, cut before the 5.
+  expect(restSlot(s, { m: 0, start: 1 }, 1)).toEqual({ pos: { m: 0, start: 1 }, dur: 1 });
+  expect(restSlot(s, { m: 0, start: 1 }, 4)).toEqual({ pos: { m: 0, start: 1 }, dur: 2 });
+  // On a note: none.
+  expect(restSlot(s, { m: 0, start: 0 }, 1)).toBeNull();
+  // After the 4: the empty beat (a rest block to make); after the 5: past the end, none.
+  expect(nextBeat(s, { m: 0, start: 0 }, 1)).toEqual({ pos: { m: 0, start: 1 }, dur: 1 });
+  expect(nextBeat(s, { m: 0, start: 3 }, 1)).toBeNull();
+  // Over a bar line, past a tie.
+  const t = song('4 5~ | ~ 6 . . |');
+  expect(nextBeat(t, { m: 0, start: 1 }, 1)).toEqual({ pos: { m: 1, start: 1 } });
+});

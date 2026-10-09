@@ -5,9 +5,9 @@
 // click under a note starts it; the verse switch says which verse you're typing.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { lyricStart, shownLyric, songVerseCount, typeLyric, type LyricKey } from '../../core/edit/lyrics';
-import { samePos, type Pos, type Song } from '../../core/edit/model';
-import { commitSong, currentSong } from '../../state/editor';
+import { lyricStart, nextBeat, shownLyric, songVerseCount, stepSingable, typeLyric, type LyricKey } from '../../core/edit/lyrics';
+import { findItem, placeItem, samePos, type Pos, type Song } from '../../core/edit/model';
+import { commitSong, currentSong, toolDuration } from '../../state/editor';
 import { useApp } from '../../state/store';
 
 // Syllables typed one after another are one undo step a word (a new word, a new step).
@@ -37,18 +37,29 @@ export function startLyrics(at?: Pos) {
     return;
   }
   word++;
-  st.setVe({ lyricAt: p, selection: [p], anchor: p, measure: p.m });
+  st.setVe({ lyricAt: p, restDraft: undefined, selection: [p], anchor: p, measure: p.m });
+}
+
+/** A rest block being made at `pos` (empty space), for a syllable (lyrics mode) or a chord. */
+export function openRestBlock(pos: Pos, dur: number, field: 'lyric' | 'chord') {
+  flushOpen?.();
+  carry = null;
+  if (field === 'lyric') word++;
+  useApp.getState().setVe({ restDraft: { pos, dur, field }, lyricAt: field === 'lyric' ? pos : undefined, selection: [], measure: pos.m });
 }
 
 /** Ends lyrics mode, keeping what's typed. */
 export function stopLyrics() {
   flushOpen?.();
   carry = null;
-  useApp.getState().setVe({ lyricAt: undefined });
+  useApp.getState().setVe({ lyricAt: undefined, restDraft: undefined });
 }
 
-/** The typing box on the note at `pos`. */
-export function LyricInput({ pos, verse }: { pos: Pos; verse: number }) {
+/**
+ * The typing box on the note at `pos`. `draft`: on a rest block being made there (its length),
+ * which comes into being with the first syllable typed (left empty, nothing changes).
+ */
+export function LyricInput({ pos, verse, draft }: { pos: Pos; verse: number; draft?: number }) {
   // What the box shows to begin with (its syllable, without a joining "-").
   const was = useMemo(() => shownLyric(currentSong(), pos, verse), [pos, verse]);
   // (Text carried on from the box before, when a whole line was pasted or typed at once.)
@@ -81,6 +92,14 @@ export function LyricInput({ pos, verse }: { pos: Pos; verse: number }) {
   /** Writes what's typed (`key` decides the joining and where the box goes next). */
   const write = (key: LyricKey): { song: Song; next: Pos | null } => {
     const song = currentSong();
+    // A rest block being made: nothing typed, nothing made; else it's made with its syllable.
+    if (draft !== undefined && !findItem(song, pos)) {
+      if (!live.current.text.trim()) return { song, next: key === 'done' ? null : stepSingable(song, pos, key === 'prev' ? -1 : 1) };
+      const made = placeItem(song, pos.m, { start: pos.start, dur: draft, sounds: [] });
+      const r = typeLyric(made, pos, verse, live.current.text, live.current.was, key);
+      commitSong(r.song, `typing:lyrics-${word}`);
+      return r;
+    }
     const r = typeLyric(song, pos, verse, live.current.text, live.current.was, key);
     if (r.song !== song) commitSong(r.song, `typing:lyrics-${word}`);
     return r;
@@ -97,17 +116,30 @@ export function LyricInput({ pos, verse }: { pos: Pos; verse: number }) {
   });
 
   /** Writes what's typed and moves on (`pasted`: part of a paste, which is one undo step). */
-  const finish = (key: LyricKey | 'cancel', pasted = false) => {
+  const finish = (key: LyricKey | 'cancel' | 'beat', pasted = false) => {
     if (!isOpen()) return;
     const st = useApp.getState();
     if (key === 'cancel') {
-      st.setVe({ lyricAt: undefined });
+      st.setVe({ lyricAt: undefined, restDraft: undefined });
+      return;
+    }
+    // Alt+Space: on to the next beat even when it's a rest (a rest block is made there to sing on).
+    if (key === 'beat') {
+      const { song } = write('next');
+      const at = findItem(song, pos) ? nextBeat(song, pos, toolDuration(st.ve)) : null;
+      word++;
+      if (at?.dur !== undefined) {
+        st.setVe({ lyricAt: at.pos, restDraft: { pos: at.pos, dur: at.dur, field: 'lyric' }, selection: [], measure: at.pos.m });
+        return;
+      }
+      st.setVe({ lyricAt: at?.pos, restDraft: undefined, selection: [at?.pos ?? pos], anchor: at?.pos ?? pos, measure: (at?.pos ?? pos).m });
+      if (!at) st.notify('That was the last note.');
       return;
     }
     const { next } = write(key);
     // (A word ends on anything but "-": the next one is a new undo step.)
     if (key !== 'join' && !pasted) word++;
-    st.setVe({ lyricAt: next ?? undefined, selection: [next ?? pos], anchor: next ?? pos, measure: (next ?? pos).m });
+    st.setVe({ lyricAt: next ?? undefined, restDraft: undefined, selection: [next ?? pos], anchor: next ?? pos, measure: (next ?? pos).m });
     if (!next && key !== 'done' && key !== 'prev' && !pasted) st.notify('That was the last note.');
   };
 
@@ -172,8 +204,9 @@ export function LyricInput({ pos, verse }: { pos: Pos; verse: number }) {
           insert(key === ' ' ? '\u00a0' : '\u2010');
           return;
         }
-        let action: LyricKey | 'cancel' | null = null;
-        if (key === ' ' || key === 'Tab') action = e.shiftKey ? 'prev' : 'next';
+        let action: LyricKey | 'cancel' | 'beat' | null = null;
+        if (key === ' ' && e.altKey) action = 'beat';
+        else if (key === ' ' || key === 'Tab') action = e.shiftKey ? 'prev' : 'next';
         else if (key === '-') action = 'join';
         else if (key === '_') action = 'hold';
         else if (key === 'Enter') action = 'done';
@@ -251,13 +284,54 @@ export function VerseSwitch({ song }: { song: Song }) {
 }
 
 /** The keys of lyrics mode, said once for screen readers (the box points here). */
-export const LYRIC_KEYS = 'Space: next note · - joins the next syllable · _ holds over the next note · Shift+Space or Backspace: back · Enter: done · Esc: leave · Ctrl+Space: a space in the syllable · Ctrl+-: a real hyphen';
+export const LYRIC_KEYS = 'Space: next note · - joins the next syllable · _ holds over the next note · Alt+Space: the next beat, even a rest · Shift+Space or Backspace: back · Enter: done · Esc: leave · Ctrl+Space: a space in the syllable · Ctrl+-: a real hyphen';
 
 // Leaving the editor (or its visual view) leaves lyrics mode, keeping what's typed.
 useApp.subscribe((s) => {
-  if (s.ve.lyricAt && (s.page !== 'editor' || s.editorMode !== 'visual')) {
+  if ((s.ve.lyricAt || s.ve.restDraft) && (s.page !== 'editor' || s.editorMode !== 'visual')) {
     flushOpen?.();
     carry = null;
-    useApp.getState().setVe({ lyricAt: undefined });
+    useApp.getState().setVe({ lyricAt: undefined, restDraft: undefined });
   }
 });
+
+/** The chord box on a rest block being made: Enter (or clicking away) puts the chord there, Esc leaves. */
+export function RestChordInput({ pos, dur }: { pos: Pos; dur: number }) {
+  const [text, setText] = useState('');
+  const box = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    box.current?.focus({ preventScroll: true });
+  }, []);
+  const done = (keep: boolean) => {
+    const st = useApp.getState();
+    const draft = st.ve.restDraft;
+    if (!draft || !samePos(draft.pos, pos)) return;
+    const chord = text.trim();
+    if (keep && chord) {
+      const song = currentSong();
+      if (!findItem(song, pos)) commitSong(placeItem(song, pos.m, { start: pos.start, dur, sounds: [], chord }));
+      st.setVe({ restDraft: undefined, selection: [pos], anchor: pos, measure: pos.m });
+      return;
+    }
+    st.setVe({ restDraft: undefined });
+  };
+  return (
+    <input
+      ref={box}
+      className="ve-lyric-input ve-chord-input"
+      value={text}
+      size={Math.max(4, text.length + 1)}
+      placeholder="G7"
+      aria-label="Chord on this rest (Enter puts it there, Esc leaves)"
+      onChange={(e) => setText(e.target.value.replace(/\s/g, ''))}
+      onPointerDown={(e) => e.stopPropagation()}
+      onBlur={() => document.hasFocus() && done(true)}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== 'Escape') return;
+        e.preventDefault();
+        e.stopPropagation();
+        done(e.key === 'Enter');
+      }}
+    />
+  );
+}

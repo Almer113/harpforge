@@ -50,7 +50,7 @@ import { onPitchPlayed, onPlayed } from '../../live/livePlayer';
 import { chooseSound, neighbours, offHarp, stepNotes, stepScale } from '../../core/edit/notes';
 import { MIC_ID } from '../../live/inputs';
 import { useHarmonicaKeyboard } from '../../live/useHarmonicaKeyboard';
-import { commitSong, DURATIONS, describeDuration, durationLabel, retabSelection, stepPitch } from '../../state/editor';
+import { commitSong, DURATIONS, describeDuration, durationLabel, retabSelection, stepPitch, toolDuration } from '../../state/editor';
 import { Popover } from '../Popover';
 import { InsertIcon, OverwriteIcon } from '../icons';
 import { MicControl, MidiControl } from '../InputBar';
@@ -63,16 +63,14 @@ import { Inspector } from './Inspector';
 import { isTyping, keysTaken, overlayOpen } from '../../live/focus';
 import { copyText, pasteText } from '../../core/edit/clipboard';
 import { openShortcuts } from '../Shortcuts';
-import { LYRIC_KEYS, LyricInput, LyricsButton, startLyrics, stopLyrics, VerseSwitch } from './LyricEntry';
+import { LYRIC_KEYS, LyricInput, LyricsButton, openRestBlock, RestChordInput, startLyrics, stopLyrics, VerseSwitch } from './LyricEntry';
 import { FillLyricsDialog } from './FillLyrics';
-import { clearLyrics, shiftLyrics, songVerseCount } from '../../core/edit/lyrics';
+import { clearLyrics, restSlot, shiftLyrics, songVerseCount } from '../../core/edit/lyrics';
 import { lyricOf } from '../../core/verses';
 
 // ---- Helpers shared with the inspector ------------------------------------------------
 
-export function toolDuration(ve: VisualState): number {
-  return ve.dur * (ve.dotted ? 1.5 : 1) * (ve.triplet ? 2 / 3 : 1);
-}
+export { toolDuration };
 
 /** The grid for a click in an empty slot: the snap setting, or (auto) the length about to be written. */
 function clickGrid(ve: VisualState): number {
@@ -830,6 +828,8 @@ type Piece = { start: number; len: number };
 interface MeasureHandlers {
   itemDown: (e: React.PointerEvent, pos: Pos, item: Item) => void;
   laneDown: (e: React.PointerEvent, m: number) => void;
+  laneMove: (e: React.PointerEvent, m: number) => void;
+  laneLeave: (e: React.PointerEvent) => void;
   laneDouble: (e: React.MouseEvent, m: number) => void;
   numClick: (e: React.MouseEvent, m: number) => void;
 }
@@ -847,6 +847,7 @@ function Score({ song, flats, showSecond, asNotes }: { song: Song; flats: Spelli
   const current = useApp((s) => s.ve.measure);
   const verse = useApp((s) => s.ve.verse);
   const lyricAt = useApp((s) => s.ve.lyricAt);
+  const restDraft = useApp((s) => s.ve.restDraft);
   const clickGridNow = useApp((s) => clickGrid(s.ve));
   const activeEvents = useApp((s) => s.activeEvents);
   const loopRange = useApp((s) => (s.loop ? s.loopRange : null));
@@ -1013,13 +1014,45 @@ function Score({ song, flats, showSecond, asNotes }: { song: Song; flats: Spelli
         if (item.sounds.length && !resize) playSounds(item.sounds, chainLength(song, chainAt(song, pos)));
       },
       laneDown: (e, m) => {
+        // (The hint goes with a click: what's there changes.)
+        delete (e.currentTarget as HTMLElement).dataset.hint;
         if (e.button !== 0 || (e.target as HTMLElement).closest('.ve-item')) return;
-        if (useApp.getState().ve.lyricAt) stopLyrics();
+        if (useApp.getState().ve.lyricAt || useApp.getState().ve.restDraft) stopLyrics();
         const { song, zoom } = live.current;
         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
         const g = clickGrid(useApp.getState().ve);
         const start = Math.max(0, Math.min(song.cap - g, Math.floor((e.clientX - r.left) / zoom / g + EPS) * g));
+        // Under empty space (the lyrics row) or above it (the chord row): a rest block there,
+        // to sing a syllable over or to carry a chord.
+        const row = laneRow(e, r);
+        const slot = row && !e.shiftKey && !e.ctrlKey && !e.metaKey ? restSlot(song, { m, start }, toolDuration(useApp.getState().ve)) : null;
+        if (row && slot) {
+          e.preventDefault();
+          openRestBlock(slot.pos, slot.dur, row);
+          return;
+        }
         setVe({ caret: { m, start }, selection: [], measure: m });
+      },
+      // The hint over empty space's lyrics and chord rows ("+ words", "+ chord"), drawn by the lane itself.
+      laneMove: (e, m) => {
+        const lane = e.currentTarget as HTMLElement;
+        const { song, zoom } = live.current;
+        const r = lane.getBoundingClientRect();
+        const row = (e.target as HTMLElement).closest('.ve-item') ? null : laneRow(e, r);
+        const g = clickGrid(useApp.getState().ve);
+        const start = Math.max(0, Math.min(song.cap - g, Math.floor((e.clientX - r.left) / zoom / g + EPS) * g));
+        const slot = row ? restSlot(song, { m, start }, toolDuration(useApp.getState().ve)) : null;
+        if (!row || !slot) {
+          delete lane.dataset.hint;
+          return;
+        }
+        lane.dataset.hint = row === 'lyric' ? '+ words' : '+ chord';
+        lane.dataset.hintRow = row;
+        lane.style.setProperty('--hint-x', `${slot.pos.start * zoom}px`);
+        lane.style.setProperty('--hint-w', `${Math.max(slot.dur * zoom - 3, 3)}px`);
+      },
+      laneLeave: (e) => {
+        delete (e.currentTarget as HTMLElement).dataset.hint;
       },
       laneDouble: (e, m) => {
         if ((e.target as HTMLElement).closest('.ve-item')) return;
@@ -1134,6 +1167,7 @@ function Score({ song, flats, showSecond, asNotes }: { song: Song; flats: Spelli
             fading={fading?.m === mi ? +fading.start.toFixed(4) : null}
             verse={verse}
             typing={lyricAt?.m === mi ? +lyricAt.start.toFixed(4) : null}
+            draft={restDraft?.pos.m === mi ? `${restDraft.pos.start}:${restDraft.dur}:${restDraft.field}` : ''}
             handlers={handlers}
           />
         ))}
@@ -1182,7 +1216,32 @@ interface MeasureProps {
   /** The verse its lyrics show (0 = verse 1), and the note whose syllable is being typed. */
   verse: number;
   typing: number | null;
+  /** A rest block being made here ("start:length:lyric|chord"), or "". */
+  draft: string;
   handlers: MeasureHandlers;
+}
+
+/** Which row of an empty lane the pointer is in: the lyrics row under the notes, the chord row above, or neither. */
+function laneRow(e: { clientY: number }, r: DOMRect): 'lyric' | 'chord' | null {
+  const y = e.clientY - r.top;
+  return y > r.height - 21 ? 'lyric' : y < 21 ? 'chord' : null;
+}
+
+/** A rest block being made (words or a chord on a rest): dashed, with its box. */
+function DraftRest({ draft, m, zoom, verse, cardW }: { draft: string; m: number; zoom: number; verse: number; cardW: (n: number) => number }) {
+  const [startText, durText, field] = draft.split(':');
+  const start = Number(startText);
+  const dur = Number(durText);
+  const pos = useMemo(() => ({ m, start }), [m, start]);
+  return (
+    <div className="ve-item rest ghost-rest" style={{ left: start * zoom, width: cardW(dur) }}>
+      <span className="ve-chord">{field === 'chord' && <RestChordInput pos={pos} dur={dur} />}</span>
+      <span className="ve-glyphs">
+        <span className="rest-glyph">𝄽</span>
+      </span>
+      <span className="ve-lyric">{field === 'lyric' && <LyricInput key={verse} pos={pos} verse={verse} draft={dur} />}</span>
+    </div>
+  );
 }
 
 /** Redraw a measure only when something it shows has changed. */
@@ -1231,6 +1290,8 @@ const MeasureView = memo(function MeasureView(p: MeasureProps) {
           // Grid background: faint lines at the snap (auto: the grid a click or the dragged note uses), stronger on beats.
           style={{ width: Math.max(cap, len) * zoom, backgroundSize: `${zoom}px 100%, ${zoom * p.grid}px 100%` }}
           onPointerDown={(e) => handlers.laneDown(e, mi)}
+          onPointerMove={(e) => handlers.laneMove(e, mi)}
+          onPointerLeave={(e) => handlers.laneLeave(e)}
           onDoubleClick={(e) => handlers.laneDouble(e, mi)}
         >
           {meas.len !== undefined && meas.len < cap - EPS && len < cap - EPS && (
@@ -1290,6 +1351,7 @@ const MeasureView = memo(function MeasureView(p: MeasureProps) {
               </div>
             );
           })}
+          {p.draft && <DraftRest draft={p.draft} m={mi} zoom={zoom} verse={p.verse} cardW={cardW} />}
           {p.caret !== null && <span className="ve-caret" style={{ left: p.caret * zoom }} />}
           {p.ghosts?.map((g) => <span key={`g${g.start}`} className={`ve-ghost ${g.copy ? 'copy' : ''}`} style={{ left: g.start * zoom, width: cardW(g.len) }} />)}
           {p.resizes?.map((g) => <span key={`r${g.start}`} className="ve-resize-ghost" style={{ left: g.start * zoom, width: cardW(g.len) }} />)}

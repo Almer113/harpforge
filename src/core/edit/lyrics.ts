@@ -4,7 +4,7 @@
 
 import { hasLyrics, lyricOf, setLyricOf } from '../verses';
 import { splitLyrics } from '../htab/parser';
-import { allPositions, cloneSong, EPS, findItem, updateItem, type Pos, type Song } from './model';
+import { allPositions, cloneSong, EPS, findItem, measureSpan, updateItem, type Pos, type Song } from './model';
 
 /**
  * The notes that take a syllable, in order, as a "w:" line counts them: played notes (a tie
@@ -151,4 +151,47 @@ export function shiftLyrics(song: Song, from: Pos, verse: number, dir: 1 | -1): 
   const lost = dir === 1 ? syls[syls.length - 1] : syls[0];
   const s = setLyrics(song, notes.flatMap((pos, k) => (moved[k] !== syls[k] ? [{ pos, text: moved[k] }] : [])), verse);
   return { song: s, lost };
+}
+
+/**
+ * A rest block for words or a chord at `pos` in empty space (a rest): as long as `wanted`,
+ * cut to fit before the next note and the end of the bar. Null when `pos` isn't empty.
+ */
+export function restSlot(song: Song, pos: Pos, wanted: number): { pos: Pos; dur: number } | null {
+  const meas = song.measures[pos.m];
+  if (!meas) return null;
+  if (meas.items.some((it) => pos.start >= it.start - EPS && pos.start < it.start + it.dur - EPS)) return null;
+  const next = Math.min(measureSpan(song, meas), ...meas.items.filter((it) => it.start > pos.start + EPS).map((it) => it.start));
+  const dur = Math.min(wanted, next - pos.start);
+  return dur > EPS ? { pos, dur } : null;
+}
+
+/**
+ * What comes right after the note at `pos` (lyrics mode's Alt+Space): the next note or rest
+ * block, or a rest block to make in the empty space there (`dur`: as long as `wanted`).
+ */
+export function nextBeat(song: Song, pos: Pos, wanted: number): { pos: Pos; dur?: number } | null {
+  const it = findItem(song, pos);
+  if (!it) return null;
+  let m = pos.m;
+  let start = pos.start + it.dur;
+  // (Past the bar's end: the next bar's start; a note tied on is skipped, it isn't sung again.)
+  for (let guard = 0; guard < 64; guard++) {
+    const meas = song.measures[m];
+    if (!meas) return null;
+    if (start >= measureSpan(song, meas) - EPS) {
+      m++;
+      start = 0;
+      continue;
+    }
+    const at = meas.items.find((x) => Math.abs(x.start - start) < EPS);
+    if (at?.tied) {
+      start += at.dur;
+      continue;
+    }
+    if (at) return { pos: { m, start } };
+    const slot = restSlot(song, { m, start }, wanted);
+    return slot ? { pos: slot.pos, dur: slot.dur } : null;
+  }
+  return null;
 }

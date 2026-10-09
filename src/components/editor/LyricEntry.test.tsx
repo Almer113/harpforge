@@ -3,11 +3,11 @@
 
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../audio/engine', async () => (await import('../../test/fakeEngine')).fakeEngine());
 
-import { LyricInput, startLyrics, stopLyrics } from './LyricEntry';
+import { LyricInput, openRestBlock, RestChordInput, startLyrics, stopLyrics } from './LyricEntry';
 import { useApp } from '../../state/store';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -20,7 +20,9 @@ let root: ReturnType<typeof createRoot>;
 function Box() {
   const at = useApp((st) => st.ve.lyricAt);
   const verse = useApp((st) => st.ve.verse);
-  return at ? <LyricInput key={`${at.m}:${at.start}`} pos={at} verse={verse} /> : null;
+  // (A rest block being made has its own box, drawn by Draft.)
+  const drafting = useApp((st) => !!st.ve.restDraft);
+  return at && !drafting ? <LyricInput key={`${at.m}:${at.start}`} pos={at} verse={verse} /> : null;
 }
 
 const box = () => host.querySelector<HTMLInputElement>('.ve-lyric-input')!;
@@ -33,8 +35,8 @@ async function change(value: string) {
     box().dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
-async function key(k: string, shiftKey = false) {
-  await act(async () => box().dispatchEvent(new KeyboardEvent('keydown', { key: k, shiftKey, bubbles: true, cancelable: true })));
+async function key(k: string, shiftKey = false, altKey = false) {
+  await act(async () => box().dispatchEvent(new KeyboardEvent('keydown', { key: k, shiftKey, altKey, bubbles: true, cancelable: true })));
 }
 
 beforeEach(async () => {
@@ -87,4 +89,59 @@ it('types into the verse chosen', async () => {
   await key('Enter');
   expect(lyrics()).toEqual(['w:', 'w: one two']);
   await act(async () => useApp.setState((st) => ({ ve: { ...st.ve, verse: 0 } })));
+});
+
+describe('words and chords on rests (empty space)', () => {
+  const lineOf = () => s().text.split('\n').filter((l) => /\|/.test(l) || l.startsWith('w:'));
+  /** The draft rest block as the editor draws it: its box. */
+  function Draft() {
+    const draft = useApp((st) => st.ve.restDraft);
+    const verse = useApp((st) => st.ve.verse);
+    if (!draft) return null;
+    return draft.field === 'lyric' ? <LyricInput key={`d${draft.pos.start}`} pos={draft.pos} verse={verse} draft={draft.dur} /> : <RestChordInput pos={draft.pos} dur={draft.dur} />;
+  }
+  beforeEach(async () => {
+    await act(async () => root.render(<><Box /><Draft /></>));
+    await act(async () => s().loadText('---\ntitle: T\n---\n4 . 5 6 |\nw: Hey there you\n', null));
+  });
+
+  it('a syllable typed under empty space makes a sung rest ("_")', async () => {
+    await act(async () => openRestBlock({ m: 0, start: 1 }, 1, 'lyric'));
+    await change('oh');
+    await key('Enter');
+    expect(lineOf()).toEqual(['4 _ 5 6 |', 'w: Hey oh there you']);
+    expect(s().ve.restDraft).toBeUndefined();
+  });
+
+  it('left empty (or Esc), nothing changes', async () => {
+    const before = s().text;
+    await act(async () => openRestBlock({ m: 0, start: 1 }, 1, 'lyric'));
+    await key('Enter');
+    expect(s().text).toBe(before);
+    await act(async () => openRestBlock({ m: 0, start: 1 }, 1, 'lyric'));
+    await change('oh');
+    await key('Escape');
+    expect(s().text).toBe(before);
+  });
+
+  it('a chord typed above empty space puts it on the rest', async () => {
+    await act(async () => openRestBlock({ m: 0, start: 1 }, 1, 'chord'));
+    await act(async () => {
+      const el = host.querySelector<HTMLInputElement>('.ve-chord-input')!;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, 'G7');
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    expect(lineOf()[0]).toBe('4 [G7] . 5 6 |');
+  });
+
+  it('Alt+Space steps onto the rest after a note; Space skips it', async () => {
+    await act(async () => startLyrics());
+    await key(' ', false, true);
+    expect(s().ve.restDraft?.pos).toEqual({ m: 0, start: 1 });
+    await key('Escape');
+    await act(async () => startLyrics());
+    await key(' ');
+    expect(s().ve.lyricAt).toEqual({ m: 0, start: 2 });
+  });
 });

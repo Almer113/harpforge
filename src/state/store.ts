@@ -97,6 +97,8 @@ export interface VisualState {
   verse: number;
   /** Lyrics mode: the note whose syllable is being typed. */
   lyricAt?: import('../core/edit/model').Pos;
+  /** A rest block being made in empty space, for words (lyrics mode) or a chord. */
+  restDraft?: { pos: import('../core/edit/model').Pos; dur: number; field: 'lyric' | 'chord' };
 }
 
 /** A file or pasted text waiting in the import dialog. */
@@ -548,7 +550,7 @@ export const useApp = create<AppState>((set) => ({
   loadSeq: 0,
   loadText: (text, docId = null, saved = false) =>
     // A different tab: the editor's caret and selection start over (they belonged to the old one).
-    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0, verse: 0, lyricAt: undefined }, showVerse: 0, fillLyricsOpen: false, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, passage: null, loopRange: null, loop: s.loopRange ? false : s.loop, training: null, alongMarks: {}, alongPrev: {}, alongPasses: [], activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
+    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0, verse: 0, lyricAt: undefined, restDraft: undefined }, showVerse: 0, fillLyricsOpen: false, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, passage: null, loopRange: null, loop: s.loopRange ? false : s.loop, training: null, alongMarks: {}, alongPrev: {}, alongPasses: [], activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
   markSaved: (docId, text) => set((s) => ({ docId, savedText: text ?? s.text })),
   notify: (message) => set({ toast: { message, id: Date.now() } }),
 }));
