@@ -32,7 +32,8 @@ const reducedMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: redu
 
 /** Scrolls `el` into view for playback, unless the user scrolled in the last few seconds. */
 export function followTo(el: Element | null | undefined) {
-  if (!el || Date.now() - lastUserScroll < HOLD_MS) return;
+  // (Something not shown — hidden holes — has no place to scroll to.)
+  if (!el || !el.getClientRects().length || Date.now() - lastUserScroll < HOLD_MS) return;
   if (useApp.getState().performing) {
     performFollow(el);
     return;

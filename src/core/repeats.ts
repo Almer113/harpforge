@@ -22,36 +22,43 @@ export interface PlaybackScore {
   repeats: boolean;
 }
 
-/** Where the repeat signs are, in beats. */
-export function repeatSigns(doc: TabDoc): { starts: number[]; ends: number[] } {
-  const starts: number[] = [];
-  const ends: number[] = [];
+/** The repeat signs in the order written, with where they are in beats. */
+export function repeatSigns(doc: TabDoc): { kind: 'start' | 'end'; at: number }[] {
+  const out: { kind: 'start' | 'end'; at: number }[] = [];
   let t = 0;
   for (const line of doc.lines) {
     for (const ev of line.events) {
       if (ev.kind === 'bar') {
-        if (ev.style === 'repeat-start') starts.push(t);
-        else if (ev.style === 'repeat-end') ends.push(t);
+        if (ev.style === 'repeat-start') out.push({ kind: 'start', at: t });
+        else if (ev.style === 'repeat-end') out.push({ kind: 'end', at: t });
       } else t += ev.beats;
     }
   }
-  return { starts, ends };
+  return out;
 }
 
 /** The stretches of the written song (in beats) in the order they're played. */
 export function playOrder(doc: TabDoc, total: number): { from: number; to: number }[] {
-  const { starts, ends } = repeatSigns(doc);
   const out: { from: number; to: number }[] = [];
   let pos = 0;
   // Where a :| with no |: of its own goes back to: the end of the last repeat (or the start).
   let floor = 0;
-  for (const end of [...ends].sort((a, b) => a - b)) {
+  // The last |: written since then. (In order written: in ":|:" the |: starts the next one,
+  // and a "|: :|" with nothing between repeats nothing.)
+  let start: number | null = null;
+  for (const sign of repeatSigns(doc)) {
+    if (sign.kind === 'start') {
+      start = sign.at;
+      continue;
+    }
+    const end = sign.at;
     if (end <= floor + EPS || end > total + EPS) continue;
-    const from = Math.max(floor, ...starts.filter((x) => x >= floor - EPS && x < end - EPS));
+    const from = start ?? floor;
     if (end > pos + EPS) out.push({ from: pos, to: end });
-    out.push({ from, to: end });
+    if (end > from + EPS) out.push({ from, to: end });
     pos = end;
     floor = end;
+    start = null;
   }
   if (total > pos + EPS || !out.length) out.push({ from: pos, to: total });
   return out;
@@ -88,13 +95,17 @@ function unroll(score: Score, order: { from: number; to: number }[]): PlaybackSc
       if (ev.start < from - EPS || ev.start >= to - EPS) continue;
       const n = (seen.get(ev.index) ?? 0) + 1;
       seen.set(ev.index, n);
-      events.push({ ...ev, index: events.length, start: at + ev.start - from, soundBeats: ev.beats });
+      // A tie whose note isn't the one played just before it (the start of a repeat, after
+      // the jump back) has nothing to continue: it's played as a note of its own.
+      const after = events.at(-1);
+      const tied = ev.tied && !!after && orig.at(-1) === ev.index - 1 && !after.rest;
+      events.push({ ...ev, index: events.length, start: at + ev.start - from, soundBeats: ev.beats, tied });
       orig.push(ev.index);
       pass.push(n);
     }
     at += to - from;
   }
-  // A tie carries the note before it in the order played (so not across a jump back's gap).
+  // A tie carries the note before it in the order played.
   for (let i = 0; i < events.length; i++) {
     const ev = events[i];
     if (!ev.tied || ev.rest) continue;

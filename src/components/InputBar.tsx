@@ -277,7 +277,7 @@ function PracticeControl() {
         {practice.played + 1} / {total} · {practice.mistakes} mistake{practice.mistakes === 1 ? '' : 's'}
       </span>
       <button className="btn small" onClick={() => void hint()} title="Hear the note">Hint</button>
-      <button className="btn small ghost" onClick={stopPractice} aria-label="Stop practising">Stop</button>
+      <button className="btn small ghost" onClick={() => stopPractice()} aria-label="Stop practising">Stop</button>
     </div>
   );
 }

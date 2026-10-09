@@ -70,7 +70,7 @@ export function PlayPage() {
         parsed={parsed}
         onSelect={onSelect}
         actions={
-          <button className="btn small ghost perform-btn" onClick={enterPerform} disabled={!!recording} title="Performance mode (F): the music fills the screen, bigger">
+          <button className="btn small ghost perform-btn" onClick={enterPerform} disabled={!!recording} title={recording ? 'Stop recording first' : 'Performance mode (F): the music fills the screen, bigger; it can play silently, and pages turn with a pedal'}>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
             </svg>

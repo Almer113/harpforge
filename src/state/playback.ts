@@ -34,6 +34,30 @@ function onEvent(index: number, on: boolean, pass?: number) {
 
 // The score being played: the written one with its repeats played (see repeats.ts).
 let playing: PlaybackScore | null = null;
+// What the sound was started with: changed since (even while paused), it starts again.
+let startedWith = { muted: false, repeats: false };
+
+/** Whether the tune would be left out, and the repeats played, if playback started now. */
+function wanted(s: AppState): { muted: boolean; repeats: boolean } {
+  const p = getParsed(s.text);
+  const range = s.loop && s.loopRange && usablePassage(s.loopRange, p.score.totalBeats);
+  return { muted: tuneMuted(s), repeats: s.playRepeats && !range && playbackScore(p.doc, p.score).repeats };
+}
+const sameStart = (a: typeof startedWith, b: typeof startedWith) => a.muted === b.muted && a.repeats === b.repeats;
+
+/**
+ * Starts playback again from where it is: the same note, the same time through a repeat.
+ * `record`: a play-along pass so far is scored (play along switched); else it's let go.
+ */
+function restartHere(record: boolean) {
+  const s = useApp.getState();
+  const beat = engine.scoreBeatNow();
+  const pb = playing ?? writtenScore(getParsed(s.text).score);
+  const at = beat === null ? undefined : [...pb.score.events].reverse().find((ev) => ev.start <= beat + 1e-6);
+  stop({ record });
+  useApp.setState({ selectedEvent: at ? (pb.orig[at.index] ?? s.selectedEvent) : s.selectedEvent });
+  void play({ count: false, pass: at ? pb.pass[at.index] : undefined });
+}
 
 // Bumped by stop(): a play() still waiting for the audio to start then doesn't go ahead.
 let generation = 0;
@@ -59,6 +83,11 @@ export async function play(opts: { count?: boolean; pass?: number } = {}) {
   await engine.ensureAudio();
   if (gen !== generation) return;
   if (s.play === 'paused') {
+    // (Silent or repeats changed while paused: from the same note, the new way.)
+    if (!sameStart(wanted(s), startedWith)) {
+      restartHere(false);
+      return;
+    }
     engine.resumePlayback();
     useApp.setState({ play: 'playing' });
     return;
@@ -85,6 +114,7 @@ export async function play(opts: { count?: boolean; pass?: number } = {}) {
   const muted = tuneMuted(s);
   if (s.along) along?.startChecking(range ?? { start: sel?.start ?? 0, end: pb.score.totalBeats }, s.loop, eachLoop, pb);
   playing = pb;
+  startedWith = { muted, repeats: pb.repeats };
   engine.playScore(pb.score, {
     tempo,
     startBeat: sel?.start ?? 0,
@@ -118,9 +148,10 @@ export function onBeforeStop(fn: () => void) {
   beforeStop = fn;
 }
 
-export function stop() {
+/** Stops playback. `record: false`: a play-along pass under way isn't scored (a restart). */
+export function stop({ record = true }: { record?: boolean } = {}) {
   beforeStop?.();
-  along?.stopChecking();
+  along?.stopChecking(record);
   generation++;
   engine.stopPlayback();
   useApp.setState({ play: 'stopped', activeEvents: [], playPass: 1 });
@@ -135,10 +166,13 @@ export function togglePlay() {
 /** Plays a single score event immediately (clicking a card) and selects it. */
 /** Plays from event `index` (clicking a card while playing jumps there). */
 export function playFrom(index: number) {
-  if (useApp.getState().recording) return;
+  const s = useApp.getState();
+  if (s.recording) return;
+  // (Mid-song, in the repeat's second time: that time, not back to the first.)
+  const pass = s.play !== 'stopped' ? s.playPass : undefined;
   stop();
   useApp.setState({ selectedEvent: index });
-  void play({ count: false });
+  void play({ count: false, pass });
 }
 
 /**
@@ -227,14 +261,10 @@ useApp.subscribe((s, prev) => {
   }
   // Play along (or its tune) switched while playing, or the tune went silent or came back
   // (performance mode): playback starts again from where it was, so the checking and the sound match.
-  // Repeats switched on or off: the same, from the same note.
-  if ((s.along !== prev.along || (s.along && s.alongMelody !== prev.alongMelody) || tuneMuted(s) !== tuneMuted(prev) || s.playRepeats !== prev.playRepeats) && s.play === 'playing') {
-    const beat = engine.scoreBeatNow();
-    const pb = playing ?? writtenScore(getParsed(s.text).score);
-    const at = beat === null ? undefined : [...pb.score.events].reverse().find((ev) => ev.start <= beat + 1e-6);
-    stop();
-    useApp.setState({ selectedEvent: at ? (pb.orig[at.index] ?? s.selectedEvent) : s.selectedEvent });
-    void play({ count: false, pass: at ? pb.pass[at.index] : undefined });
+  // Repeats switched on or off: the same, from the same note — when it changes what's played.
+  if (s.play === 'playing') {
+    if (s.along !== prev.along || (s.along && s.alongMelody !== prev.alongMelody)) restartHere(true);
+    else if ((tuneMuted(s) !== tuneMuted(prev) || s.playRepeats !== prev.playRepeats) && !sameStart(wanted(s), startedWith)) restartHere(false);
   }
 });
 

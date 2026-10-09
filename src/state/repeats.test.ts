@@ -106,3 +106,35 @@ it('playing along checks both times; marks and the report name the written notes
   setAlong(false);
   expect(s().report?.session.holes[0]).toMatchObject({ misses: 1 });
 });
+
+it('clicking a note in the second time plays on from that time', async () => {
+  await play();
+  last()[1].onEvent(3, true);
+  expect(s().playPass).toBe(2);
+  const { playFrom } = await import('./playback');
+  playFrom(2);
+  await vi.waitFor(() => expect(last()[1].startBeat).toBe(4));
+  stop();
+});
+
+it('a change while paused takes effect on resume; one that changes nothing doesn’t restart', async () => {
+  const { pause } = await import('./playback');
+  await play();
+  clock.beat = 1.5;
+  pause();
+  useApp.setState({ performing: true, performSilent: true });
+  playScore.mockClear();
+  await play();
+  expect(playScore).toHaveBeenCalledTimes(1);
+  expect(last()[1]).toMatchObject({ muted: true, startBeat: 1 });
+  stop();
+  useApp.setState({ performing: false, performSilent: false });
+  // Looping a passage plays it as written: repeats on or off, nothing to start again.
+  useApp.setState({ loop: true, loopRange: { start: 1, end: 3 }, selectedEvent: 1 });
+  await play();
+  playScore.mockClear();
+  useApp.setState({ playRepeats: false });
+  await new Promise((r) => setTimeout(r, 0));
+  expect(playScore).not.toHaveBeenCalled();
+  stop();
+});

@@ -9,6 +9,7 @@ import { stop as stopPlayback } from './playback';
 import { getParsed, useApp } from './store';
 import { practiceReport } from '../core/report';
 import { keepAlongSession, showReport } from './report';
+import { logSession } from '../storage/practiceLog';
 
 function nextPlayable(from: number): number | null {
   const { score } = getParsed(useApp.getState().text);
@@ -34,11 +35,18 @@ export function startPractice() {
   useApp.setState({ practice: { index: first, played: 0, mistakes: 0, startedAt: Date.now(), wrongAt: 0, mistakesAt: {} }, selectedEvent: first, along: false, alongMarks: {} });
 }
 
-/** Stops practising; after a few notes, the report shows how it went. */
-export function stopPractice() {
-  const p = useApp.getState().practice;
+/**
+ * Stops practising; after a few notes, the report shows how it went. `show: false` (going
+ * into performance mode): the session only joins the song's history.
+ */
+export function stopPractice({ show = true }: { show?: boolean } = {}) {
+  const s = useApp.getState();
+  const p = s.practice;
   useApp.setState({ practice: null });
-  if (p && p.played >= 5) showReport(practiceReport(getParsed(useApp.getState().text).score, p.played, p.mistakesAt), true);
+  if (!p || p.played < 5) return;
+  const report = practiceReport(getParsed(s.text).score, p.played, p.mistakesAt);
+  if (show) showReport(report, true);
+  else if (s.docId && report.notes > 0) logSession(s.docId, report);
 }
 
 /** Plays the note you're supposed to play next. */

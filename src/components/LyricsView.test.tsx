@@ -61,4 +61,16 @@ it('the playing note lights its syllable', async () => {
 it('Show → Holes off leaves the words and chords', async () => {
   await act(async () => useApp.setState((st) => ({ sheetShow: { ...st.sheetShow, lyrics: { holes: false, chords: true } } })));
   expect(host.querySelector('.lyricsview.no-holes')).not.toBeNull();
+  // The words take the keyboard (and the notes' states) instead of the hidden holes.
+  const kle = [...host.querySelectorAll<HTMLElement>('.ly-text')].find((t) => t.textContent === 'kle')!;
+  expect(kle.getAttribute('role')).toBe('button');
+  expect(kle.tabIndex).toBe(0);
+  expect(host.querySelector<HTMLElement>('.ly-syl:not(.fill) .ly-note')!.tabIndex).toBe(-1);
+  await act(async () => kle.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+  expect(s().selectedEvent).toBe(3);
+  expect(kle.classList.contains('selected')).toBe(true);
+});
+
+it('notes are named for screen readers', () => {
+  expect(host.querySelector('.ly-syl:not(.fill) .ly-note')?.getAttribute('aria-label')).toBe('C5');
 });

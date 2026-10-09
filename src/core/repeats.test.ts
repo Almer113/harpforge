@@ -60,3 +60,19 @@ it('a note tied over the :| doesn’t hold through the jump back', () => {
   // Played: the first 5 is followed by the jump back, the second by its tie.
   expect(p.score.events.map((e) => e.soundBeats)).toEqual([1, 2, 1, 3, 1, 1]);
 });
+
+it('a tie at the start of a repeat is played afresh the second time', () => {
+  const { doc, score } = parse('4 |: ~ 5 :|');
+  const p = playbackScore(doc, score);
+  // Played: 4 ~ 5 | (~) 5 — the second time, the tie follows the 5: it sounds its own 4.
+  expect(p.score.events.map((e) => e.tied)).toEqual([false, true, false, false, false]);
+  expect(p.score.events.map((e) => e.soundBeats)).toEqual([2, 1, 1, 1, 1]);
+  // After a rest too.
+  const r = parse('4 |: ~ 5 . :|');
+  expect(playbackScore(r.doc, r.score).score.events.map((e) => e.tied)).toEqual([false, true, false, false, false, false, false]);
+});
+
+it('an empty |: :| repeats nothing', () => {
+  expect(played('4 5 |: :|')).toBe('4 5');
+  expect(played('4 5 |:\n:| 6')).toBe('4 5 6');
+});

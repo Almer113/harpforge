@@ -202,28 +202,43 @@ html { scroll-padding-top: calc(var(--topbar-h) + var(--edit-head-h, 64px) + 14p
 /* Following keeps the playing line out from under the bar. */
 html.performing { scroll-padding-top: calc(var(--perform-bar-h, 56px) + 12px); }
 .perform-page { max-width: none; padding: calc(var(--perform-bar-h, 56px) + 16px) 32px 48px; }
-/* Room after the end, so the last lines can come up to the top too. */
-.perform-page .sheet.bare { padding-bottom: 70vh; }
+/* Room after the end, so the last lines can come up to the top too. Lines no longer than
+   the eye can follow on a wide screen; the staff no bigger than its size says. */
+.perform-page .sheet.bare { padding-bottom: 70vh; width: 100%; max-width: 1600px; margin: 0 auto; }
+.perform-page .staffview { max-width: 1190px; margin: 0 auto; }
 .sheet.bare { background: none; border: none; padding: 0; }
 .perform-bar {
   position: fixed; top: 0; left: 0; right: 0; z-index: 40;
-  display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 8px 16px;
+  display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; padding: 8px 16px;
   background: var(--panel); border-bottom: 1px solid var(--border);
   transition: opacity 0.4s, transform 0.4s;
 }
 .perform-bar.idle { opacity: 0; transform: translateY(-100%); pointer-events: none; }
-.performing:has(.perform-bar.idle) { cursor: none; }
-.pf-title { font-weight: 700; font-size: 15px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The pointer hides with the bar, over the music too. */
+.performing:has(.perform-bar.idle), .performing:has(.perform-bar.idle) * { cursor: none !important; }
+.pf-title { font-weight: 700; font-size: 15px; max-width: 180px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .perform-bar .speed input[type='range'] { width: 80px; }
-.pf-view-menu { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px; right: 0; left: auto; width: 260px; }
-.pf-where { min-width: 92px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.pf-group { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.perform-bar .speed .t-value { min-width: 0; }
+.pf-view-wrap { margin-left: auto; }
+.pf-view-menu { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px; right: 0; left: auto; width: 280px; }
+.pf-view-menu .pb-head { margin: 4px 0 -4px; }
+.pf-show { display: flex; flex-direction: column; gap: 6px; }
+/* Wide enough for "Bar 188 of 188 · 2nd time", so the bar doesn't change size as it plays. */
+.pf-where { min-width: 172px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pf-size button { min-width: 36px; font-variant-numeric: tabular-nums; }
-@media (prefers-reduced-motion: reduce) { .perform-bar { transition: none; } }
-/* A smaller laptop: one row still (the title is the song you chose; the slider says what it is). */
-@media (max-width: 1440px) {
-  .perform-bar .speed .t-label { display: none; }
+.pf-size button.at-end { opacity: 0.4; cursor: default; }
+/* Chips in the bar: their short form (the bar stays one row). */
+.perform-bar .loop-chip .chip-long { display: none; }
+.perform-bar .loop-chip .chip-short { display: inline; }
+.along-chip { padding-left: 10px; }
+/* While the bar is away: where you are, small, in the corner. */
+.pf-badge {
+  position: fixed; top: 8px; right: 14px; z-index: 39; padding: 3px 9px; border-radius: 999px; pointer-events: none;
+  background: var(--panel); border: 1px solid var(--border); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums;
+  opacity: 0; transition: opacity 0.4s;
 }
-@media (max-width: 1250px) {
-  .pf-title { display: none; }
+.pf-badge.shown { opacity: 0.85; }
+@media (prefers-reduced-motion: reduce) { .perform-bar, .pf-badge { transition: none; } }
+@media (max-width: 1440px) {
+  .perform-bar .speed .t-label, .pf-title { display: none; }
 }

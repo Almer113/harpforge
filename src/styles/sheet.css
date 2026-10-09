@@ -74,8 +74,8 @@
 /* (A larger target than the number itself.) */
 .bar-num::before { content: ''; position: absolute; inset: -5px -6px; }
 /* The chosen passage: a light wash; the looped one: a brass line under its notes. */
-.card.in-passage, :is(.st-note, .ly-note).in-passage { background: rgba(255, 244, 226, 0.07); border-color: rgba(255, 244, 226, 0.22); }
-.card.in-loop, :is(.st-note, .ly-note).in-loop { background-color: rgba(227, 169, 72, 0.06); box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6); }
+.card.in-passage, :is(.st-note, .ly-note, .ly-text).in-passage { background: rgba(255, 244, 226, 0.07); border-color: rgba(255, 244, 226, 0.22); }
+.card.in-loop, :is(.st-note, .ly-note, .ly-text).in-loop { background-color: rgba(227, 169, 72, 0.06); box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6); }
 .card.in-loop.active { box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6), 0 6px 16px rgba(0, 0, 0, 0.35); }
 .card.selected.in-passage { border-color: var(--brass); }
 /* "Looping bars 5–8 ✕" next to the loop button. */
@@ -94,22 +94,22 @@
 .trainer-actions { justify-content: flex-end; }
 /* Play along: green in time (✓), purple early (◂) or late (▸), red missed (✕, dashed). The
    last pass's marks are faded. A shape as well as a colour, so it isn't colour alone. */
-.card.mark-hit, :is(.st-note, .ly-note).mark-hit { border-color: var(--ok); background: rgba(124, 207, 138, 0.1); }
-.card.mark-early, .card.mark-late, :is(.st-note, .ly-note).mark-early, :is(.st-note, .ly-note).mark-late { border-color: var(--pitch); background: rgba(199, 155, 242, 0.1); }
-.card.mark-missed, :is(.st-note, .ly-note).mark-missed { border-color: var(--danger); border-style: dashed; background: rgba(239, 106, 90, 0.12); }
-.card.mark-faded, :is(.st-note, .ly-note).mark-faded { opacity: 0.55; }
-:is(.card, .st-note, .ly-note):is(.mark-hit, .mark-early, .mark-late, .mark-missed) { position: relative; }
-:is(.card, .st-note, .ly-note):is(.mark-hit, .mark-early, .mark-late, .mark-missed)::after {
+.card.mark-hit, :is(.st-note, .ly-note, .ly-text).mark-hit { border-color: var(--ok); background: rgba(124, 207, 138, 0.1); }
+.card.mark-early, .card.mark-late, :is(.st-note, .ly-note, .ly-text).mark-early, :is(.st-note, .ly-note, .ly-text).mark-late { border-color: var(--pitch); background: rgba(199, 155, 242, 0.1); }
+.card.mark-missed, :is(.st-note, .ly-note, .ly-text).mark-missed { border-color: var(--danger); border-style: dashed; background: rgba(239, 106, 90, 0.12); }
+.card.mark-faded, :is(.st-note, .ly-note, .ly-text).mark-faded { opacity: 0.55; }
+:is(.card, .st-note, .ly-note, .ly-text):is(.mark-hit, .mark-early, .mark-late, .mark-missed) { position: relative; }
+:is(.card, .st-note, .ly-note, .ly-text):is(.mark-hit, .mark-early, .mark-late, .mark-missed)::after {
   position: absolute; top: 1px; right: 3px; font-size: 12px; font-weight: 800; line-height: 1; pointer-events: none;
 }
-:is(.card, .st-note, .ly-note).mark-hit::after { content: '✓'; color: var(--ok); }
-:is(.card, .st-note, .ly-note).mark-early::after { content: '◂'; color: var(--pitch); }
-:is(.card, .st-note, .ly-note).mark-late::after { content: '▸'; color: var(--pitch); }
-:is(.card, .st-note, .ly-note).mark-missed::after { content: '✕'; color: var(--danger); }
+:is(.card, .st-note, .ly-note, .ly-text).mark-hit::after { content: '✓'; color: var(--ok); }
+:is(.card, .st-note, .ly-note, .ly-text).mark-early::after { content: '◂'; color: var(--pitch); }
+:is(.card, .st-note, .ly-note, .ly-text).mark-late::after { content: '▸'; color: var(--pitch); }
+:is(.card, .st-note, .ly-note, .ly-text).mark-missed::after { content: '✕'; color: var(--danger); }
 /* When states meet on one note: playing > selected > mark > loop > passage. */
-:is(.card, .st-note, .ly-note).selected:is(.in-passage, .in-loop, .mark-hit, .mark-early, .mark-late, .mark-missed) { border-color: var(--brass); border-style: solid; }
+:is(.card, .st-note, .ly-note, .ly-text).selected:is(.in-passage, .in-loop, .mark-hit, .mark-early, .mark-late, .mark-missed) { border-color: var(--brass); border-style: solid; }
 .card.active:is(.in-passage, .in-loop, .mark-hit, .mark-early, .mark-late, .mark-missed),
-:is(.st-note, .ly-note).active:is(.in-passage, .in-loop, .mark-hit, .mark-early, .mark-late, .mark-missed) { background: rgba(227, 169, 72, 0.16); border-color: var(--brass-2); border-style: solid; opacity: 1; }
+:is(.st-note, .ly-note, .ly-text).active:is(.in-passage, .in-loop, .mark-hit, .mark-early, .mark-late, .mark-missed) { background: rgba(227, 169, 72, 0.16); border-color: var(--brass-2); border-style: solid; opacity: 1; }
 .input-card.along { gap: 10px; flex-wrap: wrap; }
 .along-status { max-width: 320px; }
 .along-warn { flex-basis: 100%; }
@@ -143,7 +143,7 @@
   .edit-sticky .loop-chip { display: none; }
 }
 /* Shift+click chooses a passage: it shouldn't select the page's text too. */
-.tab-line, .st-line { user-select: none; }
+.tab-line, .st-line, .ly-line { user-select: none; }
 
 /* ---------- Lyrics view: words like a chord sheet, the holes small above ---------- */
 .lyricsview { display: flex; flex-direction: column; gap: 14px; }
@@ -167,7 +167,11 @@
 .ly-chord { font-family: var(--sans, inherit); font-size: 13px; font-weight: 800; color: var(--brass-2); min-height: 1.3em; white-space: nowrap; }
 .ly-hole { min-height: 1.35em; white-space: nowrap; }
 .lyricsview.as-notes .ly-hole { font-family: inherit; }
-.ly-text { padding: 0 3px; line-height: 1.3; white-space: pre; cursor: pointer; border-radius: 4px; }
+.ly-text { padding: 0 3px; line-height: 1.3; white-space: pre; cursor: pointer; border-radius: 4px; border: 1px solid transparent; }
+.ly-text.selected { border-color: var(--brass); }
+.ly-text:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* Play-along marks on a note: above it, clear of the hole number. */
+:is(.ly-note, .ly-text):is(.mark-hit, .mark-early, .mark-late, .mark-missed)::after { top: -0.95em; right: -3px; font-size: 10px; }
 .ly-text:hover { background: var(--panel-2); }
 .ly-syl.active .ly-text { color: var(--brass-2); background: rgba(227, 169, 72, 0.12); }
 /* A word stretched by its notes: a faint line joins its syllables ("Twin — kle"). */
@@ -181,6 +185,6 @@
 /* Fills (notes with no words, lines without lyrics): a compact row of holes. */
 .ly-fills { row-gap: 6px; column-gap: 18px; }
 .ly-syl.fill .ly-notes { flex-wrap: wrap; }
-.lyricsview.no-holes .ly-hole { display: none; }
-.lyricsview.no-holes .ly-line.ly-fills { display: none; }
-.lyricsview.no-holes .ly-syl.fill { display: none; }
+/* Holes hidden: the words' holes go; notes without words stay, faint, so a break still shows. */
+.lyricsview.no-holes .ly-syl:not(.fill) .ly-hole { display: none; }
+.lyricsview.no-holes .ly-syl.fill .ly-note { font-size: 12px; opacity: 0.6; }

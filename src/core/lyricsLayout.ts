@@ -43,7 +43,8 @@ export function lyricsLine(line: TabLine): LyWord[] {
           ? { ei, kind: 'rest', chord: ev.chord }
           : null;
     if (!col) return;
-    if (ev.lyric !== undefined && ev.lyric !== '') {
+    // (A syllable of only "~", a joined space, is no words.)
+    if (ev.lyric !== undefined && ev.lyric.trim() !== '') {
       const joined = ev.lyric.endsWith('-') && ev.lyric.length > 1;
       const next: LySyllable = { notes: [col], text: joined ? ev.lyric.slice(0, -1) : ev.lyric, joined };
       if (syl?.joined && word) word.syllables.push(next);

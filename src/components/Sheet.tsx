@@ -100,14 +100,14 @@ export function Sheet({
 }
 
 const VIEWS: { id: SheetView; label: string; short: string; title?: string }[] = [
-  { id: 'simple', label: 'Simple Tab', short: 'Simple', title: 'Just the holes, all the same size' },
+  { id: 'simple', label: 'Simple tab', short: 'Simple', title: 'Just the holes, all the same size' },
   { id: 'tab', label: 'Tab', short: 'Tab' },
   { id: 'staff', label: 'Staff', short: 'Staff', title: 'Standard notation, with the holes underneath' },
   { id: 'numbers', label: 'Numbers', short: 'Numbers', title: 'Numbered notation (jianpu): 1 = do of the key' },
   { id: 'lyrics', label: 'Lyrics', short: 'Lyrics', title: 'The words, with the holes above them, like a chord sheet' },
 ];
 
-/** Simple Tab | Tab | Staff | Numbers. `short`: shorter names (performance mode's bar). */
+/** Simple tab | Tab | Staff | Numbers | Lyrics. `short`: shorter names (performance mode's menu). */
 export function ViewSwitch({ short = false }: { short?: boolean }) {
   const view = useApp((s) => s.sheetView);
   return (
@@ -138,45 +138,25 @@ export function ReadAsSwitch({ className = '', icons = false }: { className?: st
   );
 }
 
-/** "Show ▾": what the Tab or Numbers view shows besides the notes. */
-export function ShowMenu({ view }: { view: 'tab' | 'numbers' | 'staff' | 'lyrics' }) {
-  const show = useApp((s) => s.sheetShow);
-  const names = useApp((s) => s.showNoteNames);
-  const notes = useApp((s) => s.readAs === 'notes');
-  const set = (patch: Partial<SheetShow['tab']> & Partial<SheetShow['numbers']> & Partial<SheetShow['staff']> & Partial<SheetShow['lyrics']>) =>
-    useApp.setState((s) => ({ sheetShow: { ...s.sheetShow, [view]: { ...s.sheetShow[view], ...patch } } }));
-  const items: { label: string; on: boolean; toggle: (v: boolean) => void; hint: string }[] =
-    view === 'tab'
-      ? [
-          notes
-            ? { label: 'Holes', on: show.tab.holes, toggle: (v) => set({ holes: v }), hint: '4, -4… under each note' }
-            : { label: 'Note names', on: names, toggle: (v) => useApp.setState({ showNoteNames: v }), hint: 'C5, E5… under each hole' },
-          { label: 'Lyrics', on: show.tab.lyrics, toggle: (v) => set({ lyrics: v }), hint: 'The words under the notes' },
-          { label: 'Chords', on: show.tab.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the notes' },
-        ]
-      : view === 'lyrics'
-        ? [
-            { label: notes ? 'Notes' : 'Holes', on: show.lyrics.holes, toggle: (v) => set({ holes: v }), hint: notes ? 'C5, E5… above the words' : '4, -4… above the words' },
-            { label: 'Chords', on: show.lyrics.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above them' },
-          ]
-      : view === 'numbers'
-        ? [
-            { label: 'Holes', on: show.numbers.holes, toggle: (v) => set({ holes: v }), hint: 'The tab under each number' },
-            { label: 'Lyrics', on: show.numbers.lyrics, toggle: (v) => set({ lyrics: v }), hint: 'The words under the notes' },
-            { label: 'Chords', on: show.numbers.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the notes' },
-          ]
-        : [
-            { label: 'Holes', on: show.staff.holes, toggle: (v) => set({ holes: v }), hint: 'The tab under the staff' },
-            { label: 'Lyrics', on: show.staff.lyrics, toggle: (v) => set({ lyrics: v }), hint: 'The words under the staff' },
-            { label: 'Chords', on: show.staff.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the staff' },
-            { label: 'Title and tempo', on: show.staff.header, toggle: (v) => set({ header: v }), hint: 'The song’s heading on the staff' },
-          ];
+/** "Show ▾": what the Tab, Numbers, Staff or Lyrics view shows besides the notes. */
+export function ShowMenu({ view }: { view: ShowView }) {
+  const items = useShowItems(view);
   // The staff's title is off by default, so it doesn't count as "hidden".
   const hidden = items.filter((i) => !i.on && i.label !== 'Title and tempo').length;
-
   return (
     <Popover label={`Show${hidden ? ` (${hidden} hidden)` : ''} ▾`} title="Choose what this view shows" kind="panel" panelClass="menu show-menu" wrapClass="show-wrap" panelLabel="Show">
-      {items.map((it) => (
+      <ShowItems view={view} />
+    </Popover>
+  );
+}
+
+type ShowView = 'tab' | 'numbers' | 'staff' | 'lyrics';
+
+/** The Show menu's choices, as checkboxes (in the menu, or in performance mode's view menu). */
+export function ShowItems({ view }: { view: ShowView }) {
+  return (
+    <>
+      {useShowItems(view).map((it) => (
         <label key={it.label} className="show-item">
           <input type="checkbox" checked={it.on} onChange={(e) => it.toggle(e.target.checked)} />
           <span>
@@ -185,6 +165,39 @@ export function ShowMenu({ view }: { view: 'tab' | 'numbers' | 'staff' | 'lyrics
           </span>
         </label>
       ))}
-    </Popover>
+    </>
   );
+}
+
+function useShowItems(view: ShowView): { label: string; on: boolean; toggle: (v: boolean) => void; hint: string }[] {
+  const show = useApp((s) => s.sheetShow);
+  const names = useApp((s) => s.showNoteNames);
+  const notes = useApp((s) => s.readAs === 'notes');
+  const set = (patch: Partial<SheetShow['tab']> & Partial<SheetShow['numbers']> & Partial<SheetShow['staff']> & Partial<SheetShow['lyrics']>) =>
+    useApp.setState((s) => ({ sheetShow: { ...s.sheetShow, [view]: { ...s.sheetShow[view], ...patch } } }));
+  return view === 'tab'
+      ? [
+          notes
+            ? { label: 'Holes', on: show.tab.holes, toggle: (v) => set({ holes: v }), hint: '4, -4… under each note' }
+            : { label: 'Note names', on: names, toggle: (v) => useApp.setState({ showNoteNames: v }), hint: 'C5, E5… under each hole' },
+          { label: 'Words', on: show.tab.lyrics, toggle: (v) => set({ lyrics: v }), hint: 'The lyrics under the notes' },
+          { label: 'Chords', on: show.tab.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the notes' },
+        ]
+      : view === 'lyrics'
+        ? [
+            { label: notes ? 'Notes' : 'Holes', on: show.lyrics.holes, toggle: (v) => set({ holes: v }), hint: notes ? 'C5, E5… above the words' : '4, -4… above the words' },
+            { label: 'Chords', on: show.lyrics.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the words' },
+          ]
+      : view === 'numbers'
+        ? [
+            { label: 'Holes', on: show.numbers.holes, toggle: (v) => set({ holes: v }), hint: 'The tab under each number' },
+            { label: 'Words', on: show.numbers.lyrics, toggle: (v) => set({ lyrics: v }), hint: 'The lyrics under the notes' },
+            { label: 'Chords', on: show.numbers.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the notes' },
+          ]
+        : [
+            { label: 'Holes', on: show.staff.holes, toggle: (v) => set({ holes: v }), hint: 'The tab under the staff' },
+            { label: 'Words', on: show.staff.lyrics, toggle: (v) => set({ lyrics: v }), hint: 'The lyrics under the staff' },
+            { label: 'Chords', on: show.staff.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the staff' },
+            { label: 'Title and tempo', on: show.staff.header, toggle: (v) => set({ header: v }), hint: 'The song’s heading on the staff' },
+          ];
 }

@@ -173,3 +173,22 @@ it('in performance mode the arrows turn pages instead of reaching the harmonica'
   await act(async () => root.unmount());
   host.remove();
 });
+
+it('entering stops practice without its report over the music', () => {
+  useApp.setState({ practice: { index: 6, played: 6, mistakes: 1, startedAt: 0, wrongAt: 0, mistakesAt: { 2: 1 } }, report: null });
+  enterPerform();
+  expect(s().practice).toBeNull();
+  expect(s().report).toBeNull();
+});
+
+it('a screen lock that arrives after leaving is let go', async () => {
+  let resolve: (l: unknown) => void = () => {};
+  const release = vi.fn(() => Promise.resolve());
+  Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: () => new Promise((r) => (resolve = r)) } });
+  enterPerform();
+  exitPerform();
+  resolve({ release, addEventListener: () => {} });
+  await new Promise((r) => setTimeout(r, 0));
+  expect(release).toHaveBeenCalled();
+  Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: undefined });
+});

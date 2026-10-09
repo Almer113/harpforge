@@ -179,7 +179,7 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
     <Popover
       label={`♫ ${soundMode === 'samples' ? 'Real' : 'Synth'}${showSpeed ? ` · ${Math.round(speed * 100)}%` : ''} ▾`}
       buttonClass="btn small ghost"
-      title={withSpeed ? 'Sound, speed, counting in and repeats' : 'Sound, counting in and repeats'}
+      title={withSpeed ? 'Sound (real harmonica or synth), speed, counting in and repeats' : 'Sound (real harmonica or synth), counting in and repeats'}
       ariaLabel={withSpeed ? 'Sound, speed, counting in and repeats' : 'Sound, counting in and repeats'}
       kind="panel"
       panelClass="menu pb-menu"
@@ -218,14 +218,17 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
           <input type="checkbox" checked={playRepeats} onChange={(e) => useApp.setState({ playRepeats: e.target.checked })} />
           Play repeats
         </label>
-        <span className="mi-hint pb-hint">Sections between |: and :| play twice (not when looping a passage)</span>
+        <span className="mi-hint pb-hint">Sections between repeat signs (|: and :|) play twice; not when looping a passage</span>
       </div>
     </Popover>
   );
 }
 
-/** Play / pause, stop, loop and metronome: the start of the bar on both pages. */
-export function PlayStop() {
+/**
+ * Play / pause, stop, loop and metronome: the start of the bar on both pages. `perform`
+ * (performance mode, where Esc leaves): no "Esc" in the hints.
+ */
+export function PlayStop({ perform = false }: { perform?: boolean }) {
   const play = useApp((s) => s.play);
   const loop = useApp((s) => s.loop);
   const metronome = useApp((s) => s.metronome);
@@ -243,7 +246,7 @@ export function PlayStop() {
       <button className="t-btn primary" onClick={togglePlay} disabled={!!recording} title="Play / pause (Enter)" aria-label={play === 'playing' ? 'Pause' : 'Play'}>
         {play === 'playing' ? Icon.pause : Icon.play}
       </button>
-      <button className="t-btn" onClick={stop} disabled={play === 'stopped' || !!recording} title="Stop (Esc)" aria-label="Stop">
+      <button className="t-btn" onClick={() => stop()} disabled={play === 'stopped' || !!recording} title={perform ? 'Stop' : 'Stop (Esc)'} aria-label="Stop">
         {Icon.stop}
       </button>
       <button
@@ -270,7 +273,7 @@ export function PlayStop() {
           <span role="status">
             Looping {describePassage(score, loopRange)}
           </span>
-          <button className="loop-chip-x" onClick={() => { endPassageLoop(); focusLoop(); }} title="Stop looping this passage (Esc when stopped)" aria-label="Stop looping this passage">
+          <button className="loop-chip-x" onClick={() => { endPassageLoop(); focusLoop(); }} title={perform ? 'Stop looping this passage' : 'Stop looping this passage (Esc when stopped)'} aria-label="Stop looping this passage">
             ✕
           </button>
         </span>
@@ -280,7 +283,7 @@ export function PlayStop() {
           <span role="status">
             {capital(describePassage(score, passage))} · {loopKey} to loop
           </span>
-          <button className="loop-chip-x" onClick={() => { useApp.setState({ passage: null }); focusLoop(); }} title="Let go of this passage (Esc)" aria-label="Let go of the chosen passage">
+          <button className="loop-chip-x" onClick={() => { useApp.setState({ passage: null }); focusLoop(); }} title={perform ? 'Let go of this passage' : 'Let go of this passage (Esc)'} aria-label="Let go of the chosen passage">
             ✕
           </button>
         </span>

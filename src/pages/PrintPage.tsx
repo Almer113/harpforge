@@ -22,7 +22,7 @@ export interface PrintPrefs {
 }
 
 const VIEWS: { id: SheetView; label: string }[] = [
-  { id: 'simple', label: 'Simple Tab' },
+  { id: 'simple', label: 'Simple tab' },
   { id: 'tab', label: 'Tab' },
   { id: 'staff', label: 'Staff' },
   { id: 'numbers', label: 'Numbers' },
