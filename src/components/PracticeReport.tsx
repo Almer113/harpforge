@@ -10,8 +10,11 @@ const shortDate = (at: number) => new Date(at).toLocaleDateString(undefined, { m
 
 export function PracticeReport() {
   const report = useApp((s) => s.report);
+  const saved = useApp((s) => !!s.docId);
   if (!report) return null;
-  const { session: r, history, title, at } = report;
+  const { session: r, title, at } = report;
+  // Earlier sessions of the same kind (practice mode and play along count differently).
+  const history = report.history.filter((e) => e.mode === r.mode);
   const pct = accuracy(r);
   const holes = r.holes.filter((h) => h.misses + h.off > 0).slice(0, 4);
   const bars = r.bars.filter((b) => b.misses + b.off > 0).slice(0, 3);
@@ -27,13 +30,14 @@ export function PracticeReport() {
       <div className="report-summary">
         <div className="report-big">
           <b>{pct}%</b>
-          <span className="muted small">{r.mode === 'along' ? 'of the notes played' : 'right first time'}</span>
+          <span className="muted small">{r.mode === 'along' ? 'of the notes played' : 'of your tries were right'}</span>
         </div>
         <ul className="report-facts">
           {r.mode === 'along' ? (
             <>
               <li>{r.passes} pass{r.passes === 1 ? '' : 'es'}, {r.clean} clean</li>
               <li>{r.inTime} of {r.notes} notes in time</li>
+              {r.mistakes > 0 && <li>{r.mistakes} wrong note{r.mistakes === 1 ? '' : 's'}</li>}
             </>
           ) : (
             <li>{r.played} notes · {r.mistakes} wrong note{r.mistakes === 1 ? '' : 's'}</li>
@@ -41,7 +45,11 @@ export function PracticeReport() {
           {before && (
             <li>
               Last time ({shortDate(before.at)}): {before.accuracy}%{' '}
-              {pct !== before.accuracy && <span className={pct > before.accuracy ? 'report-up' : 'report-down'}>{pct > before.accuracy ? `▲ ${pct - before.accuracy}` : `▼ ${before.accuracy - pct}`}</span>}
+              {pct !== before.accuracy && (
+                <span className={pct > before.accuracy ? 'report-up' : 'report-down'} aria-label={pct > before.accuracy ? `up ${pct - before.accuracy} points` : `down ${before.accuracy - pct} points`}>
+                  {pct > before.accuracy ? `▲ ${pct - before.accuracy}` : `▼ ${before.accuracy - pct}`}
+                </span>
+              )}
             </li>
           )}
         </ul>
@@ -75,20 +83,23 @@ export function PracticeReport() {
           </section>
         </div>
       ) : (
-        <p className="report-clean">Every note played. Try it faster, or a harder passage.</p>
+        <p className="report-clean">{r.mode === 'along' ? 'Every note played.' : 'No wrong notes.'} Try it faster, or a harder passage.</p>
       )}
       {history.length > 1 && (
         <section className="report-history">
           <h3>Earlier sessions</h3>
-          <div className="report-bars" aria-label="Accuracy of earlier sessions">
+          <div className="report-bars" role="img" aria-label={`Earlier sessions: ${[...history.slice(-9).map((e) => `${e.accuracy}%`), `today ${pct}%`].join(', ')}`}>
             {[...history.slice(-9), { at, accuracy: pct }].map((e, k, all) => (
               <span key={k} className={k === all.length - 1 ? 'now' : ''} style={{ height: `${Math.max(4, e.accuracy)}%` }} title={`${shortDate(e.at)}: ${e.accuracy}%`} />
             ))}
           </div>
         </section>
       )}
+      {!saved && <p className="muted small report-note">Save the song to your library to keep a history of your practice.</p>}
       <div className="modal-actions">
-        <button className="btn primary" onClick={closeReport}>Done</button>
+        <button className="btn primary" onClick={closeReport} autoFocus>
+          Done
+        </button>
       </div>
     </Dialog>
   );

@@ -72,3 +72,23 @@ it('stopped part way, only the notes up to there count', () => {
   c.attack(0, 72, { ok: 0.25, good: 0.125 });
   expect(c.result(1.5)).toMatchObject({ total: 2, hit: 1, missed: 1, missedAt: [1] });
 });
+
+describe('review fixes', () => {
+  const win = { ok: 0.3, good: 0.15 };
+  it("a chord's other notes, played one by one, aren't wrong notes", () => {
+    const c = new AlongChecker(expectedNotes(score('(4 5) 6 |')));
+    expect(c.attack(0, 72, win)?.mark).toBe('hit');
+    expect(c.attack(0.02, 76, win)).toBeNull();
+    expect(c.strays).toBe(0);
+  });
+
+  it('playing steadily a little late keeps each note on its own note', () => {
+    // Quarter-beat notes of the same pitch, each played 0.13 beat late.
+    const c = new AlongChecker(expectedNotes(score('{4 4 4 4} {4 4 4 4} 5 |')));
+    for (let k = 0; k < 8; k++) {
+      c.missedBy(k * 0.25 + 0.13, win);
+      expect(c.attack(k * 0.25 + 0.13, 72, win)?.index).toBe(k);
+    }
+    expect(c.result()).toMatchObject({ missed: 1, strays: 0, missedAt: [8] });
+  });
+});

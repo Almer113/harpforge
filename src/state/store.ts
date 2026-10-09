@@ -181,8 +181,12 @@ export interface AppState {
   alongMelody: boolean;
   /** The microphone's delay in ms, from a calibration (null: not calibrated). Remembered. */
   micLatency: number | null;
+  /** A microphone calibration is listening (Play ends it). */
+  calibrating: boolean;
   /** This pass's marks, by score index. */
   alongMarks: Record<number, import('../core/playAlong').Mark>;
+  /** The last pass's marks (shown faded until each note comes round again). */
+  alongPrev: Record<number, import('../core/playAlong').Mark>;
   /** Passes played along since it was turned on, newest last. */
   alongPasses: import('../core/playAlong').PassResult[];
   /** The practice report on screen: the session, and the song's earlier sessions. */
@@ -399,7 +403,9 @@ export const useApp = create<AppState>((set) => ({
   along: false,
   alongMelody: prefs.alongMelody ?? true,
   micLatency: prefs.micLatency ?? null,
+  calibrating: false,
   alongMarks: {},
+  alongPrev: {},
   alongPasses: [],
   report: null,
   speed: 1,
@@ -484,7 +490,7 @@ export const useApp = create<AppState>((set) => ({
   loadSeq: 0,
   loadText: (text, docId = null, saved = false) =>
     // A different tab: the editor's caret and selection start over (they belonged to the old one).
-    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0 }, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, passage: null, loopRange: null, loop: s.loopRange ? false : s.loop, training: null, alongMarks: {}, alongPasses: [], activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
+    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0 }, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, passage: null, loopRange: null, loop: s.loopRange ? false : s.loop, training: null, alongMarks: {}, alongPrev: {}, alongPasses: [], activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
   markSaved: (docId, text) => set((s) => ({ docId, savedText: text ?? s.text })),
   notify: (message) => set({ toast: { message, id: Date.now() } }),
 }));

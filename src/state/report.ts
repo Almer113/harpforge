@@ -3,7 +3,8 @@
 import type { Passage } from '../core/passage';
 import type { SessionReport } from '../core/report';
 import { logSession, songLog } from '../storage/practiceLog';
-import { startTrainer } from './playback';
+import { startTrainer, stop } from './playback';
+import { alongReport } from '../core/report';
 import { getParsed, useApp } from './store';
 
 /**
@@ -18,13 +19,25 @@ export function showReport(session: SessionReport, log: boolean) {
   useApp.setState({ report: { session, history, title: getParsed(s.text).doc.meta.title || 'Untitled', at } });
 }
 
+/** A play-along session that's being left (for a drill, or practice mode) joins the song's history. */
+export function keepAlongSession() {
+  const s = useApp.getState();
+  if (s.along && s.alongPasses.length && s.docId) logSession(s.docId, alongReport(getParsed(s.text).score, s.alongPasses));
+}
+
 export function closeReport() {
   useApp.setState({ report: null });
 }
 
-/** Works on a bar: loops it slowly with the tempo trainer, playing along to check it. */
+/**
+ * Works on a bar: loops it slowly with the tempo trainer, counting in, playing along to
+ * check it. A play-along session still going is kept in the song's history first.
+ */
 export function drill(passage: Passage) {
-  const first = getParsed(useApp.getState().text).score.events.find((ev) => ev.start >= passage.start - 1e-6);
-  useApp.setState({ report: null, passage, selectedEvent: first?.index ?? null, loop: false, loopRange: null, along: true, practice: null, alongPasses: [], alongMarks: {} });
-  startTrainer();
+  stop();
+  keepAlongSession();
+  const s = useApp.getState();
+  const first = getParsed(s.text).score.events.find((ev) => ev.start >= passage.start - 1e-6);
+  useApp.setState({ report: null, passage, selectedEvent: first?.index ?? null, loop: false, loopRange: null, along: true, practice: null, alongPasses: [], alongMarks: {}, alongPrev: {} });
+  startTrainer({ count: true });
 }

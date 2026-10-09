@@ -24,6 +24,7 @@ export function Sheet({
 }) {
   const passage = useApp((s) => s.passage);
   const marks = useApp((s) => s.alongMarks);
+  const marksPrev = useApp((s) => s.alongPrev);
   const loopRange = useApp((s) => (s.loop ? s.loopRange : null));
   const activeEvents = useApp((s) => s.activeEvents);
   const selectedEvent = useApp((s) => s.selectedEvent);
@@ -86,7 +87,7 @@ export function Sheet({
         </div>
       </div>
       {view === 'simple' ? (
-        <SimpleTabView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} passage={passage} loopRange={loopRange} marks={marks} readAs={readAs} />
+        <SimpleTabView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} passage={passage} loopRange={loopRange} marks={marks} marksPrev={marksPrev} readAs={readAs} />
       ) : view !== 'staff' ? (
         <TabView
           parsed={parsed}
@@ -99,6 +100,7 @@ export function Sheet({
           passage={passage}
           loopRange={loopRange}
           marks={marks}
+          marksPrev={marksPrev}
           onBarClick={selectBar}
           notation={view === 'numbers' ? 'numbers' : 'holes'}
           readAs={readAs}

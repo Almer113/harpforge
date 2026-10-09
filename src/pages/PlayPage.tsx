@@ -70,7 +70,7 @@ function KeyHelp({ harp }: { harp: HarmonicaT }) {
       {holes > 12 && <span><kbd>←</kbd><kbd>→</kbd> move keys</span>}
       <span>Mouse: drag sideways to glide{bendable ? ', drag out to bend' : ''}</span>
       <span><kbd>Enter</kbd> play / pause · <kbd>Esc</kbd> stop</span>
-      <span><kbd>L</kbd> loop · <kbd>Shift</kbd>+click a note or click a bar number to choose a passage</span>
+      <span><kbd>L</kbd> loop · <kbd>Shift</kbd>+click a note, or click a bar number (Tab and Numbers views), to choose a passage</span>
     </Popover>
   );
 }

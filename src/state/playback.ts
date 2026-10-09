@@ -3,7 +3,7 @@
 import * as engine from '../audio/engine';
 import { beatsPerBar } from '../core/htab/types';
 import { soundPitch } from '../core/instruments';
-import { barStarts, eventPassage, joinPassages, type Passage } from '../core/passage';
+import { barAt, barPassage, barStarts, eventPassage, joinPassages, type Passage } from '../core/passage';
 import { findItem, fromDoc, realBeat } from '../core/edit/model';
 import type { PassResult } from '../core/playAlong';
 import { getParsed, useApp } from './store';
@@ -14,8 +14,8 @@ import { getParsed, useApp } from './store';
  */
 interface AlongHooks {
   startChecking(range: Passage, looping: boolean, counted: boolean): void;
-  stopChecking(): void;
-  passEnded(): PassResult | null;
+  stopChecking(record?: boolean): void;
+  passEnded(reason?: 'loop' | 'end'): PassResult | null;
 }
 let along: AlongHooks | null = null;
 export function setAlongHooks(hooks: AlongHooks) {
@@ -39,10 +39,15 @@ export function countBeats(bpb: number, bpm: number): number {
   return (bpb * 60) / bpm < 1.6 ? bpb * 2 : bpb;
 }
 
-/** Starts (or resumes) playback. `count: false` skips the count-in (jumping to a note mid-play). */
+/**
+ * Starts (or resumes) playback. `count: false` skips the count-in (jumping to a note mid-play),
+ * `count: true` counts in whatever the setting (a drill).
+ */
 export async function play(opts: { count?: boolean } = {}) {
   const s = useApp.getState();
   if (s.recording) return;
+  // Playing ends a microphone calibration that's still listening.
+  if (s.calibrating) useApp.setState({ calibrating: false });
   const gen = ++generation;
   await engine.ensureAudio();
   if (gen !== generation) return;
@@ -57,21 +62,23 @@ export async function play(opts: { count?: boolean } = {}) {
     return;
   }
   const sel = s.selectedEvent !== null ? p.score.events[s.selectedEvent] : undefined;
-  const range = s.loop && s.loopRange ? s.loopRange : undefined;
+  const range = (s.loop && s.loopRange && usablePassage(s.loopRange, p.score.totalBeats)) || undefined;
   const bpb = beatsPerBar(p.doc.meta);
   const tempo = p.doc.meta.tempo * s.speed;
-  // A loop that counts in before each pass counts in before the first one too.
-  const counting = (s.countIn || (s.loop && s.countEachLoop)) && opts.count !== false;
+  // A loop that counts in before each pass counts in before the first one too (also when
+  // jumping to a note in it: the count belongs to every pass).
+  const eachLoop = s.loop && s.countEachLoop;
+  const counting = opts.count === true || eachLoop || (s.countIn && opts.count !== false);
   // Playing along without the tune: the clicks keep time instead.
   const muted = s.along && !s.alongMelody;
-  if (s.along) along?.startChecking(range ?? { start: sel?.start ?? 0, end: p.score.totalBeats }, s.loop, s.loop && s.countEachLoop && counting);
+  if (s.along) along?.startChecking(range ?? { start: sel?.start ?? 0, end: p.score.totalBeats }, s.loop, eachLoop);
   engine.playScore(p.score, {
     tempo,
     startBeat: sel?.start ?? 0,
     range,
     loop: s.loop,
     countIn: counting ? countBeats(bpb, tempo) : 0,
-    countEachLoop: s.loop && s.countEachLoop,
+    countEachLoop: eachLoop,
     barStarts: barStarts(p.score),
     beatsPerBar: bpb,
     onLoop: loopPassed,
@@ -79,8 +86,8 @@ export async function play(opts: { count?: boolean } = {}) {
     metronomeBeatsPerBar: s.metronome || muted ? bpb : undefined,
     onEvent,
     onEnd: () => {
-      if (useApp.getState().along) along?.passEnded();
-      along?.stopChecking();
+      if (useApp.getState().along) along?.passEnded('end');
+      along?.stopChecking(false);
       useApp.setState({ play: 'stopped', activeEvents: [] });
     },
   });
@@ -188,13 +195,41 @@ useApp.subscribe((s, prev) => {
   if (s.speed !== prev.speed && s.play !== 'stopped') {
     engine.setTempo(getParsed(s.text).doc.meta.tempo * s.speed);
   }
-  if (s.metronome !== prev.metronome && s.play !== 'stopped' && !s.recording) {
+  // (Playing along without the tune, the clicks are the only timekeeping: they stay.)
+  const muted = s.along && !s.alongMelody;
+  if (s.metronome !== prev.metronome && s.play !== 'stopped' && !s.recording && !muted) {
     engine.setMetronome(s.metronome ? beatsPerBar(getParsed(s.text).doc.meta) : null);
   }
   // Looping switches on and off in place; playback keeps going.
   if (s.loop !== prev.loop && s.play !== 'stopped') engine.setLoop(s.loop);
-  if (s.text !== prev.text && s.play !== 'stopped' && !s.recording) stop();
+  if (s.text !== prev.text) {
+    if (s.play !== 'stopped' && !s.recording) stop();
+    // An edit can leave the chosen passage (or the looped one) past the end of the song.
+    const total = getParsed(s.text).score.totalBeats;
+    const passage = s.passage && usablePassage(s.passage, total);
+    const loopRange = s.loopRange && usablePassage(s.loopRange, total);
+    if (passage !== s.passage || loopRange !== s.loopRange) {
+      useApp.setState({ passage: passage ?? null, loopRange: loopRange ?? null, ...(s.loopRange && !loopRange ? { loop: false, training: null } : {}) });
+    }
+  }
+  // Play along (or its tune) switched while playing: playback starts again from where it
+  // was, so the checking and the sound match.
+  if ((s.along !== prev.along || (s.along && s.alongMelody !== prev.alongMelody)) && s.play === 'playing') {
+    const beat = engine.scoreBeatNow();
+    const { score } = getParsed(s.text);
+    const at = beat === null ? undefined : [...score.events].reverse().find((ev) => ev.start <= beat + 1e-6);
+    stop();
+    useApp.setState({ selectedEvent: at?.index ?? s.selectedEvent });
+    void play({ count: false });
+  }
 });
+
+/** A passage cut to the song's length (the same object when it fits), or null if none of it is left. */
+export function usablePassage(p: Passage, total: number): Passage | null {
+  if (p.end <= total + 1e-6) return p.start < p.end - 1e-6 ? p : null;
+  const end = total;
+  return end > p.start + 1e-6 ? { start: p.start, end } : null;
+}
 
 // ---- Passages and looping one --------------------------------------------------------
 
@@ -217,7 +252,7 @@ export function selectBar(bar: Passage, extend: boolean) {
   if (!first) return;
   const anchor = s.selectedEvent !== null ? score.events[s.selectedEvent] : undefined;
   if (extend && anchor) {
-    useApp.setState({ passage: joinPassages(s.passage ?? eventPassage(anchor), bar) });
+    useApp.setState({ passage: joinPassages(eventPassage(anchor), bar) });
     return;
   }
   if (s.play === 'paused') stop();
@@ -227,10 +262,16 @@ export function selectBar(bar: Passage, extend: boolean) {
 /** The passage the loop button would loop: the editor's selection there, else the Play page's. */
 export function currentPassage(): Passage | null {
   const s = useApp.getState();
-  if (s.page === 'editor' && s.editorMode !== 'text') {
+  // (The Split view's preview is a sheet like the Play page's: its passage counts there.)
+  if (s.page === 'editor' && s.editorMode === 'visual') {
     const sel = s.ve.selection;
-    if (sel.length < 2) return null;
+    if (!sel.length) return null;
     const song = fromDoc(getParsed(s.text).doc);
+    // One note: its bar (a single note is where playback starts, not a passage).
+    if (sel.length === 1) {
+      const { score } = getParsed(s.text);
+      return barPassage(score, barAt(score, realBeat(song, sel[0])));
+    }
     let start = Infinity;
     let end = -Infinity;
     for (const p of sel) {
@@ -252,7 +293,8 @@ export function currentPassage(): Passage | null {
 export function toggleLoop() {
   const s = useApp.getState();
   if (s.loop) {
-    useApp.setState({ loop: false, loopRange: null, training: null });
+    endTraining();
+    useApp.setState({ loop: false, loopRange: null });
     return;
   }
   const range = currentPassage();
@@ -265,7 +307,16 @@ export function toggleLoop() {
 
 /** Ends a passage loop (the loop chip's ✕); if it's playing, this pass is the last. */
 export function endPassageLoop() {
-  useApp.setState({ loop: false, loopRange: null, training: null });
+  endTraining();
+  useApp.setState({ loop: false, loopRange: null });
+}
+
+/** The loop ending takes the trainer with it: says so (the speed stays where it got to). */
+function endTraining() {
+  const s = useApp.getState();
+  if (!s.training) return;
+  useApp.setState({ training: null });
+  if (s.speed !== 1) s.notify(`Tempo trainer stopped at ${Math.round(s.speed * 100)}% speed`);
 }
 
 // ---- Tempo trainer ---------------------------------------------------------------------
@@ -276,13 +327,14 @@ const roundSpeed = (x: number) => Math.round(x * 100) / 100;
  * Starts the tempo trainer: the loop (the chosen passage, or the whole song) plays from the
  * trainer's start speed, a step faster after every `every` passes, up to its goal.
  */
-export function startTrainer() {
+export function startTrainer(opts: { count?: boolean } = {}) {
   const s = useApp.getState();
   if (s.recording) return;
   const range = s.loop ? s.loopRange : currentPassage();
   stop();
-  useApp.setState({ speed: s.trainer.start, loop: true, loopRange: range, training: { pass: 0, holding: false } });
-  void play();
+  // (Never above the goal: it would only ever slow down.)
+  useApp.setState({ speed: Math.min(s.trainer.start, s.trainer.goal), loop: true, loopRange: range, training: { pass: 0, holding: false } });
+  void play(opts);
 }
 
 export function stopTrainer() {
@@ -297,7 +349,7 @@ export function holdTrainer(holding: boolean) {
 
 /** A pass of the loop ended: count it, and speed up when it's time. */
 export function loopPassed() {
-  const result = useApp.getState().along ? (along?.passEnded() ?? null) : null;
+  const result = useApp.getState().along ? (along?.passEnded('loop') ?? null) : null;
   const s = useApp.getState();
   const t = s.training;
   if (!t) return;

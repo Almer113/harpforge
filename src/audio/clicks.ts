@@ -13,11 +13,17 @@ export interface ClickInfo {
 
 const EPS = 1e-6;
 
+/** Whether score beat `beat` falls in the count before the music. */
+export function inCount(beat: number, info: ClickInfo): boolean {
+  return info.count > 0 && beat >= info.countFrom - EPS && beat < info.countFrom + info.count - EPS;
+}
+
 /** Whether the click on score beat `beat` is accented. */
 export function isAccent(beat: number, info: ClickInfo, bpb: number): boolean {
-  const { barStarts, countFrom, count } = info;
+  const { barStarts, countFrom } = info;
   const near = (x: number) => Math.abs(x) < EPS || Math.abs(x - bpb) < EPS;
-  if (count > 0 && beat >= countFrom - EPS && beat < countFrom + count - EPS) return near((beat - countFrom) % bpb);
+  // In the count: the first click of each of its bars (it may start part way through a beat).
+  if (inCount(beat, info)) return (((beat - countFrom) % bpb) + bpb) % bpb < 1 - EPS;
   if (barStarts?.length) return barStarts.some((b) => Math.abs(b - beat) < EPS);
   return near(((beat % bpb) + bpb) % bpb);
 }

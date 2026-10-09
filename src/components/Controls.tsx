@@ -6,7 +6,7 @@ import { isKeyChange, keyDistance, setHarmonica, shiftOctave } from '../state/ac
 import { guessTonic, harpForPosition, octaveOptions, positionFor, positionName } from '../core/convert';
 import { mod12, transposeKey } from '../core/pitch';
 import { describePassage } from '../core/passage';
-import { endPassageLoop, holdTrainer, playFrom, startTrainer, stop, stopTrainer, toggleLoop, togglePlay, trainerLabel } from '../state/playback';
+import { currentPassage, endPassageLoop, extendPassage, holdTrainer, playFrom, startTrainer, stop, stopTrainer, toggleLoop, togglePlay, trainerLabel } from '../state/playback';
 import { TRAINER_CHOICES, useApp, useParsed, type TrainerSettings } from '../state/store';
 import { Popover } from './Popover';
 
@@ -208,7 +208,7 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
         <span className="mi-hint pb-hint">A bar of clicks first (two at fast tempos)</span>
         <label className="check">
           <input type="checkbox" checked={countEachLoop} onChange={(e) => useApp.setState({ countEachLoop: e.target.checked })} />
-          Count in before each loop
+          Count in before each pass
         </label>
         <span className="mi-hint pb-hint">A breath between passes when looping</span>
       </div>
@@ -223,11 +223,13 @@ export function PlayStop() {
   const metronome = useApp((s) => s.metronome);
   const recording = useApp((s) => s.recording);
   const page = useApp((s) => s.page);
-  // "Looping bars 5–8" while a passage loops.
+  const countIn = useApp((s) => s.countIn);
+  // "Looping bars 5–8" while a passage loops; "Bars 5–8" for a chosen passage not looped yet.
   const loopRange = useApp((s) => (s.loop ? s.loopRange : null));
+  const passage = useApp((s) => (s.page === 'play' && !s.loop ? s.passage : null));
   const { score } = useParsed();
-  const looping = loopRange ? `Looping ${describePassage(score, loopRange)}` : null;
   const loopKey = page === 'editor' ? 'Shift+L' : 'L';
+  const focusLoop = () => document.querySelector<HTMLElement>('.play-stop [aria-label="Loop"]')?.focus();
   return (
     <div className="t-group play-stop">
       <button className="t-btn primary" onClick={togglePlay} disabled={!!recording} title="Play / pause (Enter)" aria-label={play === 'playing' ? 'Pause' : 'Play'}>
@@ -239,20 +241,38 @@ export function PlayStop() {
       <button
         className={`t-btn toggle ${loop ? 'on' : ''}`}
         onClick={toggleLoop}
-        title={`Loop (${loopKey}): the selected passage, or the whole song`}
+        title={loopRange ? `Looping ${describePassage(score, loopRange)} (${loopKey} or click to stop)` : `Loop (${loopKey}): the chosen passage, or the whole song`}
         aria-label="Loop"
         aria-pressed={loop}
       >
         {Icon.loop}
       </button>
-      <button className={`t-btn toggle ${metronome ? 'on' : ''}`} onClick={() => useApp.setState({ metronome: !metronome })} title="Metronome during playback" aria-label="Metronome" aria-pressed={metronome}>
+      <button
+        className={`t-btn toggle ${metronome ? 'on' : ''}`}
+        onClick={() => useApp.setState({ metronome: !metronome })}
+        title={`Metronome during playback${countIn ? ' (counting in is on)' : ' (counting in: in the ♫ menu)'}`}
+        aria-label="Metronome"
+        aria-pressed={metronome}
+      >
         {Icon.metro}
       </button>
       <TrainerButton />
-      {looping && (
-        <span className="loop-chip" role="status">
-          {looping}
-          <button className="loop-chip-x" onClick={endPassageLoop} title="Stop looping this passage (Esc when stopped)" aria-label="Stop looping this passage">
+      {loopRange && (
+        <span className="loop-chip">
+          <span role="status">
+            Looping {describePassage(score, loopRange)}
+          </span>
+          <button className="loop-chip-x" onClick={() => { endPassageLoop(); focusLoop(); }} title="Stop looping this passage (Esc when stopped)" aria-label="Stop looping this passage">
+            ✕
+          </button>
+        </span>
+      )}
+      {passage && (
+        <span className="loop-chip passage-chip">
+          <span role="status">
+            {capital(describePassage(score, passage))} · {loopKey} to loop
+          </span>
+          <button className="loop-chip-x" onClick={() => { useApp.setState({ passage: null }); focusLoop(); }} title="Let go of this passage (Esc)" aria-label="Let go of the chosen passage">
             ✕
           </button>
         </span>
@@ -261,6 +281,7 @@ export function PlayStop() {
   );
 }
 
+const capital = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 /**
@@ -273,31 +294,39 @@ function TrainerButton() {
   const speed = useApp((s) => s.speed);
   const recording = useApp((s) => s.recording);
   const cleanOnly = useApp((s) => s.trainerCleanOnly);
+  const playing = useApp((s) => s.play !== 'stopped');
+  const { score } = useParsed();
   const set = (patch: Partial<TrainerSettings>) => useApp.setState((s) => ({ trainer: { ...s.trainer, ...patch } }));
-  const choice = (key: keyof TrainerSettings, label: string, show: (x: number) => string) => (
+  const choice = (key: keyof TrainerSettings, label: string, show: (x: number) => string, disabled = false) => (
     <label className="pb-row">
       <span>{label}</span>
-      <select value={trainer[key]} onChange={(e) => set({ [key]: parseFloat(e.target.value) })} aria-label={label}>
+      <select value={trainer[key]} disabled={disabled} onChange={(e) => set({ [key]: parseFloat(e.target.value) })} aria-label={label}>
         {TRAINER_CHOICES[key].map((x) => (
           <option key={x} value={x}>{show(x)}</option>
         ))}
       </select>
     </label>
   );
+  const focusButton = () => document.querySelector<HTMLElement>('.play-stop [aria-label^="Tempo trainer"]')?.focus();
   return (
     <>
       <Popover
         label={Icon.gauge}
         buttonClass={`t-btn toggle ${training ? 'on' : ''}`}
-        title="Tempo trainer: loop slowly, speeding up pass by pass"
-        ariaLabel="Tempo trainer"
+        title={training ? trainerLabel(training, speed, trainer.goal) : 'Tempo trainer: loop slowly, speeding up pass by pass'}
+        ariaLabel={training ? 'Tempo trainer (on)' : 'Tempo trainer'}
         kind="panel"
         panelClass="menu pb-menu trainer-menu"
       >
-        {(close) => (
+        {(close) => {
+          // What it will loop (worked out when the menu opens).
+          const target = useApp.getState().loop ? useApp.getState().loopRange : currentPassage();
+          return (
           <div className="pb-settings">
-            <p className="trainer-intro">Loops the chosen passage (or the whole song), a little faster each time.</p>
-            {choice('start', 'Start at', pct)}
+            <p className="trainer-intro">
+              {target ? `Loops ${describePassage(score, target)}` : 'Loops the whole song (Shift+click notes, or click bar numbers, to choose a passage)'}, a little faster each pass.
+            </p>
+            {choice('start', 'Start at', pct, !!training)}
             {choice('step', 'Speed up by', (x) => `+${Math.round(x * 100)}%`)}
             {choice('every', 'Every', (x) => (x === 1 ? 'pass' : `${x} passes`))}
             {choice('goal', 'Up to', pct)}
@@ -313,23 +342,26 @@ function TrainerButton() {
               )}
             </div>
           </div>
-        )}
+          );
+        }}
       </Popover>
       {training && (
-        <span className="loop-chip trainer-chip" role="status">
-          {trainerLabel(training, speed, trainer.goal)}
+        <span className={`loop-chip trainer-chip ${playing ? '' : 'idle'}`}>
+          <span role="status">
+            {trainerLabel(training, speed, trainer.goal)}{playing ? '' : ' (stopped)'}
+          </span>
           {speed < trainer.goal - 1e-9 && (
             <button
               className={`loop-chip-x ${training.holding ? 'on' : ''}`}
               onClick={() => holdTrainer(!training.holding)}
-              title={training.holding ? 'Speed up again' : 'Hold this speed'}
-              aria-label={training.holding ? 'Speed up again' : 'Hold this speed'}
+              title={training.holding ? 'Holding this speed: click to speed up again' : 'Hold this speed'}
+              aria-label="Hold this speed"
               aria-pressed={training.holding}
             >
               {training.holding ? Icon.resume : Icon.hold}
             </button>
           )}
-          <button className="loop-chip-x" onClick={stopTrainer} title="Stop the trainer (the loop goes on at this speed)" aria-label="Stop the trainer">
+          <button className="loop-chip-x" onClick={() => { stopTrainer(); focusButton(); }} title="Stop the trainer (the loop goes on at this speed)" aria-label="Stop the trainer">
             ✕
           </button>
         </span>
@@ -358,7 +390,9 @@ export function Transport({ compact = false }: { compact?: boolean }) {
       const card = el.closest<HTMLElement>('[data-index]');
       if (e.code === 'Enter' && !e.repeat && card && card.closest('.sheet')) {
         e.preventDefault();
-        playFrom(Number(card.dataset.index));
+        // Shift+Enter, like Shift+click: the passage runs to this note.
+        if (e.shiftKey) extendPassage(Number(card.dataset.index));
+        else playFrom(Number(card.dataset.index));
         return;
       }
       const st = useApp.getState();
@@ -376,6 +410,7 @@ export function Transport({ compact = false }: { compact?: boolean }) {
         else if (st.play !== 'stopped') stop();
         // Stopped: Escape lets go of the passage loop, then of the chosen passage.
         else if (st.loop && st.loopRange) endPassageLoop();
+        else if (st.training) stopTrainer();
         else if (st.passage) useApp.setState({ passage: null });
       }
     };

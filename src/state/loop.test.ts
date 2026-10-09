@@ -136,3 +136,42 @@ it('stopping the trainer keeps the loop going at its speed', () => {
   stopTrainer();
   expect(s()).toMatchObject({ loop: true, training: null, speed: 0.65 });
 });
+
+// ---- Review fixes
+
+it('an edit that shortens the song cuts the chosen and looped passages (or drops them)', () => {
+  selectBar({ start: 12, end: 16 }, false);
+  toggleLoop();
+  s().setText('---\ntitle: Loop\n---\n4 4 4 4 | 5 5 5 5 |\n');
+  expect(s()).toMatchObject({ passage: null, loopRange: null, loop: false });
+  selectBar({ start: 4, end: 8 }, false);
+  useApp.setState({ passage: { start: 4, end: 12 } });
+  s().setText('---\ntitle: Loop\n---\n4 4 4 4 | 5 5 5 5 | 6 6 |\n');
+  expect(s().passage).toEqual({ start: 4, end: 10 });
+});
+
+it('Split view: the loop uses the preview’s passage, not the hidden visual editor’s selection', () => {
+  useApp.setState({ page: 'editor', editorMode: 'split', passage: { start: 4, end: 8 } });
+  s().setVe({ selection: [] });
+  toggleLoop();
+  expect(s().loopRange).toEqual({ start: 4, end: 8 });
+});
+
+it('in the visual editor one selected note loops its bar', () => {
+  useApp.setState({ page: 'editor', editorMode: 'visual' });
+  s().setVe({ selection: [{ m: 2, start: 1 }] });
+  toggleLoop();
+  expect(s().loopRange).toEqual({ start: 8, end: 12 });
+});
+
+it('the trainer never starts above its goal', () => {
+  useApp.setState({ trainer: { ...DEFAULT_TRAINER, start: 0.9, goal: 0.8 } });
+  startTrainer();
+  expect(s().speed).toBe(0.8);
+});
+
+it('Play ends a microphone calibration that is still listening', async () => {
+  useApp.setState({ calibrating: true });
+  await play();
+  expect(s().calibrating).toBe(false);
+});

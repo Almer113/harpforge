@@ -9,7 +9,7 @@ import { eventsIn, type Passage } from '../core/passage';
 import type { Parsed, ReadAs } from '../state/store';
 import { midiToName, keySpelling, type Spelling } from '../core/pitch';
 import { followTo } from './follow';
-import { indexesByLine, markMap, marksPerLine, useStableClick } from './TabView';
+import { indexesByLine, markClass, markMap, marksPerLine, useStableClick } from './TabView';
 import type { Mark } from '../core/playAlong';
 
 interface Props {
@@ -21,8 +21,9 @@ interface Props {
   /** The chosen passage and the looped one, shown as bands behind their notes. */
   passage?: Passage | null;
   loopRange?: Passage | null;
-  /** Play-along marks by score index. */
+  /** Play-along marks by score index, and the last pass's. */
   marks?: Record<number, Mark>;
+  marksPrev?: Record<number, Mark>;
   /** Notes mode: note names (C5) instead of holes. */
   readAs?: ReadAs;
 }
@@ -102,7 +103,7 @@ export function SimpleTabPreview({ doc, lines = 2 }: { doc: TabDoc; lines?: numb
   );
 }
 
-export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect, passage, loopRange, marks, readAs = 'holes' }: Props) {
+export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect, passage, loopRange, marks, marksPrev, readAs = 'holes' }: Props) {
   const { doc, score, harp } = parsed;
   const flats = keySpelling(doc.meta.key ?? harp.spec.key);
   const root = useRef<HTMLDivElement>(null);
@@ -120,7 +121,7 @@ export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect, p
   const activeByLine = indexesByLine(score, activeEvents);
   const passageByLine = indexesByLine(score, passage ? eventsIn(score, passage) : []);
   const loopByLine = indexesByLine(score, loopRange ? eventsIn(score, loopRange) : []);
-  const marksByLine = marksPerLine(score, marks);
+  const marksByLine = marksPerLine(score, marks, marksPrev);
   const selectedLine = selectedEvent !== null ? score.events[selectedEvent]?.line : undefined;
   return (
     <div className={`simpletab ${readAs === 'notes' ? 'as-notes' : ''}`} ref={root}>
@@ -169,14 +170,15 @@ const SimpleLine = memo(function SimpleLine({
             const idx = indexByKey.get(eventKey(li, ei));
             const isActive = idx !== undefined && activeSet.has(idx);
             const isSelected = idx !== undefined && idx === selected;
-            const mark = idx !== undefined ? markOf.get(idx) : undefined;
-            const band = idx === undefined ? '' : `${passageSet.has(idx) ? 'in-passage' : ''} ${loopSet.has(idx) ? 'in-loop' : ''} ${mark ? `mark-${mark}` : ''}`;
+            const mark = markClass(idx !== undefined ? markOf.get(idx) : undefined);
+            const band = idx === undefined ? '' : `${passageSet.has(idx) ? 'in-passage' : ''} ${loopSet.has(idx) ? 'in-loop' : ''} ${mark.cls}`;
             return (
               <button
                 key={ei}
                 data-index={idx}
                 className={`st-note ${breathClass(ev)} ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''} ${band}`}
                 onClick={(e) => idx !== undefined && onSelect(idx, ev, e.shiftKey)}
+                title={mark.words || undefined}
               >
                 {asNotes && idx !== undefined ? <NoteNames midis={score.events[idx]?.midis ?? []} flats={flats} /> : <Token ev={ev} />}
               </button>

@@ -23,7 +23,9 @@ type Log = Record<string, LogEntry[]>;
 function read(): Log {
   try {
     const v: unknown = JSON.parse(localStorage.getItem(KEY) ?? '{}');
-    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Log) : {};
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+    // (A song's entry that isn't a list is from something else: it's dropped.)
+    return Object.fromEntries(Object.entries(v).filter(([, list]) => Array.isArray(list))) as Log;
   } catch {
     return {};
   }

@@ -55,19 +55,33 @@ export class AlongChecker {
   constructor(readonly expected: Expected[]) {}
 
   /**
-   * A note you played at score beat `beat`: the nearest unplayed note of that pitch within
-   * the window gets its mark; otherwise it's a stray (a wrong note, or one far off the beat).
+   * The unplayed note a note played at `beat` would be: of that pitch, within the window.
+   * Late is preferred over early: a note played after an unplayed note's moment is that note
+   * (so playing steadily a little late doesn't push every note onto the next one).
+   */
+  match(beat: number, midi: number, win: { ok: number }): Expected | null {
+    const pitch = Math.round(midi);
+    let behind: Expected | null = null;
+    let ahead: Expected | null = null;
+    for (const e of this.expected) {
+      if (this.marks.has(e.index) || !e.midis.includes(pitch) || Math.abs(beat - e.start) > win.ok + 1e-9) continue;
+      if (e.start <= beat + 1e-9) behind ??= e;
+      else if (!ahead || e.start < ahead.start) ahead = e;
+    }
+    return behind ?? ahead;
+  }
+
+  /**
+   * A note you played at score beat `beat` marks the note it matches (see match); otherwise
+   * it's a stray (a wrong note, or one far off the beat), unless it's another note of a chord
+   * just played (keys and MIDI give a chord's notes one by one).
    */
   attack(beat: number, midi: number, win: { ok: number; good: number }): { index: number; mark: Mark } | null {
-    const pitch = Math.round(midi);
-    let best: Expected | null = null;
-    for (const e of this.expected) {
-      if (this.marks.has(e.index) || !e.midis.includes(pitch)) continue;
-      const d = Math.abs(beat - e.start);
-      if (d <= win.ok + 1e-9 && (!best || d < Math.abs(beat - best.start))) best = e;
-    }
+    const best = this.match(beat, midi, win);
     if (!best) {
-      this.strays++;
+      const pitch = Math.round(midi);
+      const chordNote = this.expected.some((e) => this.marks.has(e.index) && this.marks.get(e.index) !== 'missed' && e.midis.length > 1 && e.midis.includes(pitch) && Math.abs(beat - e.start) <= win.ok + 1e-9);
+      if (!chordNote) this.strays++;
       return null;
     }
     const d = beat - best.start;

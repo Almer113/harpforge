@@ -4,7 +4,7 @@
 
 import * as Tone from 'tone';
 import { soundSpans, type Score } from '../core/score';
-import { isAccent, type ClickInfo } from './clicks';
+import { inCount, isAccent, type ClickInfo } from './clicks';
 import { createVoice, outputs, type Voice } from './voices';
 
 export { loadSamples, samplesReady, setSoundMode, setVoicing, type SoundMode, type Voicing } from './voices';
@@ -168,7 +168,8 @@ function scheduleMetronome(beatsPerBar: number) {
   const frac = ((clickInfo.offset % 1) + 1) % 1;
   metronomeId = transport().scheduleRepeat((time) => {
     const beat = Math.round((transport().getTicksAtTime(time) / ticksPerBeat() - clickInfo.offset) * 1000) / 1000;
-    click(time, accented(beat));
+    // The count has its own clicks (so the metronome going on or off mid-song never changes it).
+    if (!inCount(beat, clickInfo)) click(time, accented(beat));
   }, beatTicks(1), beatTicks(frac));
 }
 
@@ -187,7 +188,8 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
   const countIn = opts.countIn ?? 0;
   // Score beat b sits at transport beat b + offset, so the count fits before wherever playback starts.
   const offset = countIn;
-  const range = opts.range && opts.range.end > opts.range.start ? opts.range : undefined;
+  // (A range that's no longer inside the song, after an edit, plays the song instead.)
+  const range = opts.range && score && Math.min(opts.range.end, score.totalBeats) > opts.range.start + 1e-6 ? opts.range : undefined;
   const startBeat = range ? range.start : (opts.startBeat ?? 0);
 
   if (score) {
@@ -248,7 +250,7 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
   clickInfo = { offset, barStarts: opts.barStarts, countFrom: startBeat - countIn, count: countIn };
   metronomeBpb = opts.metronomeBeatsPerBar ?? opts.beatsPerBar ?? (countIn || 4);
   if (opts.metronomeBeatsPerBar) scheduleMetronome(opts.metronomeBeatsPerBar);
-  else if (countIn > 0) {
+  if (countIn > 0) {
     // Count-in clicks only, on the beats before the music (each pass, when a loop counts in again).
     for (let b = 0; b < countIn - 1e-6; b++) t.schedule((time) => click(time, accented(startBeat - countIn + b)), beatTicks(startBeat + b));
   }

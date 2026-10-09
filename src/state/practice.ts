@@ -8,7 +8,7 @@ import { onLive } from '../live/livePlayer';
 import { stop as stopPlayback } from './playback';
 import { getParsed, useApp } from './store';
 import { practiceReport } from '../core/report';
-import { showReport } from './report';
+import { keepAlongSession, showReport } from './report';
 
 function nextPlayable(from: number): number | null {
   const { score } = getParsed(useApp.getState().text);
@@ -29,15 +29,16 @@ export function startPractice() {
     s.notify('Nothing to practise yet — this tab has no playable notes.');
     return;
   }
-  // (Practice and play along take turns.)
+  // (Practice and play along take turns: a play-along session joins the song's history.)
+  keepAlongSession();
   useApp.setState({ practice: { index: first, played: 0, mistakes: 0, startedAt: Date.now(), wrongAt: 0, mistakesAt: {} }, selectedEvent: first, along: false, alongMarks: {} });
 }
 
-/** Stops practising; after at least a note, the report shows how it went. */
+/** Stops practising; after a few notes, the report shows how it went. */
 export function stopPractice() {
   const p = useApp.getState().practice;
   useApp.setState({ practice: null });
-  if (p && p.played > 0) showReport(practiceReport(getParsed(useApp.getState().text).score, p.played, p.mistakesAt), true);
+  if (p && p.played >= 5) showReport(practiceReport(getParsed(useApp.getState().text).score, p.played, p.mistakesAt), true);
 }
 
 /** Plays the note you're supposed to play next. */

@@ -8,6 +8,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 const clock = vi.hoisted(() => ({ beat: 0 as number | null }));
 vi.mock('../audio/engine', async () => (await import('../test/fakeEngine')).fakeEngine({ scoreBeatNow: () => clock.beat }));
 
+import * as engine from '../audio/engine';
 import { holeSound } from '../core/types';
 import { press, release } from '../live/livePlayer';
 import { loopPassed, play, selectBar, startTrainer, stop } from './playback';
@@ -125,4 +126,103 @@ it("a note played just before the loop comes round is the next pass's first, a l
   await comeRound();
   expect(s().alongPasses).toHaveLength(1);
   expect(s().alongMarks).toEqual({ 4: 'hit' });
+});
+
+// ---- Review fixes
+
+it('the last note of a loop, a little late, counts for its own pass', async () => {
+  s().loadText('---\ntempo: 200\n---\n4 4 4 4 | 4 4 4 {4 5} |\n', null);
+  setAlong(true);
+  useApp.setState({ loop: true, loopRange: { start: 4, end: 8 } });
+  await play();
+  for (const b of [4, 5, 6, 7]) playAt(b, 4);
+  playAt(7.55, 5);
+  await comeRound();
+  expect(s().alongPasses.at(-1)).toMatchObject({ clean: true, missed: 0, strays: 0 });
+});
+
+it('the engine reporting the loop just before the position jumps back scores the pass once', async () => {
+  useApp.setState({ loop: true, loopRange: { start: 4, end: 8 } });
+  await play();
+  for (const b of [4, 5, 6, 7]) playAt(b, 4);
+  clock.beat = 7.999;
+  loopPassed();
+  expect(s().alongPasses).toHaveLength(1);
+  // The jump back then doesn't end the new pass.
+  playAt(4.02, 4);
+  expect(s().alongPasses).toHaveLength(1);
+  expect(s().alongMarks).toEqual({ 4: 'hit' });
+});
+
+it('turning the loop off mid-pass: the last pass is scored when the song ends', async () => {
+  useApp.setState({ loop: true, loopRange: { start: 4, end: 8 } });
+  await play();
+  for (const b of [4, 5, 6, 7]) playAt(b, 4);
+  await comeRound();
+  useApp.setState({ loop: false, loopRange: null });
+  playAt(4, 4);
+  playAt(5, 4);
+  // The song ends: the engine has stopped, then calls onEnd.
+  clock.beat = null;
+  const onEnd = (engine.playScore as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)![1].onEnd as () => void;
+  onEnd();
+  expect(s().alongPasses).toHaveLength(2);
+  expect(s().alongPasses[1]).toMatchObject({ hit: 2 });
+  // The marks stay on the notes after the song.
+  expect(s().alongMarks).toMatchObject({ 4: 'hit', 5: 'hit' });
+});
+
+it('a loop shorter than a beat is scored', async () => {
+  useApp.setState({ loop: true, loopRange: { start: 4, end: 4.5 } });
+  s().loadText('---\ntempo: 60\n---\n4 5 4 5 | {4 5} 4 4 4 |\n', null);
+  setAlong(true);
+  useApp.setState({ loop: true, loopRange: { start: 4, end: 4.5 } });
+  await play();
+  playAt(4, 4);
+  clock.beat = 4.45;
+  await new Promise((r) => setTimeout(r, 130));
+  clock.beat = 4.02;
+  loopPassed();
+  expect(s().alongPasses.at(-1)).toMatchObject({ total: 1, hit: 1, clean: true });
+});
+
+it('editing the song drops the session (its notes were the old ones)', async () => {
+  await play();
+  playAt(0, 4);
+  s().setText(TAB.replace('4 5 4 5', '5 5 5 5'));
+  expect(s()).toMatchObject({ alongMarks: {}, alongPasses: [] });
+});
+
+it('the last pass marks fade, shown until the loop comes round to them', async () => {
+  useApp.setState({ loop: true, loopRange: { start: 4, end: 8 } });
+  await play();
+  playAt(4, 4);
+  await comeRound();
+  expect(s().alongMarks).toEqual({});
+  expect(s().alongPrev).toMatchObject({ 4: 'hit', 5: 'missed' });
+});
+
+it('Drill keeps a play-along session going on in the history, and counts in', async () => {
+  localStorage.clear();
+  s().loadText(TAB, 'song-2', true);
+  setAlong(true);
+  useApp.setState({ loop: true, loopRange: { start: 4, end: 8 } });
+  await play();
+  for (const b of [4, 5, 6, 7]) playAt(b, 4);
+  await comeRound();
+  drill({ start: 0, end: 4 });
+  await settle();
+  expect(songLog('song-2')).toHaveLength(1);
+  expect(engine.playScore).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ countIn: 4, range: { start: 0, end: 4 } }));
+});
+
+it('a corrupt practice history is ignored rather than breaking the report', () => {
+  localStorage.setItem('harpforge:practice-log', JSON.stringify({ other: null, 'song-3': 5 }));
+  expect(songLog('song-3')).toEqual([]);
+});
+
+it('the microphone going on while playing along turns the tune off', () => {
+  useApp.setState({ alongMelody: true, mic: { ...s().mic, status: 'on' } });
+  expect(s().alongMelody).toBe(false);
+  useApp.setState({ mic: { ...s().mic, status: 'off' }, alongMelody: true });
 });

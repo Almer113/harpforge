@@ -22,3 +22,10 @@ it('the music accents its real bar starts, so a pickup comes out right', () => {
 it('without bar starts (recording), every bar of the time signature', () => {
   expect(accents(-4, 8, { offset: 4, countFrom: -4, count: 4 }, 4)).toEqual([-4, 0, 4]);
 });
+
+it('a count starting part way through a beat accents the first click of each of its bars', () => {
+  // Two bars of 4/4 counted in before beat 10.5: clicks at 2.5, 3.5, … 9.5.
+  const info = { offset: 8, countFrom: 2.5, count: 8 };
+  const at = [2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5].filter((b) => isAccent(b, info, 4));
+  expect(at).toEqual([2.5, 6.5]);
+});

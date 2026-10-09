@@ -174,18 +174,24 @@ export function MidiControl() {
  * Play along, checked: play with the song while it plays; each note lights up green (in
  * time), amber (early or late) or red (missed). Shows how the last pass went.
  */
+/** Moves the keyboard to an element that appears once the state change has drawn. */
+function focusSoon(selector: string) {
+  requestAnimationFrame(() => document.querySelector<HTMLElement>(selector)?.focus());
+}
+
 function AlongControl() {
   const along = useApp((s) => s.along);
   const melody = useApp((s) => s.alongMelody);
   const passes = useApp((s) => s.alongPasses);
   const micOn = useApp((s) => s.mic.status === 'on');
   const latency = useApp((s) => s.micLatency);
+  const playing = useApp((s) => s.play === 'playing');
   const { score } = useParsed();
   const [cal, setCal] = useState<'idle' | 'running' | 'failed'>('idle');
   if (!along) {
     return (
       <div className="input-card">
-        <button className="t-btn toggle" onClick={() => setAlong(true)} title="Play along with the song as it plays: each note you play (keys, MIDI or microphone) is checked for time">
+        <button className="t-btn toggle along-start" onClick={() => setAlong(true)} title="Play along with the song as it plays: each note you play (keys, MIDI or microphone) is checked for time">
           {AlongIcon} <span>Play along</span>
         </button>
       </div>
@@ -202,22 +208,22 @@ function AlongControl() {
     <div className="input-card on along">
       <span className="practice-label">Play along</span>
       <span className="input-status along-status" role="status">
-        {cal === 'running' ? 'Play any note with each click after the first bar…' : cal === 'failed' ? 'Didn’t hear enough notes on the clicks. Try again.' : last ? `Last pass: ${describePass(last)}` : 'Press Play, then play with it'}
+        {cal === 'running' ? 'Play any note with each click after the first bar…' : cal === 'failed' ? 'Didn’t hear enough notes on the clicks. Try again.' : last ? `Last pass: ${describePass(last)}` : playing ? 'Checking starts at the next Play' : 'Press Play, then play with it'}
       </span>
       {passes.length > 1 && <span className="input-status">{clean} of {passes.length} clean</span>}
       <label className="check" title="Off: only the clicks play, so the microphone hears just you">
         <input type="checkbox" checked={melody} onChange={(e) => useApp.setState({ alongMelody: e.target.checked })} />
         Hear the tune
       </label>
-      {micOn && melody && <span className="input-error along-warn">With the microphone, turn the tune off so it hears only you.</span>}
+      {micOn && melody && <span className="mi-hint along-warn">With the tune on, the microphone hears it too: turn it off to be checked.</span>}
       {micOn && (
         <button
           className="btn small ghost"
           disabled={cal === 'running'}
           onClick={() => void calibrate()}
-          title={`The microphone hears notes a moment late; calibrating measures by how much (now ${latency ?? DEFAULT_MIC_LATENCY} ms${latency === null ? ', a guess' : ''})`}
+          title={`The microphone hears notes a moment late; this measures by how much${latency === null ? ` (until then, ${DEFAULT_MIC_LATENCY} ms is assumed)` : ' (click to measure again)'}`}
         >
-          {latency === null ? 'Calibrate mic' : `Mic delay ${latency} ms`}
+          {latency === null ? 'Calibrate mic' : `Mic timing ${latency} ms`}
         </button>
       )}
       {passes.length > 0 && (
@@ -225,7 +231,9 @@ function AlongControl() {
           Report
         </button>
       )}
-      <button className="btn small ghost" onClick={() => setAlong(false)}>Stop</button>
+      <button className="btn small ghost" onClick={() => { setAlong(false); focusSoon('.inputbar .along-start'); }} aria-label="Finish playing along" title="Finish: shows how it went">
+        Finish
+      </button>
     </div>
   );
 }
@@ -269,7 +277,7 @@ function PracticeControl() {
         {practice.played + 1} / {total} · {practice.mistakes} mistake{practice.mistakes === 1 ? '' : 's'}
       </span>
       <button className="btn small" onClick={() => void hint()} title="Hear the note">Hint</button>
-      <button className="btn small ghost" onClick={stopPractice}>Stop</button>
+      <button className="btn small ghost" onClick={stopPractice} aria-label="Stop practising">Stop</button>
     </div>
   );
 }
