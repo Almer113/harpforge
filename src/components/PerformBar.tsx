@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PlayStop, SpeedControl, useTransportKeys } from './Controls';
-import { pageTurnKey, turnPage } from './follow';
+import { pageTurnKey, startPerformanceView, turnPage } from './follow';
 import { Popover } from './Popover';
 import { keysTaken } from '../live/focus';
 import { ReadAsSwitch, ShowMenu, ViewSwitch } from './Sheet';
@@ -15,7 +15,7 @@ import { PERFORM_SIZES, useApp, useParsed } from '../state/store';
 const IDLE_MS = 2500;
 /** The note last heard: "Bar 5" stays up through the gaps between notes. */
 let lastPlayed: number | null = null;
-const VIEW_NAMES = { simple: 'Simple tab', tab: 'Tab', staff: 'Staff', numbers: 'Numbers' };
+const VIEW_NAMES = { simple: 'Simple tab', tab: 'Tab', staff: 'Staff', numbers: 'Numbers', lyrics: 'Lyrics' };
 
 export function PerformBar() {
   useTransportKeys();
@@ -57,6 +57,10 @@ export function PerformBar() {
     if (!el) return;
     const ro = new ResizeObserver(() => document.documentElement.style.setProperty('--perform-bar-h', `${el.offsetHeight}px`));
     ro.observe(el);
+    // The page under it has changed completely: start at the top, or at the selected note.
+    document.documentElement.style.setProperty('--perform-bar-h', `${el.offsetHeight}px`);
+    const sel = useApp.getState().selectedEvent;
+    startPerformanceView(sel !== null ? document.querySelector(`.sheet [data-index="${sel}"]`) : null);
     return () => ro.disconnect();
   }, []);
 
@@ -83,9 +87,9 @@ export function PerformBar() {
       <div className="pf-group">
         {view !== 'simple' && <ShowMenu view={view} />}
         {/* The view and Holes | Notes, in one menu: the bar stays one row on a laptop. */}
-        <Popover label={`${VIEW_NAMES[view]}${(view === 'tab' || view === 'simple') && readAs === 'notes' ? ' · Notes' : ''}${move === 'pages' ? ' · Pages' : ''} ▾`} title="Choose the view, and how it keeps up" kind="panel" panelClass="menu pf-view-menu" panelLabel="View">
+        <Popover label={`${VIEW_NAMES[view]}${(view === 'tab' || view === 'simple' || view === 'lyrics') && readAs === 'notes' ? ' · Notes' : ''}${move === 'pages' ? ' · Pages' : ''} ▾`} title="Choose the view, and how it keeps up" kind="panel" panelClass="menu pf-view-menu" panelLabel="View">
           <ViewSwitch short />
-          {(view === 'tab' || view === 'simple') && <ReadAsSwitch />}
+          {(view === 'tab' || view === 'simple' || view === 'lyrics') && <ReadAsSwitch />}
           <div className="seg" role="radiogroup" aria-label="Keeping up">
             <button role="radio" aria-checked={move === 'scroll'} className={move === 'scroll' ? 'on' : ''} onClick={() => useApp.setState({ performMove: 'scroll' })} title="The music scrolls smoothly, keeping the playing line near the top">
               Scroll

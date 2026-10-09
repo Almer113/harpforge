@@ -63,7 +63,7 @@ function loadWorking(): WorkingCopy {
   return (store && readWorking(store, tabId)) ?? { text: TWINKLE, docId: null, savedText: TWINKLE };
 }
 
-export type SheetView = 'simple' | 'tab' | 'staff' | 'numbers';
+export type SheetView = 'simple' | 'tab' | 'staff' | 'numbers' | 'lyrics';
 export type HarpSize = 'full' | 'slim' | 'hidden';
 export type EditorMode = 'visual' | 'text' | 'split';
 
@@ -271,12 +271,15 @@ export interface SheetShow {
   tab: { lyrics: boolean; chords: boolean; holes: boolean };
   numbers: { holes: boolean; lyrics: boolean; chords: boolean };
   staff: { holes: boolean; lyrics: boolean; chords: boolean; header: boolean };
+  /** `holes`: the holes (or notes) above the words. */
+  lyrics: { holes: boolean; chords: boolean };
 }
 const SHOW_ALL: SheetShow = {
   tab: { lyrics: true, chords: true, holes: true },
   numbers: { holes: true, lyrics: true, chords: true },
   // The page already shows the title and tempo, so the staff leaves them out unless asked.
   staff: { holes: true, lyrics: true, chords: true, header: false },
+  lyrics: { holes: true, chords: true },
 };
 
 export interface TrainerSettings {
@@ -342,7 +345,7 @@ function loadPrefs(): {
   const bool = (v: unknown) => (typeof v === 'boolean' ? v : undefined);
   const sheet = isObject(p.sheetShow) ? p.sheetShow : {};
   const print = like(p.printPrefs, { view: 'tab', size: 'normal', title: true, details: true, chart: false });
-  if (print.view !== undefined && !['simple', 'tab', 'staff', 'numbers'].includes(print.view)) delete print.view;
+  if (print.view !== undefined && !['simple', 'tab', 'staff', 'numbers', 'lyrics'].includes(print.view)) delete print.view;
   if (print.size !== undefined && !['compact', 'normal', 'large'].includes(print.size)) delete print.size;
   return {
     soundMode: p.soundMode === 'synth' ? 'synth' : p.soundMode === 'samples' ? 'samples' : undefined,
@@ -362,7 +365,7 @@ function loadPrefs(): {
     performMove: p.performMove === 'pages' || p.performMove === 'scroll' ? p.performMove : undefined,
     performSilent: bool(p.performSilent),
     readAs: p.readAs === 'notes' ? 'notes' : p.readAs === 'holes' ? 'holes' : undefined,
-    sheetShow: { tab: like(sheet.tab, SHOW_ALL.tab), numbers: like(sheet.numbers, SHOW_ALL.numbers), staff: like(sheet.staff, SHOW_ALL.staff) },
+    sheetShow: { tab: like(sheet.tab, SHOW_ALL.tab), numbers: like(sheet.numbers, SHOW_ALL.numbers), staff: like(sheet.staff, SHOW_ALL.staff), lyrics: like(sheet.lyrics, SHOW_ALL.lyrics) },
     printPrefs: print as Partial<import('../pages/PrintPage').PrintPrefs>,
     textPrefs: textPrefsFrom(p.textPrefs),
     ownedHarps: Array.isArray(p.ownedHarps)
@@ -456,6 +459,7 @@ export const useApp = create<AppState>((set) => ({
     tab: { ...SHOW_ALL.tab, ...prefs.sheetShow?.tab },
     numbers: { ...SHOW_ALL.numbers, ...prefs.sheetShow?.numbers },
     staff: { ...SHOW_ALL.staff, ...prefs.sheetShow?.staff },
+    lyrics: { ...SHOW_ALL.lyrics, ...prefs.sheetShow?.lyrics },
   },
   fitWidth: prefs.fitWidth !== false,
   dockOpen: prefs.dockOpen !== false,

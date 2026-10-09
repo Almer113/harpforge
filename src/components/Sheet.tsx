@@ -5,6 +5,7 @@ import type { NoteEvent, RestEvent } from '../core/htab/types';
 import { useApp, type Parsed, type ReadAs, type SheetShow, type SheetView } from '../state/store';
 import { doPitchClass } from '../core/formats/jianpu';
 import { pitchClassName, keyUsesFlats } from '../core/pitch';
+import { LyricsView } from './LyricsView';
 import { SimpleTabView } from './SimpleTabView';
 import { TabView } from './TabView';
 import { selectBar } from '../state/playback';
@@ -55,19 +56,21 @@ export function Sheet({
     <div className={`sheet ${bare ? 'bare' : ''}`}>
       {!bare && <div className="sheet-head">
         <h2>
-          {view === 'numbers' ? 'Numbered notation' : view === 'staff' ? 'Staff notation' : notes ? (view === 'simple' ? 'Simple notes' : 'Notes') : view === 'simple' ? 'Simple tab' : title}
+          {view === 'numbers' ? 'Numbered notation' : view === 'staff' ? 'Staff notation' : view === 'lyrics' ? 'Lyrics' : notes ? (view === 'simple' ? 'Simple notes' : 'Notes') : view === 'simple' ? 'Simple tab' : title}
           {view === 'numbers' && <span className="chip plain jp-key">1={doName}</span>}
         </h2>
         <div className="tb-group">
           {view !== 'simple' && <ShowMenu view={view} />}
-          {(view === 'tab' || view === 'simple') && <ReadAsSwitch />}
+          {(view === 'tab' || view === 'simple' || view === 'lyrics') && <ReadAsSwitch />}
           <ViewSwitch />
           {actions}
         </div>
       </div>}
       {/* (The staff is drawn to the width it's given: it's made bigger by giving it less.) */}
       <div className="sheet-body" style={scale !== 1 && view !== 'staff' ? { zoom: scale } : undefined}>
-      {view === 'simple' ? (
+      {view === 'lyrics' ? (
+        <LyricsView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} passage={passage} loopRange={loopRange} marks={marks} marksPrev={marksPrev} readAs={readAs} show={show.lyrics} />
+      ) : view === 'simple' ? (
         <SimpleTabView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} passage={passage} loopRange={loopRange} marks={marks} marksPrev={marksPrev} readAs={readAs} />
       ) : view !== 'staff' ? (
         <TabView
@@ -101,6 +104,7 @@ const VIEWS: { id: SheetView; label: string; short: string; title?: string }[] =
   { id: 'tab', label: 'Tab', short: 'Tab' },
   { id: 'staff', label: 'Staff', short: 'Staff', title: 'Standard notation, with the holes underneath' },
   { id: 'numbers', label: 'Numbers', short: 'Numbers', title: 'Numbered notation (jianpu): 1 = do of the key' },
+  { id: 'lyrics', label: 'Lyrics', short: 'Lyrics', title: 'The words, with the holes above them, like a chord sheet' },
 ];
 
 /** Simple Tab | Tab | Staff | Numbers. `short`: shorter names (performance mode's bar). */
@@ -135,11 +139,11 @@ export function ReadAsSwitch({ className = '', icons = false }: { className?: st
 }
 
 /** "Show ▾": what the Tab or Numbers view shows besides the notes. */
-export function ShowMenu({ view }: { view: 'tab' | 'numbers' | 'staff' }) {
+export function ShowMenu({ view }: { view: 'tab' | 'numbers' | 'staff' | 'lyrics' }) {
   const show = useApp((s) => s.sheetShow);
   const names = useApp((s) => s.showNoteNames);
   const notes = useApp((s) => s.readAs === 'notes');
-  const set = (patch: Partial<SheetShow['tab']> & Partial<SheetShow['numbers']> & Partial<SheetShow['staff']>) =>
+  const set = (patch: Partial<SheetShow['tab']> & Partial<SheetShow['numbers']> & Partial<SheetShow['staff']> & Partial<SheetShow['lyrics']>) =>
     useApp.setState((s) => ({ sheetShow: { ...s.sheetShow, [view]: { ...s.sheetShow[view], ...patch } } }));
   const items: { label: string; on: boolean; toggle: (v: boolean) => void; hint: string }[] =
     view === 'tab'
@@ -150,6 +154,11 @@ export function ShowMenu({ view }: { view: 'tab' | 'numbers' | 'staff' }) {
           { label: 'Lyrics', on: show.tab.lyrics, toggle: (v) => set({ lyrics: v }), hint: 'The words under the notes' },
           { label: 'Chords', on: show.tab.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the notes' },
         ]
+      : view === 'lyrics'
+        ? [
+            { label: notes ? 'Notes' : 'Holes', on: show.lyrics.holes, toggle: (v) => set({ holes: v }), hint: notes ? 'C5, E5… above the words' : '4, -4… above the words' },
+            { label: 'Chords', on: show.lyrics.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above them' },
+          ]
       : view === 'numbers'
         ? [
             { label: 'Holes', on: show.numbers.holes, toggle: (v) => set({ holes: v }), hint: 'The tab under each number' },

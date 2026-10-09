@@ -45,7 +45,7 @@ function HoleText({ text }: { text: string }) {
  * A note's holes; a chord's holes sit side by side. A draw chord gets one minus sign
  * ("-123"); a chord mixing blow and draw keeps one per hole.
  */
-function Token({ ev }: { ev: NoteEvent }) {
+export function Token({ ev }: { ev: NoteEvent }) {
   const holes = ev.sounds.every((s) => s.type === 'hole');
   const allDraw = holes && ev.sounds.length > 1 && ev.sounds.every((s) => s.type === 'hole' && s.breath === 'draw');
   return (
@@ -59,11 +59,11 @@ function Token({ ev }: { ev: NoteEvent }) {
 }
 
 /** A note's pitches as names (Notes mode); a chord's notes sit side by side. */
-function NoteNames({ midis, flats }: { midis: (number | null)[]; flats: Spelling }) {
+export function NoteNames({ midis, flats }: { midis: (number | null)[]; flats: Spelling }) {
   return <>{midis.map((m) => (m === null ? '?' : midiToName(m, flats).replace('#', '♯').replace(/b(?=-?\d)/, '♭'))).join(' ')}</>;
 }
 
-function breathClass(ev: NoteEvent): string {
+export function breathClass(ev: NoteEvent): string {
   if (ev.sounds.every((s) => s.type === 'hole' && s.breath === 'blow')) return 'blow';
   if (ev.sounds.every((s) => s.type === 'hole' && s.breath === 'draw')) return 'draw';
   return 'other';

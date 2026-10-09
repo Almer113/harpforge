@@ -74,8 +74,8 @@
 /* (A larger target than the number itself.) */
 .bar-num::before { content: ''; position: absolute; inset: -5px -6px; }
 /* The chosen passage: a light wash; the looped one: a brass line under its notes. */
-.card.in-passage, .st-note.in-passage { background: rgba(255, 244, 226, 0.07); border-color: rgba(255, 244, 226, 0.22); }
-.card.in-loop, .st-note.in-loop { background-color: rgba(227, 169, 72, 0.06); box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6); }
+.card.in-passage, :is(.st-note, .ly-note).in-passage { background: rgba(255, 244, 226, 0.07); border-color: rgba(255, 244, 226, 0.22); }
+.card.in-loop, :is(.st-note, .ly-note).in-loop { background-color: rgba(227, 169, 72, 0.06); box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6); }
 .card.in-loop.active { box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6), 0 6px 16px rgba(0, 0, 0, 0.35); }
 .card.selected.in-passage { border-color: var(--brass); }
 /* "Looping bars 5–8 ✕" next to the loop button. */
@@ -94,22 +94,22 @@
 .trainer-actions { justify-content: flex-end; }
 /* Play along: green in time (✓), purple early (◂) or late (▸), red missed (✕, dashed). The
    last pass's marks are faded. A shape as well as a colour, so it isn't colour alone. */
-.card.mark-hit, .st-note.mark-hit { border-color: var(--ok); background: rgba(124, 207, 138, 0.1); }
-.card.mark-early, .card.mark-late, .st-note.mark-early, .st-note.mark-late { border-color: var(--pitch); background: rgba(199, 155, 242, 0.1); }
-.card.mark-missed, .st-note.mark-missed { border-color: var(--danger); border-style: dashed; background: rgba(239, 106, 90, 0.12); }
-.card.mark-faded, .st-note.mark-faded { opacity: 0.55; }
-:is(.card, .st-note):is(.mark-hit, .mark-early, .mark-late, .mark-missed) { position: relative; }
-:is(.card, .st-note):is(.mark-hit, .mark-early, .mark-late, .mark-missed)::after {
+.card.mark-hit, :is(.st-note, .ly-note).mark-hit { border-color: var(--ok); background: rgba(124, 207, 138, 0.1); }
+.card.mark-early, .card.mark-late, :is(.st-note, .ly-note).mark-early, :is(.st-note, .ly-note).mark-late { border-color: var(--pitch); background: rgba(199, 155, 242, 0.1); }
+.card.mark-missed, :is(.st-note, .ly-note).mark-missed { border-color: var(--danger); border-style: dashed; background: rgba(239, 106, 90, 0.12); }
+.card.mark-faded, :is(.st-note, .ly-note).mark-faded { opacity: 0.55; }
+:is(.card, .st-note, .ly-note):is(.mark-hit, .mark-early, .mark-late, .mark-missed) { position: relative; }
+:is(.card, .st-note, .ly-note):is(.mark-hit, .mark-early, .mark-late, .mark-missed)::after {
   position: absolute; top: 1px; right: 3px; font-size: 12px; font-weight: 800; line-height: 1; pointer-events: none;
 }
-:is(.card, .st-note).mark-hit::after { content: '✓'; color: var(--ok); }
-:is(.card, .st-note).mark-early::after { content: '◂'; color: var(--pitch); }
-:is(.card, .st-note).mark-late::after { content: '▸'; color: var(--pitch); }
-:is(.card, .st-note).mark-missed::after { content: '✕'; color: var(--danger); }
+:is(.card, .st-note, .ly-note).mark-hit::after { content: '✓'; color: var(--ok); }
+:is(.card, .st-note, .ly-note).mark-early::after { content: '◂'; color: var(--pitch); }
+:is(.card, .st-note, .ly-note).mark-late::after { content: '▸'; color: var(--pitch); }
+:is(.card, .st-note, .ly-note).mark-missed::after { content: '✕'; color: var(--danger); }
 /* When states meet on one note: playing > selected > mark > loop > passage. */
-:is(.card, .st-note).selected:is(.in-passage, .in-loop, .mark-hit, .mark-early, .mark-late, .mark-missed) { border-color: var(--brass); border-style: solid; }
+:is(.card, .st-note, .ly-note).selected:is(.in-passage, .in-loop, .mark-hit, .mark-early, .mark-late, .mark-missed) { border-color: var(--brass); border-style: solid; }
 .card.active:is(.in-passage, .in-loop, .mark-hit, .mark-early, .mark-late, .mark-missed),
-.st-note.active:is(.in-passage, .in-loop, .mark-hit, .mark-early, .mark-late, .mark-missed) { background: rgba(227, 169, 72, 0.16); border-color: var(--brass-2); border-style: solid; opacity: 1; }
+:is(.st-note, .ly-note).active:is(.in-passage, .in-loop, .mark-hit, .mark-early, .mark-late, .mark-missed) { background: rgba(227, 169, 72, 0.16); border-color: var(--brass-2); border-style: solid; opacity: 1; }
 .input-card.along { gap: 10px; flex-wrap: wrap; }
 .along-status { max-width: 320px; }
 .along-warn { flex-basis: 100%; }
@@ -144,3 +144,43 @@
 }
 /* Shift+click chooses a passage: it shouldn't select the page's text too. */
 .tab-line, .st-line { user-select: none; }
+
+/* ---------- Lyrics view: words like a chord sheet, the holes small above ---------- */
+.lyricsview { display: flex; flex-direction: column; gap: 14px; }
+.ly-none { margin: 0; }
+.ly-block .tab-section { margin-bottom: 4px; }
+.ly-line { display: flex; flex-wrap: wrap; align-items: flex-end; column-gap: 0.55em; row-gap: 12px; font-size: 21px; }
+.ly-word { display: inline-flex; align-items: flex-end; }
+.ly-syl { display: inline-flex; flex-direction: column; align-items: stretch; }
+.ly-notes { display: flex; gap: 1px; }
+.ly-note {
+  display: flex; flex-direction: column; align-items: flex-start; padding: 0 3px; border: 1px solid transparent; border-radius: 5px;
+  background: transparent; font: inherit; font-family: var(--mono); font-size: 14px; font-weight: 700; line-height: 1.35; cursor: pointer; color: var(--text);
+}
+.ly-note.blow { color: var(--blow); }
+.ly-note.draw { color: var(--draw); }
+.ly-note:hover { background: var(--panel-2); }
+.ly-note.selected { border-color: var(--brass); }
+.ly-note.active { background: rgba(227, 169, 72, 0.18); border-color: var(--brass-2); }
+.ly-rest { cursor: default; }
+.ly-rest:hover { background: transparent; }
+.ly-chord { font-family: var(--sans, inherit); font-size: 13px; font-weight: 800; color: var(--brass-2); min-height: 1.3em; white-space: nowrap; }
+.ly-hole { min-height: 1.35em; white-space: nowrap; }
+.lyricsview.as-notes .ly-hole { font-family: inherit; }
+.ly-text { padding: 0 3px; line-height: 1.3; white-space: pre; cursor: pointer; border-radius: 4px; }
+.ly-text:hover { background: var(--panel-2); }
+.ly-syl.active .ly-text { color: var(--brass-2); background: rgba(227, 169, 72, 0.12); }
+/* A word stretched by its notes: a faint line joins its syllables ("Twin — kle"). */
+.ly-syl.joined .ly-text { display: flex; align-items: center; gap: 0; padding-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.ly-syl.joined + .ly-syl .ly-text { padding-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+/* (Clear of the letters by its own transparent ends: no margin, so it takes no room when there's none.) */
+.ly-syl.joined .ly-text::after {
+  content: ''; flex: 1; min-width: 0; height: 1px; opacity: 0.35;
+  background: linear-gradient(90deg, transparent 3px, currentColor 3px, currentColor calc(100% - 3px), transparent calc(100% - 3px));
+}
+/* Fills (notes with no words, lines without lyrics): a compact row of holes. */
+.ly-fills { row-gap: 6px; column-gap: 18px; }
+.ly-syl.fill .ly-notes { flex-wrap: wrap; }
+.lyricsview.no-holes .ly-hole { display: none; }
+.lyricsview.no-holes .ly-line.ly-fills { display: none; }
+.lyricsview.no-holes .ly-syl.fill { display: none; }

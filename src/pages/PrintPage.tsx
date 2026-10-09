@@ -3,6 +3,7 @@
 
 import { lazy, Suspense, useEffect } from 'react';
 import { ReadAsSwitch, ShowMenu } from '../components/Sheet';
+import { LyricsView } from '../components/LyricsView';
 import { SimpleTabView } from '../components/SimpleTabView';
 import { TabView } from '../components/TabView';
 import { guessTonic, positionFor, positionName } from '../core/convert';
@@ -25,6 +26,7 @@ const VIEWS: { id: SheetView; label: string }[] = [
   { id: 'tab', label: 'Tab' },
   { id: 'staff', label: 'Staff' },
   { id: 'numbers', label: 'Numbers' },
+  { id: 'lyrics', label: 'Lyrics' },
 ];
 
 const ZOOM = { compact: 0.82, normal: 1, large: 1.3 };
@@ -69,7 +71,7 @@ export function PrintPage() {
               </button>
             ))}
           </div>
-          {(prefs.view === 'tab' || prefs.view === 'simple') && <ReadAsSwitch />}
+          {(prefs.view === 'tab' || prefs.view === 'simple' || prefs.view === 'lyrics') && <ReadAsSwitch />}
           {prefs.view !== 'simple' && <ShowMenu view={prefs.view} />}
           <select value={prefs.size} onChange={(e) => set({ size: e.target.value as PrintPrefs['size'] })} title="Size on the page">
             <option value="compact">Compact</option>
@@ -124,7 +126,9 @@ export function PrintPage() {
           </table>
         )}
         <div className="paper-body">
-          {prefs.view === 'simple' ? (
+          {prefs.view === 'lyrics' ? (
+            <LyricsView parsed={parsed} activeEvents={[]} selectedEvent={null} readAs={readAs} show={show.lyrics} />
+          ) : prefs.view === 'simple' ? (
             <SimpleTabView parsed={parsed} activeEvents={[]} selectedEvent={null} readAs={readAs} />
           ) : prefs.view === 'staff' ? (
             <Suspense fallback={<p>Loading the staff…</p>}>

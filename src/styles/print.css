@@ -31,6 +31,9 @@
 .hole-chart caption { caption-side: bottom; text-align: left; color: var(--faint); font-size: 11px; padding-top: 3px; }
 .paper .tab-line-wrap, .paper .st-line, .paper .abcjs-container > svg, .paper .abcjs-container { break-inside: avoid; }
 .paper .tab-section { break-after: avoid; }
+.paper .ly-block { break-inside: avoid; }
+.paper .ly-note, .paper .ly-text { cursor: default; }
+.paper .ly-note:hover, .paper .ly-text:hover { background: transparent; }
 
 @media print {
   @page { margin: 12mm; }

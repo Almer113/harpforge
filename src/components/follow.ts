@@ -79,6 +79,15 @@ function performFollow(el: Element) {
   window.scrollBy({ top: dy, behavior: move === 'pages' || reducedMotion() ? 'auto' : 'smooth' });
 }
 
+/** Entering performance mode: from the top, or with the selected note a third of the way down. */
+export function startPerformanceView(el: Element | null) {
+  window.scrollTo({ top: 0, behavior: 'auto' });
+  if (!el) return;
+  const area = musicArea();
+  const y = el.getBoundingClientRect().top - area.top;
+  if (y > area.height * 0.45) window.scrollBy({ top: y - area.height * 0.3, behavior: 'auto' });
+}
+
 /**
  * Performance mode's page turn (Page Down / Up, the arrows, a pedal): three quarters of the
  * music area, so the last lines carry over. Following then holds, and waits for the music

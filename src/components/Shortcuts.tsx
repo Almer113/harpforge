@@ -19,7 +19,7 @@ const COLUMNS: Group[][] = [
         ['F', 'Performance mode: the music fills the screen (Play); F or Esc leaves'],
         ['Ctrl+= / Ctrl+−', 'Performance mode: bigger / smaller music (Ctrl+0: the usual size)'],
         ['Page Down / Up, arrows', 'Performance mode: next / previous page (page-turner pedals send these)'],
-        ['Shift+click', 'Choose a passage, from the selected note (Play: Tab, Simple and Numbers views)'],
+        ['Shift+click', 'Choose a passage, from the selected note (Play: Tab, Simple, Numbers and Lyrics views)'],
         ['Bar number', 'Click: choose that bar; Shift+click: up to it (Play: Tab and Numbers views)'],
         ['Ctrl+S', 'Save to your library'],
         ['Ctrl+P', 'Print or save as PDF'],
