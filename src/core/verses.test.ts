@@ -75,3 +75,13 @@ it('the staff gets a lyrics line per verse (or just the one chosen)', () => {
   const gap = parse('4 5 |\nw:\nw: c d');
   expect(writeAbc(gap).text).toMatch(/w: \* \*\nw: c d/);
 });
+
+it('more syllables than notes: a warning on that w: line (they aren’t sung, and an edit would drop them)', () => {
+  const text = '---\ntitle: W\n---\n4 5 |\nw: a b c d\nw: e f\n';
+  const { issues } = parseHtab(text);
+  expect(issues).toHaveLength(1);
+  expect(issues[0].message).toMatch(/^2 syllables more than the notes above/);
+  expect(text.slice(issues[0].span.start, issues[0].span.end)).toBe('w: a b c d');
+  // ("*" place-holders past the end count for nothing.)
+  expect(parseHtab('---\ntitle: W\n---\n4 5 |\nw: a b * *\n').issues).toHaveLength(0);
+});

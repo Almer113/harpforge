@@ -99,7 +99,7 @@ export function exportDoc(kind: ExportKind, doc: TabDoc, harp: Harmonica, htabTe
       data = htabText ?? serializeHtab(doc);
       break;
     case 'abc':
-      data = writeAbc(doc, harp, { tabLine: true }).text;
+      data = writeAbc(doc, harp, { tabLine: true, restWords: true }).text;
       break;
     case 'musicxml':
       data = writeMusicXml(doc, harp);

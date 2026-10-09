@@ -13,8 +13,10 @@ const isVowel = (c: string) => VOWELS.has(c);
 /**
  * An Indonesian word's syllables. ng, ny, sy and kh are one sound; ai, au, oi and ei stay
  * together at the end of a word or before a consonant that starts the next syllable
- * (pan-tai, sau-da-ra, but ma-in, la-ut); one consonant between vowels starts the next
- * syllable (ka-sih), of two or more the first ends the syllable before (ban-tu, in-stru-men).
+ * (pan-tai, sau-da-ra, but ma-in, la-ut) — and not when the consonant is a word's last
+ * before an ending -an (ma-i-nan, ke-ba-i-kan; but sam-pai-kan, pan-tai-nya); one consonant
+ * between vowels starts the next syllable (ka-sih), of two or more the first ends the
+ * syllable before (ban-tu, in-stru-men).
  * Words with an apostrophe (t'lah, 'ku) are left whole.
  */
 export function syllablesId(word: string): string[] {
@@ -44,7 +46,7 @@ export function syllablesId(word: string): string[] {
       const after = units[i + 2];
       const end = !after;
       const startsNext = !!after && !after.vowel && !!units[i + 3]?.vowel;
-      if (end || startsNext) {
+      if (end || (startsNext && !rootThenAn(lower, units[i].at + 2))) {
         nuclei.push([i, i + 1]);
         i++;
         continue;
@@ -72,16 +74,46 @@ export function syllablesId(word: string): string[] {
 }
 
 /**
+ * Whether the word goes on from letter `at` (just after an ai/au/oi/ei) as the last
+ * consonant of its root and then the ending -an (-annya, -anya): main+an, laut+an, baik+an.
+ * A k there is mostly the ending -kan instead (sampai+kan, santai+kan), but for baik and naik.
+ */
+function rootThenAn(lower: string, at: number): boolean {
+  const rest = lower.slice(at);
+  if (!/^[bcdfghjklmnpqrstvwxyz](an|anya|annya)$/.test(rest)) return false;
+  return rest[0] !== 'k' || /[bn]aik$/.test(lower.slice(0, at + 1));
+}
+
+/** Words the patterns split other than as they're sung. */
+const EN_SUNG: Record<string, string[]> = {
+  every: ['ev', 'ery'],
+  evening: ['eve', 'ning'],
+  flower: ['flow', 'er'],
+  flowers: ['flow', 'ers'],
+  power: ['pow', 'er'],
+  shower: ['show', 'er'],
+  tower: ['tow', 'er'],
+};
+
+/**
  * English, from the patterns' breaks: also a first vowel on its own before one consonant and
  * a vowel (a-bove, e-ven, o-pen), which word processors never split off but singers do
- * (not before a silent final e: use, ache, are).
+ * (not before a silent final e: use, ache, are, used, ones); and -ing on its own (sing-ing).
  */
 export function englishForSinging(word: string, parts: string[]): string[] {
   const lower = word.toLowerCase();
+  const sung = Object.hasOwn(EN_SUNG, lower) ? EN_SUNG[lower] : undefined;
+  if (sung && sung.join('') === lower) {
+    let at = 0;
+    return sung.map((p) => word.slice(at, (at += p.length)));
+  }
+  // -ing after a stem with a vowel (sing-ing, see-ing; not "string").
+  const last = parts.at(-1) ?? word;
+  if (last.length > 3 && /ing$/i.test(last) && /[aeiouy]/i.test(last.slice(0, -3))) parts = [...parts.slice(0, -1), last.slice(0, -3), last.slice(-3)];
   const first = parts[0] ?? word;
   const vcv = lower.length >= 3 && isVowel(lower[0]) && !isVowel(lower[1]) && !'yw'.includes(lower[1]) && isVowel(lower[2]);
-  // (A three-letter word ending in a silent e — "use", "are", "eve" — is one syllable.)
-  const silentE = lower.length === 3 && lower[2] === 'e';
+  // (A word ending in a silent e — "use", "are", "eve", "used", "ones" — is one syllable.)
+  const silentE = (lower.length === 3 && lower[2] === 'e') || /^[aeiou][^aeiou]e[ds]$/.test(lower);
   if (vcv && !silentE && first.length >= 3) return [word.slice(0, 1), first.slice(1), ...parts.slice(1)];
   return parts;
 }

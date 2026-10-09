@@ -364,8 +364,11 @@ export function splitLyrics(text: string): string[] {
   return out;
 }
 
-/** Puts a lyrics line's syllables on a tab line's notes, as verse `verse` (0 = verse 1). */
-function attachLyrics(line: TabLine, text: string, verse: number) {
+/**
+ * Puts a lyrics line's syllables on a tab line's notes, as verse `verse` (0 = verse 1).
+ * Returns how many are left over, with no note to go on.
+ */
+function attachLyrics(line: TabLine, text: string, verse: number): number {
   const syllables = splitLyrics(text);
   let k = 0;
   for (const ev of line.events) {
@@ -375,6 +378,7 @@ function attachLyrics(line: TabLine, text: string, verse: number) {
     const syl = syllables[k++];
     if (syl !== '*' && syl !== '_') setLyricOf(ev, verse, syl);
   }
+  return syllables.slice(k).filter((syl) => syl !== '*').length;
 }
 
 /**
@@ -451,8 +455,16 @@ export function parseHtab(text: string): ParseResult {
       continue;
     }
     if (/^w:/i.test(trimmed)) {
-      if (lastLine) attachLyrics(lastLine, trimmed.slice(2), verses++);
-      else issues.push({ message: 'Lyrics line "w:" must follow a tab line', span: { start: lineStart, end: lineStart + line.length }, severity: 'warning' });
+      if (lastLine) {
+        const over = attachLyrics(lastLine, trimmed.slice(2), verses++);
+        if (over) {
+          issues.push({
+            message: `${over} syllable${over === 1 ? '' : 's'} more than the notes above: ${over === 1 ? 'it isn’t' : 'they aren’t'} sung, and ${over === 1 ? 'goes' : 'go'} when this line is next edited in the visual editor`,
+            span: { start: lineStart, end: lineStart + line.length },
+            severity: 'warning',
+          });
+        }
+      } else issues.push({ message: 'Lyrics line "w:" must follow a tab line', span: { start: lineStart, end: lineStart + line.length }, severity: 'warning' });
       continue;
     }
     const ctx: Ctx = { s: line, base: lineStart, issues };

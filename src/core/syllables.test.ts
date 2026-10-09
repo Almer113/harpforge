@@ -63,3 +63,16 @@ it('finds the words of lyrics text, and rewrites one wherever it is', async () =
   expect(replaceWord(text, 'world', 'wor-ld')).toBe('Up a-bove the wor-ld, so high! _ (the) * wor-ld');
   expect(applySuggestions('the darling, darling', new Map([['darling', 'dar-ling']]))).toBe('the dar-ling, dar-ling');
 });
+
+it('Indonesian: a root ending in ai/au and a consonant, then -an, keeps its two vowels apart', () => {
+  const split = (w: string) => syllablesId(w).join('-');
+  expect(['mainan', 'permainannya', 'kebaikan', 'kaitan', 'lautan'].map(split)).toEqual(['ma-i-nan', 'per-ma-i-nan-nya', 'ke-ba-i-kan', 'ka-i-tan', 'la-u-tan']);
+  // The ending -kan (and -nya) after a diphthong leaves it whole.
+  expect(['sampaikan', 'damaikan', 'pantainya', 'mainkan'].map(split)).toEqual(['sam-pai-kan', 'da-mai-kan', 'pan-tai-nya', 'ma-in-kan']);
+});
+
+it('English for singing: -ing on its own, silent e words whole, words sung other than the patterns split them', async () => {
+  const words = ['singing', 'seeing', 'string', 'used', 'ones', 'every', 'evening', 'Flower'];
+  const s = await suggestBreaks(words, 'en');
+  expect(words.map((w) => s.get(w) ?? w)).toEqual(['sing-ing', 'see-ing', 'string', 'used', 'ones', 'ev-ery', 'eve-ning', 'Flow-er']);
+});

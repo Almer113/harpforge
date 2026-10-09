@@ -41,6 +41,9 @@ export function parseAbc(text: string): Imported {
   // One entry per written note head; null = a head merged into the previous note by a
   // tie (it still takes a lyric slot, but the syllable is dropped).
   let pendingLyricNotes: (NoteEvent | null)[] = [];
+  // The bar (counted along the music lines a "w:" line belongs to) each of those notes is in.
+  let pendingLyricBars: number[] = [];
+  let lyricBar = 0;
   let lastNote: PendingNote | null = null;
   let tieOpen = false;
   let barAcc: Record<string, number> = {};
@@ -122,30 +125,38 @@ export function parseAbc(text: string): Imported {
   };
 
   let lyricRest: (NoteEvent | null)[] = [];
+  let lyricRestBars: number[] = [];
   let continuesLine = false;
   let lastField = '';
   // Each "w:" line under a music line is a verse of it (1, 2, …); "+:" goes on with the last one.
   let verseCount = 0;
   let verse = 0;
   const attachLyrics = (textLine: string, continued = false) => {
-    // Tokenize: syllables separated by spaces or hyphens; _ * skip; | to next bar (approximate: ignored).
+    // Tokenize: syllables separated by spaces or hyphens; "_", "*" and a "-" on its own (after a
+    // space or another "-") take a note with no new syllable; "|" goes on to the next bar.
     const notes = continued ? lyricRest : pendingLyricNotes;
+    const bars = continued ? lyricRestBars : pendingLyricBars;
     if (!continued) verse = verseCount++;
     let k = 0;
-    const re = /(\\-|[^\s\-_*|~]|~)+-?|[_*]|\|/g;
+    const re = /(\\[-%]|[^\s\-_*|~]|~)+-?|[_*]|\||-/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(textLine)) && k < notes.length) {
       const tok = m[0];
-      if (tok === '|') continue;
-      if (tok === '_' || tok === '*') {
+      if (tok === '|') {
+        // (Words already up to the bar line: nothing to skip.)
+        if (k > 0) while (k < notes.length && bars[k] === bars[k - 1]) k++;
+        continue;
+      }
+      if (tok === '_' || tok === '*' || tok === '-') {
         k++;
         continue;
       }
       const target = notes[k++];
       // ("\-" is a literal hyphen: one ending a syllable is kept as "‐", so it isn't read as joined.)
-      if (target && !target.tied) setLyricOf(target, verse, tok.replace(/(?<=.)\\-$/, '\u2010').replace(/\\-/g, '-').replace(/~/g, ' '));
+      if (target && !target.tied) setLyricOf(target, verse, tok.replace(/(?<=.)\\-$/, '\u2010').replace(/\\-/g, '-').replace(/\\%/g, '%').replace(/~/g, ' '));
     }
     lyricRest = notes.slice(k);
+    lyricRestBars = bars.slice(k);
   };
 
   const durationOf = (lenStr: string): number => {
@@ -219,11 +230,15 @@ export function parseAbc(text: string): Imported {
     // that had no lyrics aren't given the next line's words (unless it continued with "\").
     if (!continuesLine) {
       pendingLyricNotes = [];
+      pendingLyricBars = [];
+      lyricBar = 0;
       verseCount = 0;
     }
     continuesLine = /\\\s*$/.test(line);
     const events: TabEvent[] = [];
     let pendingChord: string | undefined;
+    // Words written below a rest ("_roll"z2): sung over it (a verse each, " / " between).
+    let pendingBelow: string | undefined;
     let tuplet: { left: number; factor: number } | null = null;
     let broken: number | null = null; // multiplier for the next note
     const s = line;
@@ -242,6 +257,14 @@ export function parseAbc(text: string): Imported {
         ev.chord = pendingChord;
         pendingChord = undefined;
       }
+      if (pendingBelow !== undefined) {
+        if (ev.kind === 'rest') {
+          const rest = ev;
+          pendingBelow.split(' / ').forEach((w, v) => setLyricOf(rest, v, w.trim() || undefined));
+          if (rest.lyric !== undefined || rest.verses?.some(Boolean)) rest.sung = true;
+        }
+        pendingBelow = undefined;
+      }
       // Ties: within a bar the notes merge; across a bar line (or line) they stay tied.
       const key = ev.kind === 'note' ? ev.sounds.map((s) => (s.type === 'pitch' ? s.midi : 0)).join(',') : '';
       void tieMidi;
@@ -252,11 +275,13 @@ export function parseAbc(text: string): Imported {
         if (!crossesBar && !ev.chord) {
           lastNote.ev.beats += ev.beats;
           pendingLyricNotes.push(null);
+          pendingLyricBars.push(lyricBar);
           return;
         }
         ev.tied = true;
         events.push(ev);
         pendingLyricNotes.push(ev);
+        pendingLyricBars.push(lyricBar);
         lastNote = { ev, key };
         return;
       }
@@ -265,6 +290,7 @@ export function parseAbc(text: string): Imported {
       if (ev.kind === 'note') {
         lastNote = { ev, key };
         pendingLyricNotes.push(ev);
+        pendingLyricBars.push(lyricBar);
       } else lastNote = null;
     };
 
@@ -287,6 +313,7 @@ export function parseAbc(text: string): Imported {
         const j = s.indexOf('"', i + 1);
         const content = s.slice(i + 1, j < 0 ? s.length : j);
         if (content && !/^[\^_<>@]/.test(content)) pendingChord = content.trim();
+        else if (content.startsWith('_') && content.length > 1) pendingBelow = content.slice(1);
         i = j < 0 ? s.length : j + 1;
         continue;
       }
@@ -347,6 +374,7 @@ export function parseAbc(text: string): Imported {
           // "::" / ":|:" — the end of one repeat and the start of the next.
           events.push({ kind: 'bar', style: 'repeat-end' }, { kind: 'bar', style: 'repeat-start' });
           barAcc = {};
+          lyricBar++;
           continue;
         }
         let style: BarEvent['style'] = 'single';
@@ -357,6 +385,7 @@ export function parseAbc(text: string): Imported {
         else if (tok.includes('|]') || tok.includes('[|')) style = 'final';
         events.push({ kind: 'bar', style });
         barAcc = {};
+        lyricBar++;
         continue;
       }
       if (c === '[') {
@@ -453,6 +482,11 @@ export interface AbcExportOptions {
   header?: boolean;
   /** Reference number written in X:. */
   index?: number;
+  /**
+   * Words sung over a rest written below it ("_roll"z2; verses " / " between): a "w:" line
+   * can't hold them (ABC's words skip rests). Files only: the staff view draws them itself.
+   */
+  restWords?: boolean;
 }
 
 const LEN_DENS = [1, 2, 4, 8, 16, 32];
@@ -595,7 +629,9 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
       const start = pos;
       pos += ev.beats;
       if (ev.kind === 'rest') {
-        parts.push(`${prefix}${chord}z${len}`);
+        const words = opts.restWords && withLyrics ? lineList.map((v) => lyricOf(ev, v)?.trim().replace(/["/]/g, '') ?? '') : [];
+        const below = words.some(Boolean) ? `"_${words.slice(0, words.map(Boolean).lastIndexOf(true) + 1).join(' / ')}"` : '';
+        parts.push(`${prefix}${chord}${below}z${len}`);
         lastTieable = null;
         beam = null;
         return;
@@ -634,7 +670,7 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
           const syl = lyricOf(ev, v);
           // (A syllable that's just a hyphen, or one ending in a literal "‐", is written "\-".)
           const text = syl?.trim();
-          lyr[k].push(!text ? '*' : text === '-' ? '\\-' : text.replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-').replace(/\u2010/g, '\\-').replace(/[*_|]/g, ''));
+          lyr[k].push(!text ? '*' : text === '-' ? '\\-' : text.replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-').replace(/\u2010/g, '\\-').replace(/[*_|]/g, '').replace(/%/g, '\\%'));
         });
       tabs.push(tabToken(ev));
     }
