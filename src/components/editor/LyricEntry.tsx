@@ -71,6 +71,8 @@ export function LyricInput({ pos, verse, draft }: { pos: Pos; verse: number; dra
   const [text, setText] = useState(first ?? was.text);
   const box = useRef<HTMLInputElement>(null);
   const live = useRef({ text, was });
+  // An input method putting a word together (its Space and Enter choose, they don't move on).
+  const composing = useRef(false);
   useEffect(() => {
     live.current = { text, was };
   });
@@ -178,7 +180,14 @@ export function LyricInput({ pos, verse, draft }: { pos: Pos; verse: number; dra
       size={Math.max(4, text.length + 1)}
       aria-label={`Words for this note${verse ? ` (verse ${verse + 1})` : ''}`}
       aria-describedby="lyric-keys"
-      onChange={(e) => take(e.target.value)}
+      onChange={(e) => (composing.current ? setText(e.target.value) : take(e.target.value))}
+      onCompositionStart={() => {
+        composing.current = true;
+      }}
+      onCompositionEnd={(e) => {
+        composing.current = false;
+        take(e.currentTarget.value);
+      }}
       // A paste: its lines are words like any others (and it's one undo step).
       onPaste={(e) => {
         e.preventDefault();
@@ -188,6 +197,7 @@ export function LyricInput({ pos, verse, draft }: { pos: Pos; verse: number; dra
       // (Another window taking the keyboard isn't leaving: lyrics mode is there on return.)
       onBlur={() => document.hasFocus() && finish('done')}
       onKeyDown={(e) => {
+        if (composing.current || e.nativeEvent.isComposing || e.keyCode === 229) return;
         const key = e.key;
         const ctrl = e.ctrlKey || e.metaKey;
         // Ctrl+L leaves; Ctrl+Z / Ctrl+Y undo and redo (what's typed is written first).

@@ -98,6 +98,17 @@ export function parseMusicXml(xml: string): Imported {
       events = [];
       measuresInLine = 0;
     }
+    // A repeat starting here ("|:" on the measure's left): the bar line before it becomes one
+    // (after a ":|", or at the start of a line, it's a bar line of its own).
+    const barlines = [...measure.getElementsByTagName('barline')];
+    const left = barlines.find((b) => b.getAttribute('location') === 'left');
+    if (left && child(left, 'repeat')?.getAttribute('direction') === 'forward') {
+      const before = events.at(-1);
+      if (before?.kind === 'bar' && before.style === 'single') before.style = 'repeat-start';
+      else events.push({ kind: 'bar', style: 'repeat-start' });
+    }
+    // 1st and 2nd endings: the tab has none, so both are played, one after the other.
+    if (barlines.some((b) => child(b, 'ending'))) warnOnce('1st/2nd endings were written out in a row (a tab has no endings): check the repeats.');
     for (const el of measure.children) {
       switch (el.nodeName) {
         case 'attributes': {

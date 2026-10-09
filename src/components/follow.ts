@@ -106,7 +106,8 @@ export function turnPage(dir: 1 | -1) {
 /** Keys that turn pages: what page-turner pedals send (they come in pairs, as one of these). */
 export function pageTurnKey(e: KeyboardEvent): 1 | -1 | null {
   if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return null;
-  if (e.code === 'PageDown' || e.code === 'ArrowDown' || e.code === 'ArrowRight') return 1;
-  if (e.code === 'PageUp' || e.code === 'ArrowUp' || e.code === 'ArrowLeft') return -1;
+  // (By the key's place, or its meaning: the number pad's 3 and 9 with Num Lock off.)
+  if (e.code === 'PageDown' || e.code === 'ArrowDown' || e.code === 'ArrowRight' || e.key === 'PageDown') return 1;
+  if (e.code === 'PageUp' || e.code === 'ArrowUp' || e.code === 'ArrowLeft' || e.key === 'PageUp') return -1;
   return null;
 }

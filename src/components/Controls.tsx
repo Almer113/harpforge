@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { songVerses } from '../core/verses';
+import { lineVerses, songVerses } from '../core/verses';
 import { FAMILIES, getHarmonica, harmonicaName, keysFor, rangeLabel, specId, tuningsFor, type Family, type HarmonicaSpec } from '../core/instruments';
 import { keysTaken } from '../live/focus';
 import { stopRecording } from '../live/recorder';
@@ -10,7 +10,7 @@ import { mod12, transposeKey } from '../core/pitch';
 import { describePassage } from '../core/passage';
 import { atStart, backToStart, currentPassage, endPassageLoop, extendPassage, holdTrainer, playFrom, startLabel, startTrainer, stop, stopTrainer, toggleLoop, togglePlay, trainerLabel } from '../state/playback';
 import { exitPerform, performResize, togglePerform } from '../state/perform';
-import { TRAINER_CHOICES, useApp, useParsed, type TrainerSettings } from '../state/store';
+import { TRAINER_CHOICES, useApp, useParsed, type AppState, type TrainerSettings } from '../state/store';
 import { Popover } from './Popover';
 
 export function HarmonicaPicker() {
@@ -224,7 +224,7 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
           <input type="checkbox" checked={playRepeats} onChange={(e) => useApp.setState({ playRepeats: e.target.checked })} />
           Play repeats
         </label>
-        <span className="mi-hint pb-hint">Sections between repeat signs (|: and :|) play twice, verse 2 the second time; not when looping a passage</span>
+        <span className="mi-hint pb-hint">Sections between repeat signs (|: and :|) play twice, verse 2 the second time; not when looping a passage or playing notes selected in the editor</span>
         <label className="check">
           <input type="checkbox" checked={allVerses} onChange={(e) => useApp.setState({ playAllVerses: e.target.checked })} />
           Play all verses
@@ -405,6 +405,34 @@ function TrainerButton() {
 }
 
 /**
+ * Which time through the music is playing, when that matters: "Verse 2" (a song with several
+ * verses, going through them), else "2nd time" (in a repeat); null otherwise.
+ */
+export function usePlayingPass(): string | null {
+  const { doc } = useParsed();
+  // (Only on lines with verses of their own: an intro or a chorus between isn't "Verse 2".)
+  const linesVerses = useMemo(() => doc.lines.map(lineVerses), [doc]);
+  return useApp((s) => passLabel(s, linesVerses));
+}
+
+/** usePlayingPass's words, from the playback state and each line's verse count. */
+export function passLabel(s: Pick<AppState, 'play' | 'playVerses' | 'playLine' | 'playVerse' | 'playPass'>, linesVerses: number[]): string | null {
+  if (s.play === 'stopped') return null;
+  if (s.playVerses && s.playLine !== null && (linesVerses[s.playLine] ?? 1) > 1) return `Verse ${s.playVerse + 1}`;
+  return s.playPass === 2 ? '2nd time' : null;
+}
+
+/** "2nd time" / "Verse 2" in the transport, while it's so. */
+function PassChip() {
+  const pass = usePlayingPass();
+  return pass ? (
+    <span className="pass-chip" aria-live="polite" title="Where playback is in the repeats and verses">
+      {pass}
+    </span>
+  ) : null;
+}
+
+/**
  * The transport. Full (Play): play, stop, loop, metronome, speed, sound and the harmonica.
  * `compact` (the editor, whose bar starts with PlayStop): the sound menu (with the speed) and the harmonica.
  */
@@ -414,6 +442,7 @@ export function Transport({ compact = false }: { compact?: boolean }) {
   if (compact) {
     return (
       <div className="transport compact">
+        <PassChip />
         <SoundMenu withSpeed />
         <HarmonicaChip />
       </div>
@@ -424,6 +453,7 @@ export function Transport({ compact = false }: { compact?: boolean }) {
     <div className="transport">
       <PlayStop />
       <SpeedControl />
+      <PassChip />
       <div className="t-group t-harp">
         <SoundMenu />
         <HarmonicaChip />

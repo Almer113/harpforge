@@ -246,6 +246,8 @@ function FillBody({ close }: { close: () => void }) {
 function WordBreaks({ words, toggle, remembered }: { words: string[]; toggle: (form: string, at: number) => void; remembered: string }) {
   // Every space between two letters, in order.
   const gaps = useMemo(() => words.flatMap((form, wi) => [...breaksOf(form).word].slice(1).map((_, i) => ({ wi, at: i + 1 }))), [words]);
+  // Each gap's place in the list, by word and letter (looked up for every letter drawn).
+  const gapAt = useMemo(() => new Map(gaps.map((g, k) => [`${g.wi}:${g.at}`, k])), [gaps]);
   const [current, setCurrent] = useState(0);
   const refs = useRef(new Map<string, HTMLButtonElement>());
   const here = Math.min(current, gaps.length - 1);
@@ -274,7 +276,7 @@ function WordBreaks({ words, toggle, remembered }: { words: string[]; toggle: (f
           return (
             <span key={word.toLowerCase()} className="fill-word" aria-label={form}>
               {[...word].map((ch, i) => {
-                const k = gaps.findIndex((g) => g.wi === wi && g.at === i);
+                const k = gapAt.get(`${wi}:${i}`) ?? -1;
                 return (
                   <span key={i} className="fill-letter-wrap">
                     {i > 0 && (

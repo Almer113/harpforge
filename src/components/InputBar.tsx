@@ -170,15 +170,15 @@ export function MidiControl() {
   );
 }
 
-/**
- * Play along, checked: play with the song while it plays; each note lights up green (in
- * time), amber (early or late) or red (missed). Shows how the last pass went.
- */
 /** Moves the keyboard to an element that appears once the state change has drawn. */
 function focusSoon(selector: string) {
   requestAnimationFrame(() => document.querySelector<HTMLElement>(selector)?.focus());
 }
 
+/**
+ * Play along, checked: play with the song while it plays; each note lights up green (in
+ * time), purple (early or late) or red (missed). Shows how the last pass went.
+ */
 function AlongControl() {
   const along = useApp((s) => s.along);
   const melody = useApp((s) => s.alongMelody);

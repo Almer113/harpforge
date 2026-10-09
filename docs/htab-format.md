@@ -55,11 +55,11 @@ Aliases accepted on import: `instrument` = `harmonica`, `bpm` = `tempo`, `meter`
 | `.` | rest (one beat, `.~` = two) |
 | `_` | a **sung rest**: the harp rests while a syllable is sung; the `w:` line gives it a syllable like a note (`[N.C.] _ 4 5` + `w: Oh la la`) |
 | `~` (on its own) | **tie**: the previous note keeps sounding for one beat per `~`, e.g. `6~ \| ~~ 5` |
-| `\|` `\|\|` `\|]` `\|:` `:\|` | bar lines: single, double, final, repeat start/end. Also accepted: `:\|:` (end one repeat, start the next), `\|\|:`, and `:\|` right after a note (`4:\|`) |
+| `\|` `\|\|` `\|]` `\|:` `:\|` | bar lines: single, double, final, repeat start/end. Also accepted: `:\|:` (end one repeat, start the next), `\|\|:`, and `:\|` right after a note (`4:\|`). A repeat plays twice; a repeat inside another isn't played as one (a warning says so) |
 | `[G7]` | chord symbol shown above the next note or rest (right before a bar line: at the end of that bar) |
 | `w: Twin-kle twin-kle` | lyrics for the tab line above: one syllable per note (and per sung rest `_`); `_` or `*` skips a note; `~` joins words (`Hello~my` is one syllable); `\-` is a real hyphen (`x\-` doesn't join the next syllable). Several `w:` lines under a tab line are its verses 1, 2, 3…; an empty `w:` keeps a verse's place when the line has no words in it |
 | `@ Chorus` | section heading |
-| `# text` | comment (at line start or after whitespace) |
+| `# text` | comment (at line start or after whitespace; in a `w:` line `#` is part of the words, as in `w: Sing #1`) |
 
 ### Ties
 

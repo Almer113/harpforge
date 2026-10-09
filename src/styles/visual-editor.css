@@ -164,6 +164,10 @@
 .simpletab { display: flex; flex-direction: column; gap: 10px; font-family: var(--mono); }
 .st-line { display: flex; flex-wrap: wrap; column-gap: 26px; row-gap: 8px; }
 .st-measure { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.st-section { margin: 6px 0 -4px; color: var(--brass); font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+.simpletab > .st-section:first-child { margin-top: 0; }
+/* Repeat signs, between the holes: quiet, so the holes still read first. */
+.st-repeat { align-self: center; color: var(--brass); font-size: 18px; font-weight: 800; opacity: 0.8; }
 .st-note {
   min-width: 34px; padding: 2px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent;
   font: inherit; font-size: 20px; font-weight: 700; line-height: 1.4; text-align: center; cursor: pointer;

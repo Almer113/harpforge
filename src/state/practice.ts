@@ -137,7 +137,11 @@ export function practiceTotal(): number {
   return score.events.filter((ev) => !ev.rest && !ev.tied && ev.midis.some((m) => m !== null)).length;
 }
 
-// Editing the tab ends practice.
+// Editing the tab (or opening another) ends practice; after a few notes, the session joins
+// that song's history.
 useApp.subscribe((s, prev) => {
-  if (s.practice && s.text !== prev.text) useApp.setState({ practice: null });
+  if (!s.practice || s.text === prev.text) return;
+  const p = s.practice;
+  useApp.setState({ practice: null });
+  if (p.played >= 5 && prev.docId) logSession(prev.docId, practiceReport(getParsed(prev.text).score, p.played, p.mistakesAt));
 });

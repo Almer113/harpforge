@@ -210,6 +210,11 @@ useApp.subscribe((s, prev) => {
 
 setAlongHooks({ startChecking, stopChecking, passEnded });
 
+// Leaving the Play page (whose card it's on) ends a calibration still listening.
+useApp.subscribe((s, prev) => {
+  if (s.calibrating && s.page !== 'play' && prev.page === 'play') useApp.setState({ calibrating: false });
+});
+
 /** Play along on or off (it and practice mode take turns). */
 export function setAlong(on: boolean) {
   if (on) useApp.setState({ along: true, practice: null, alongPasses: [], alongMarks: {}, alongPrev: {} });

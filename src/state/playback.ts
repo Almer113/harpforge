@@ -29,7 +29,9 @@ export function setAlongHooks(hooks: AlongHooks) {
  * verse sung, 0-based).
  */
 function onEvent(index: number, on: boolean, pass?: number, verse?: number) {
+  const line = on ? (getParsed(useApp.getState().text).score.events[index]?.line ?? null) : null;
   useApp.setState((st) => ({
+    ...(on && line !== st.playLine ? { playLine: line } : {}),
     activeEvents: on ? [...st.activeEvents.filter((x) => x !== index), index] : st.activeEvents.filter((x) => x !== index),
     ...(on && pass !== undefined && pass !== st.playPass ? { playPass: pass } : {}),
     ...(on && verse !== undefined && verse !== st.playVerse ? { playVerse: verse } : {}),
@@ -124,7 +126,7 @@ export function startLabel(s: AppState): string {
 
 /** Whether the tune would be left out, and what would be played, if playback started now. */
 function wanted(s: AppState): typeof startedWith {
-  return { muted: tuneMuted(s), played: playedScore(s), along: s.along };
+  return { muted: tuneMuted(s), played: playedScore(s), along: alongOn(s) };
 }
 const sameStart = (a: typeof startedWith, b: typeof startedWith) => a.muted === b.muted && a.played === b.played && a.along === b.along;
 
@@ -206,12 +208,12 @@ export async function play(opts: { count?: boolean; from?: number; pass?: number
   const eachLoop = s.loop && s.countEachLoop;
   const counting = opts.count === true || eachLoop || (s.countIn && opts.count !== false);
   // Playing along without the tune: the clicks keep time instead.
-  const alongMuted = s.along && !s.alongMelody;
+  const alongMuted = alongOn(s) && !s.alongMelody;
   const muted = tuneMuted(s);
-  if (s.along) along?.startChecking(range ?? { start: startBeat, end: pb.score.totalBeats }, s.loop, eachLoop, pb);
+  if (alongOn(s)) along?.startChecking(range ?? { start: startBeat, end: pb.score.totalBeats }, s.loop, eachLoop, pb);
   playing = pb;
   playingAt = selAt ?? 0;
-  startedWith = { muted, played: pb, along: s.along };
+  startedWith = { muted, played: pb, along: alongOn(s) };
   startedKey = startKey(s);
   engine.playScore(pb.score, {
     tempo,
@@ -230,12 +232,12 @@ export async function play(opts: { count?: boolean; from?: number; pass?: number
       onEvent(pb.orig[i] ?? i, on, pb.pass[i], pb.verse[i]);
     },
     onEnd: () => {
-      if (useApp.getState().along) along?.passEnded('end');
+      if (alongOn(useApp.getState())) along?.passEnded('end');
       along?.stopChecking(false);
-      useApp.setState({ play: 'stopped', activeEvents: [], playPass: 1, playVerse: 0 });
+      useApp.setState({ play: 'stopped', activeEvents: [], playPass: 1, playVerse: 0, playLine: null });
     },
   });
-  useApp.setState({ play: 'playing', activeEvents: [], playPass: sel ? pb.pass[sel.index] : 1, playVerse: sel ? pb.verse[sel.index] : 0, playVerses: pb.verse.some((v) => v > 0) });
+  useApp.setState({ play: 'playing', activeEvents: [], playPass: sel ? pb.pass[sel.index] : 1, playVerse: sel ? pb.verse[sel.index] : 0, playVerses: pb.verse.some((v) => v > 0), playLine: sel ? sel.line : null });
 }
 
 export function pause() {
@@ -252,10 +254,12 @@ export function onBeforeStop(fn: () => void) {
 /** Stops playback. `record: false`: a play-along pass under way isn't scored (a restart). */
 export function stop({ record = true }: { record?: boolean } = {}) {
   beforeStop?.();
+  // (Stopping ends a microphone calibration still listening, without saving a delay.)
+  if (useApp.getState().calibrating) useApp.setState({ calibrating: false });
   along?.stopChecking(record);
   generation++;
   engine.stopPlayback();
-  useApp.setState({ play: 'stopped', activeEvents: [], playPass: 1, playVerse: 0 });
+  useApp.setState({ play: 'stopped', activeEvents: [], playPass: 1, playVerse: 0, playLine: null });
 }
 
 export function togglePlay() {
@@ -354,7 +358,7 @@ useApp.subscribe((s, prev) => {
     engine.setTempo(getParsed(s.text).doc.meta.tempo * s.speed);
   }
   // (Playing along without the tune, the clicks are the only timekeeping: they stay.)
-  const muted = s.along && !s.alongMelody;
+  const muted = alongOn(s) && !s.alongMelody;
   if (s.metronome !== prev.metronome && s.play !== 'stopped' && !s.recording && !muted) {
     engine.setMetronome(s.metronome ? beatsPerBar(getParsed(s.text).doc.meta) : null);
   }
@@ -381,14 +385,19 @@ useApp.subscribe((s, prev) => {
   // (performance mode): playback starts again from where it was, so the checking and the sound match.
   // Repeats switched on or off: the same, from the same note — when it changes what's played.
   if (s.play === 'playing') {
-    if (s.along !== prev.along || (s.along && s.alongMelody !== prev.alongMelody)) restartHere(true);
+    if (alongOn(s) !== alongOn(prev) || (alongOn(s) && s.alongMelody !== prev.alongMelody)) restartHere(true);
     else if ((tuneMuted(s) !== tuneMuted(prev) || s.playRepeats !== prev.playRepeats || s.playAllVerses !== prev.playAllVerses) && !sameStart(wanted(s), startedWith)) restartHere(false);
   }
 });
 
 /** Whether playback leaves the tune out: playing along without it, or performing silently. */
-export function tuneMuted(s: Pick<AppState, 'along' | 'alongMelody' | 'performing' | 'performSilent'>): boolean {
-  return (s.along && !s.alongMelody) || (s.performing && s.performSilent);
+export function tuneMuted(s: Pick<AppState, 'along' | 'alongMelody' | 'performing' | 'performSilent' | 'page'>): boolean {
+  return (alongOn(s) && !s.alongMelody) || (s.performing && s.performSilent);
+}
+
+/** Whether playing along is on here: it's the Play page's (the editor plays without it). */
+export function alongOn(s: Pick<AppState, 'along' | 'page'>): boolean {
+  return s.along && s.page === 'play';
 }
 
 /** A passage cut to the song's length (the same object when it fits), or null if none of it is left. */
@@ -497,7 +506,8 @@ const roundSpeed = (x: number) => Math.round(x * 100) / 100;
 export function startTrainer(opts: { count?: boolean } = {}) {
   const s = useApp.getState();
   if (s.recording) return;
-  const range = s.loop ? s.loopRange : currentPassage();
+  // The looped passage; else (nothing looping, or the whole song) the passage chosen.
+  const range = (s.loop && s.loopRange) || currentPassage();
   stop();
   // (Never above the goal: it would only ever slow down.)
   useApp.setState({ speed: Math.min(s.trainer.start, s.trainer.goal), loop: true, loopRange: range, training: { pass: 0, holding: false } });
@@ -516,14 +526,14 @@ export function holdTrainer(holding: boolean) {
 
 /** A pass of the loop ended: count it, and speed up when it's time. */
 export function loopPassed() {
-  const result = useApp.getState().along ? (along?.passEnded('loop') ?? null) : null;
+  const result = alongOn(useApp.getState()) ? (along?.passEnded('loop') ?? null) : null;
   const s = useApp.getState();
   const t = s.training;
   if (!t) return;
   const pass = t.pass + 1;
   const { step, every, goal } = s.trainer;
   // Playing along, the trainer can wait for passes played cleanly: then every `every` clean ones.
-  const cleanOnly = s.along && s.trainerCleanOnly;
+  const cleanOnly = alongOn(s) && s.trainerCleanOnly;
   const counts = !cleanOnly || !!result?.clean;
   const counted = (t.counted ?? t.pass) + (counts ? 1 : 0);
   const due = counts && !t.holding && counted % every === 0 && s.speed < goal - 1e-9;

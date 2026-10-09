@@ -4,7 +4,7 @@
 
 import abcjs from 'abcjs';
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
-import { writeAbc } from '../core/formats/abc';
+import { lineHasNoteWords, writeAbc } from '../core/formats/abc';
 import { eventKey } from '../core/score';
 import type { Parsed } from '../state/store';
 import { lineShown, lyricOf, songVerses } from '../core/verses';
@@ -83,6 +83,11 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
     }
     const scoreIndex = abc.order.map(([l, e]) => parsed.indexByKey.get(eventKey(l, e)));
     map.current = { elems, scoreIndex, abcElems };
+    // Each note findable by its score index, as on the other views (performance mode finds
+    // where you are by it).
+    elems.forEach((set, k) => {
+      if (scoreIndex[k] !== undefined) set[0]?.setAttribute('data-index', String(scoreIndex[k]));
+    });
     // The holes (the first line under each note) in the tab's blow/draw colours.
     if (holes) {
       const css = getComputedStyle(host.current);
@@ -145,6 +150,8 @@ function drawRestWords(elems: SVGElement[][], order: [number, number][], parsed:
     const set = elems[k];
     if (!ev || ev.kind !== 'rest' || !set?.length) return;
     const list = lineShown(parsed.doc.lines[l], shown);
+    // (A line with no words on its notes has them below the rests already: see writeAbc.)
+    if (!lineHasNoteWords(parsed.doc.lines[l], list)) return;
     const words = list.map((v) => lyricOf(ev, v));
     if (!words.some(Boolean)) return;
     const el = set[0];
@@ -159,6 +166,8 @@ function drawRestWords(elems: SVGElement[][], order: [number, number][], parsed:
     } catch {
       return;
     }
+    // (Drawn while hidden, nothing has a size yet: the words would all go to the left edge.)
+    if (!box.width && !box.height) return;
     // (A note's rows are lines of one text, 1.2em apart: the holes, then each verse.)
     const gap = Number(sample.getAttribute('font-size') || 16) * 1.2;
     words.forEach((w, i) => {

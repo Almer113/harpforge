@@ -125,6 +125,10 @@ describe('staff beams', () => {
   it('in 6/8, three eighths a beam (a dotted-quarter beat)', () => {
     expect(abcOf('{4 5 6}~~/2 {-6 4 5}~~/2 |', '6/8')).toBe('ceg ace |');
   });
+  it('a pickup is the end of a bar: its eighths beam on the beats they fall on there', () => {
+    // An eighth on the "and" of beat 3, then two eighths on beat 4.
+    expect(abcOf('{4}/2 {5 6} | 4 4 4 4 |')).toBe('c eg | c2 c2 c2 c2 |');
+  });
   it('the words stay on their notes', () => {
     const doc = parseHtab('---\ntitle: B\n---\n{4 5} {6 -6} |\nw: a b c d\n').doc;
     const back = parseAbc(writeAbc(doc, C).text).doc;

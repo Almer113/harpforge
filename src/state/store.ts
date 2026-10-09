@@ -206,6 +206,8 @@ export interface AppState {
   playAllVerses: boolean;
   /** While playing: the verse being sung (0 = verse 1). */
   playVerse: number;
+  /** The tab line of the note last started while playing (null: none yet). */
+  playLine: number | null;
   /** While playing: whether it goes through verses (all verses, or a repeat's verse 2). */
   playVerses: boolean;
   /** This pass's marks, by score index. */
@@ -458,6 +460,7 @@ export const useApp = create<AppState>((set) => ({
   playPass: 1,
   playAllVerses: prefs.playAllVerses ?? false,
   playVerse: 0,
+  playLine: null,
   playVerses: false,
   calibrating: false,
   alongMarks: {},

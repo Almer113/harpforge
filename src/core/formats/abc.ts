@@ -491,6 +491,11 @@ export interface AbcExportOptions {
 
 const LEN_DENS = [1, 2, 4, 8, 16, 32];
 
+/** Whether any note of `line` (not a tie) has words in one of the verses `list`. */
+export function lineHasNoteWords(line: TabLine, list: number[]): boolean {
+  return line.events.some((e) => e.kind === 'note' && !e.tied && list.some((v) => !!lyricOf(e, v)?.trim()));
+}
+
 /** Tuplet ratios tried for lengths no plain note shows: p notes in the time of q. */
 const TUPLETS: [number, number][] = [
   [3, 2],
@@ -552,7 +557,19 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
   // break the beam. `pos` is where in the bar the next note starts (in quarter beats).
   const [timeTop, timeBottom] = (/^(\d+)\s*\/\s*(\d+)$/.exec(meta.time) ?? []).slice(1).map(Number);
   const beamBeat = timeBottom === 8 && timeTop % 3 === 0 ? 1.5 : 1;
-  let pos = 0;
+  // A short first bar (a pickup) is the end of a bar: its notes are on the beats they'd have there.
+  const firstBar = (() => {
+    let len = 0;
+    for (const line of doc.lines) {
+      for (const e of line.events) {
+        if (e.kind === 'bar') return len;
+        len += e.beats;
+      }
+    }
+    return len;
+  })();
+  const barLen = beatsPerBar(meta);
+  let pos = firstBar > 1e-6 && firstBar < barLen - 1e-6 ? barLen - firstBar : 0;
   let beam: { group: number; end: number } | null = null;
   /** The parts written, as a line: a part in `glued` touches the one before it (a beam). */
   const lineOf = (parts: string[], glued: Set<number>) => parts.map((p, k) => (k === 0 || glued.has(k) ? p : ' ' + p)).join('');
@@ -571,6 +588,9 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
     const lineList = lineShown(line, verses);
     const lyr: string[][] = lineList.map(() => []);
     const tabs: string[] = [];
+    // Words over rests go below them as text when there's no "w:" row to put them in (no note
+    // of the line has words): there's nowhere else on the staff for them.
+    const restsBelow = withLyrics && (opts.restWords || !lineHasNoteWords(line, lineList));
 
     const noteText = (midi: number): string => {
       const sp = spell(midi, fifths);
@@ -629,7 +649,7 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
       const start = pos;
       pos += ev.beats;
       if (ev.kind === 'rest') {
-        const words = opts.restWords && withLyrics ? lineList.map((v) => lyricOf(ev, v)?.trim().replace(/["/]/g, '') ?? '') : [];
+        const words = restsBelow ? lineList.map((v) => lyricOf(ev, v)?.trim().replace(/["/]/g, '') ?? '') : [];
         const below = words.some(Boolean) ? `"_${words.slice(0, words.map(Boolean).lastIndexOf(true) + 1).join(' / ')}"` : '';
         parts.push(`${prefix}${chord}${below}z${len}`);
         lastTieable = null;

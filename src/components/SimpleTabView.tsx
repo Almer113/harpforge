@@ -1,5 +1,6 @@
 // Simple tab: just the holes, all the same size, a small gap between measures and
-// the tab's own line breaks. No rhythm, chords, lyrics or rests.
+// the tab's own line breaks, with the sections' names and the repeat signs. No rhythm,
+// chords, lyrics or rests.
 
 import { memo, useEffect, useRef } from 'react';
 import { holeSoundText, soundText } from '../core/htab/serializer';
@@ -69,20 +70,41 @@ export function breathClass(ev: NoteEvent): string {
   return 'other';
 }
 
-/** Splits a line into measures of played notes (rests and ties are left out). */
-function measuresOf(events: TabEvent[]): { ev: NoteEvent; ei: number }[][] {
-  const out: { ev: NoteEvent; ei: number }[][] = [[]];
+interface SimpleMeasure {
+  notes: { ev: NoteEvent; ei: number }[];
+  /** A repeat starts here ("|:") / ends here (":|"). */
+  open?: boolean;
+  close?: boolean;
+}
+
+/**
+ * Splits a line into measures of played notes (rests and ties are left out), with the repeat
+ * signs: one by a measure of rests only goes on the nearest measure with notes.
+ */
+function measuresOf(events: TabEvent[]): SimpleMeasure[] {
+  const out: SimpleMeasure[] = [{ notes: [] }];
+  let open = false;
   events.forEach((ev, ei) => {
     if (ev.kind === 'bar') {
-      if (out[out.length - 1].length) out.push([]);
-    } else if (ev.kind === 'note' && !ev.tied && ev.sounds.length) out[out.length - 1].push({ ev, ei });
+      if (ev.style === 'repeat-end') {
+        const last = [...out].reverse().find((m) => m.notes.length);
+        if (last) last.close = true;
+      }
+      if (out[out.length - 1].notes.length) out.push({ notes: [] });
+      if (ev.style === 'repeat-start') open = true;
+    } else if (ev.kind === 'note' && !ev.tied && ev.sounds.length) {
+      const m = out[out.length - 1];
+      if (open && !m.notes.length) m.open = true;
+      open = false;
+      m.notes.push({ ev, ei });
+    }
   });
-  return out.filter((m) => m.length);
+  return out.filter((m) => m.notes.length);
 }
 
 /** The first lines of a tab in Simple Tab style, not clickable (library cards). */
 export function SimpleTabPreview({ doc, lines = 2 }: { doc: TabDoc; lines?: number }) {
-  const shown = doc.lines.map((l) => measuresOf(l.events)).filter((m) => m.length).slice(0, lines);
+  const shown = doc.lines.map((l) => measuresOf(l.events).map((m) => m.notes)).filter((m) => m.length).slice(0, lines);
   if (!shown.length) return <span className="muted small">No notes yet</span>;
   return (
     <div className="simpletab preview">
@@ -162,11 +184,15 @@ const SimpleLine = memo(function SimpleLine({
   const passageSet = set(inPassage);
   const loopSet = set(inLoop);
   const markOf = markMap(marks);
+  const section = doc.lines[li].section;
   return (
+    <>
+    {section && <div className="st-section">{section}</div>}
     <div className="st-line">
       {measuresOf(doc.lines[li].events).map((m, mi) => (
         <span className="st-measure" key={mi}>
-          {m.map(({ ev, ei }) => {
+          {m.open && <span className="st-repeat" aria-label="Repeat from here" title="Repeat from here">|:</span>}
+          {m.notes.map(({ ev, ei }) => {
             const idx = indexByKey.get(eventKey(li, ei));
             const isActive = idx !== undefined && activeSet.has(idx);
             const isSelected = idx !== undefined && idx === selected;
@@ -184,8 +210,10 @@ const SimpleLine = memo(function SimpleLine({
               </button>
             );
           })}
+          {m.close && <span className="st-repeat" aria-label="Repeat back" title="Repeat back to the |: (or the start)">:|</span>}
         </span>
       ))}
     </div>
+    </>
   );
 });

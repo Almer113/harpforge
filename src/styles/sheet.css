@@ -178,9 +178,10 @@
 /* A word stretched by its notes: a faint line joins its syllables ("Twin — kle"). */
 .ly-syl.joined .ly-text { display: flex; align-items: center; gap: 0; padding-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .ly-syl.joined + .ly-syl .ly-text { padding-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
-/* (Clear of the letters by its own transparent ends: no margin, so it takes no room when there's none.) */
+/* (Clear of the letters by its own transparent ends; never shorter than a hyphen, so a word
+   whose notes are close together still reads as one: "ri - ver", not "ri ver".) */
 .ly-syl.joined .ly-text::after {
-  content: ''; flex: 1; min-width: 0; height: 1px; opacity: 0.35;
+  content: ''; flex: 1; min-width: 12px; height: 1.5px; opacity: 0.6;
   background: linear-gradient(90deg, transparent 3px, currentColor 3px, currentColor calc(100% - 3px), transparent calc(100% - 3px));
 }
 /* Fills (notes with no words, lines without lyrics): a compact row of holes. */
@@ -210,3 +211,8 @@
 /* (The playing note lights in the verse being sung only.) */
 .ly-line.not-sung .ly-note.active, .ly-line.not-sung .ly-syl.active .ly-text { background: transparent; border-color: transparent; color: inherit; }
 @media (prefers-reduced-motion: reduce) { .ly-line.not-sung { transition: none; } }
+/* "2nd time" / "Verse 2" in the transport while it plays. */
+.pass-chip {
+  display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid var(--border-2); background: var(--panel-2); color: var(--text); font-size: 12px; font-weight: 600;
+}

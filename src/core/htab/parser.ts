@@ -403,6 +403,23 @@ function joinTiesInBars(lines: TabLine[]) {
 }
 
 /**
+ * A "|:" while another repeat is still open (no ":|" yet) starts the repeat afresh: repeats
+ * inside repeats aren't played, so it says so.
+ */
+function checkRepeats(lines: TabLine[], issues: ParseIssue[]) {
+  let open = false;
+  for (const line of lines) {
+    for (const ev of line.events) {
+      if (ev.kind !== 'bar') continue;
+      if (ev.style === 'repeat-start') {
+        if (open && ev.src) issues.push({ message: 'A repeat inside a repeat: the first "|:" is forgotten, and only this one repeats', span: ev.src, severity: 'warning' });
+        open = true;
+      } else if (ev.style === 'repeat-end') open = false;
+    }
+  }
+}
+
+/**
  * Gives each tie ("~") the sounds of the note it continues. A tie after a rest just
  * lengthens the rest; a tie with nothing before it is an error.
  */
@@ -486,5 +503,6 @@ export function parseHtab(text: string): ParseResult {
 
   resolveTies(lines, issues);
   joinTiesInBars(lines);
+  checkRepeats(lines, issues);
   return { doc: { meta, lines }, issues };
 }

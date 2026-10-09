@@ -220,7 +220,9 @@ html.performing { scroll-padding-top: calc(var(--perform-bar-h, 56px) + 12px); }
 .perform-bar .speed input[type='range'] { width: 80px; }
 .perform-bar .speed .t-value { min-width: 0; }
 .pf-view-wrap { margin-left: auto; }
-.pf-view-menu { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px; right: 0; left: auto; width: 280px; }
+.pf-view-menu { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px; right: 0; left: auto; width: 340px; max-width: calc(100vw - 24px); }
+/* (All five views on one row where there's room; else they wrap rather than go off the edge.) */
+.pf-view-menu > .seg { flex-wrap: wrap; max-width: 100%; }
 .pf-view-menu .pb-head { margin: 4px 0 -4px; }
 .pf-show { display: flex; flex-direction: column; gap: 6px; }
 /* Wide enough for "Bar 188 of 188 · 2nd time", so the bar doesn't change size as it plays. */
@@ -241,4 +243,10 @@ html.performing { scroll-padding-top: calc(var(--perform-bar-h, 56px) + 12px); }
 @media (prefers-reduced-motion: reduce) { .perform-bar, .pf-badge { transition: none; } }
 @media (max-width: 1440px) {
   .perform-bar .speed .t-label, .pf-title { display: none; }
+}
+/* (Narrower: the place in the song takes only its words' room, so the bar stays one row.) */
+@media (max-width: 1100px) {
+  .pf-where { min-width: 0; }
+  .perform-bar { gap: 8px 10px; }
+  .perform-bar .speed input[type='range'] { width: 64px; }
 }

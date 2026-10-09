@@ -20,7 +20,7 @@ export function enterPerform() {
       if (!useApp.getState().performing) return leaveFullscreen();
       // In full screen the browser takes Esc for itself; asking for it (Chrome, Edge) lets Esc
       // close a menu first. (Holding Esc still leaves full screen.)
-      return (navigator as Navigator & { keyboard?: { lock?: (keys: string[]) => Promise<void> } }).keyboard?.lock?.(['Escape']);
+      return (navigator as KeyboardLock).keyboard?.lock?.(['Escape']);
     })
     .catch(() => undefined);
   if (!told) {
@@ -32,15 +32,16 @@ export function enterPerform() {
 /** The first visit says how to leave. */
 let told = false;
 
+type KeyboardLock = Navigator & { keyboard?: { lock?: (keys: string[]) => Promise<void>; unlock?: () => void } };
+
 export function exitPerform() {
   if (!useApp.getState().performing) return;
   useApp.setState({ performing: false });
+  (navigator as KeyboardLock).keyboard?.unlock?.();
   void leaveFullscreen();
   // Back on the Play page: the keyboard on the Perform button, the music where you were.
   requestAnimationFrame(() => {
-    const s = useApp.getState();
-    const at = s.activeEvents.at(-1) ?? s.selectedEvent;
-    const note = at !== null && at !== undefined ? document.querySelector(`.sheet [data-index="${at}"]`) : null;
+    const note = noteHere();
     (note ?? document.querySelector('.sheet'))?.scrollIntoView({ block: note ? 'center' : 'start' });
     document.querySelector<HTMLElement>('.perform-btn')?.focus({ preventScroll: true });
   });
@@ -62,6 +63,21 @@ export function performResize(dir: -1 | 0 | 1) {
   const next = PERFORM_SIZES[Math.max(0, Math.min(PERFORM_SIZES.length - 1, (i < 0 ? PERFORM_SIZES.length - 1 : i) + dir))];
   useApp.setState({ performSize: next });
 }
+
+/** The note you're at: the one playing, else the selected one (its element on the sheet). */
+function noteHere(): Element | null {
+  const s = useApp.getState();
+  const at = s.activeEvents.at(-1) ?? s.selectedEvent;
+  return at !== null && at !== undefined ? document.querySelector(`.sheet [data-index="${at}"]`) : null;
+}
+
+// Bigger or smaller music, or another view, lays the page out afresh: back to the note you
+// were at (while playing, following the music does that).
+useApp.subscribe((s, prev) => {
+  if (!s.performing || s.play === 'playing' || (s.performSize === prev.performSize && s.sheetView === prev.sheetView)) return;
+  if (typeof requestAnimationFrame === 'undefined') return;
+  requestAnimationFrame(() => requestAnimationFrame(() => noteHere()?.scrollIntoView({ block: 'center' })));
+});
 
 // Another page (Back, a link) ends performance mode.
 useApp.subscribe((s, prev) => {

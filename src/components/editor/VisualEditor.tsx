@@ -408,8 +408,13 @@ export function VisualEditor() {
           const cur = sel[sel.length - 1];
           const before = (a: Pos, b: Pos) => a.m < b.m || (a.m === b.m && a.start < b.start - EPS);
           let j: number;
-          if (cur) j = stops.findIndex((p) => samePos(p, cur)) + (right ? 1 : -1);
-          else {
+          const at = cur ? stops.findIndex((p) => samePos(p, cur)) : -1;
+          if (cur && at >= 0) j = at + (right ? 1 : -1);
+          else if (cur) {
+            // (A selection that isn't a stop itself — a chord on no beat — goes on from where it is.)
+            j = right ? stops.findIndex((p) => before(cur, p)) : lastIndex(stops, (p) => before(p, cur));
+            if (right && j < 0) j = stops.length;
+          } else {
             // No selection: from the caret. On a note there, Right takes that note.
             const here = stops.findIndex((p) => samePos(p, v.caret));
             const onNote = here >= 0 && !!findItem(s, v.caret);

@@ -161,3 +161,28 @@ describe('where playback starts', () => {
     expect(s().selectedEvent).toBeNull();
   });
 });
+
+describe('the pass shown while playing', () => {
+  it('"Verse 2" only on lines with verses; "2nd time" in a repeat; nothing when stopped', async () => {
+    const { passLabel } = await import('../components/Controls');
+    // Line 0: an intro (one verse); line 1: two verses.
+    const lines = [1, 2];
+    const at = { play: 'playing' as const, playVerses: true, playVerse: 1, playPass: 2 };
+    expect(passLabel({ ...at, playLine: 1 }, lines)).toBe('Verse 2');
+    expect(passLabel({ ...at, playLine: 0 }, lines)).toBe('2nd time');
+    expect(passLabel({ ...at, playLine: 0, playPass: 1 }, lines)).toBeNull();
+    expect(passLabel({ ...at, playLine: 1, play: 'stopped' }, lines)).toBeNull();
+  });
+
+  it('the line playing is kept between notes, and let go on stopping', async () => {
+    s().loadText('---\ntitle: L\n---\n4 4 |\n|: 5 5 :|\nw: a b\nw: c d\n', null);
+    useApp.setState({ playAllVerses: false });
+    await play();
+    const { onEvent } = last()[1] as unknown as { onEvent: (i: number, on: boolean) => void };
+    onEvent(3, true);
+    onEvent(3, false);
+    expect(s().playLine).toBe(1);
+    stop();
+    expect(s().playLine).toBeNull();
+  });
+});

@@ -3,13 +3,12 @@
 // badge keeps the bar number), and comes back when the mouse moves.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PlayStop, SpeedControl, useTransportKeys } from './Controls';
+import { PlayStop, SpeedControl, usePlayingPass, useTransportKeys } from './Controls';
 import { pageTurnKey, startPerformanceView, turnPage } from './follow';
 import { Popover } from './Popover';
 import { keysTaken } from '../live/focus';
 import { ReadAsSwitch, ShowItems, ViewSwitch } from './Sheet';
 import { barAt, barStarts } from '../core/passage';
-import { songVerses } from '../core/verses';
 import { exitPerform, performResize } from '../state/perform';
 import { setAlong } from '../state/playAlong';
 import { DEFAULT_PERFORM_SIZE, PERFORM_SIZES, useApp, useParsed } from '../state/store';
@@ -40,13 +39,11 @@ export function PerformBar() {
     return now ?? lastPlayed ?? s.selectedEvent;
   });
   const starts = useMemo(() => barStarts(score), [score]);
-  const second = useApp((s) => s.play !== 'stopped' && s.playPass === 2);
   // With several verses: which one is being sung (else "2nd time" in a repeat).
-  const verseCount = useMemo(() => songVerses(doc), [doc]);
-  const verse = useApp((s) => (s.play !== 'stopped' && s.playVerses && verseCount > 1 ? s.playVerse + 1 : null));
+  const pass = usePlayingPass();
   const ev = at !== null && at !== undefined ? score.events[at] : undefined;
   const bar = ev ? barAt(score, ev.start, starts) + 1 : null;
-  const where = bar ? `Bar ${bar} of ${starts.length}${verse ? ` · Verse ${verse}` : second ? ' · 2nd time' : ''}` : `${starts.length} bars`;
+  const where = bar ? `Bar ${bar} of ${starts.length}${pass ? ` · ${pass}` : ''}` : `${starts.length} bars`;
 
   const { idle, hint } = useIdle(playing);
 
@@ -74,7 +71,10 @@ export function PerformBar() {
     document.documentElement.style.setProperty('--perform-bar-h', `${el.offsetHeight}px`);
     const sel = useApp.getState().selectedEvent;
     startPerformanceView(sel !== null ? document.querySelector(`.sheet [data-index="${sel}"]`) : null);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty('--perform-bar-h');
+    };
   }, []);
 
   const sizeButton = (dir: -1 | 1, label: string, title: string) => {
@@ -175,6 +175,7 @@ function useIdle(playing: boolean): { idle: boolean; hint: boolean } {
   useEffect(() => {
     if (!playing) return;
     let timer = 0;
+    let hintTimer = 0;
     let swallow = false;
     const busy = () => !!document.querySelector('.perform-bar:hover, .perform-bar :focus-visible, .pop-panel, .modal-backdrop');
     const wake = () => {
@@ -189,7 +190,7 @@ function useIdle(playing: boolean): { idle: boolean; hint: boolean } {
           if (!hinted) {
             hinted = true;
             setHint(true);
-            setTimeout(() => setHint(false), 5000);
+            hintTimer = window.setTimeout(() => setHint(false), 5000);
           }
         }
       }, IDLE_MS);
@@ -198,12 +199,17 @@ function useIdle(playing: boolean): { idle: boolean; hint: boolean } {
     // (Of the keys, only Tab, going to the bar: page turns and harmonica keys leave it be.)
     const tab = (e: KeyboardEvent) => e.key === 'Tab' && wake();
     const down = (e: PointerEvent) => {
+      // (Only the press that wakes the bar is swallowed: not one long after.)
+      swallow = away.current;
       if (away.current) {
         e.preventDefault();
         e.stopPropagation();
-        swallow = true;
       }
       wake();
+    };
+    // A press that became a scroll (touch) never clicks: nothing left to swallow.
+    const cancel = () => {
+      swallow = false;
     };
     const click = (e: MouseEvent) => {
       if (!swallow) return;
@@ -215,9 +221,12 @@ function useIdle(playing: boolean): { idle: boolean; hint: boolean } {
     for (const e of events) window.addEventListener(e, wake, { passive: true });
     window.addEventListener('pointerdown', down, true);
     window.addEventListener('click', click, true);
+    window.addEventListener('pointercancel', cancel, true);
     window.addEventListener('keydown', tab);
     return () => {
       clearTimeout(timer);
+      clearTimeout(hintTimer);
+      window.removeEventListener('pointercancel', cancel, true);
       for (const e of events) window.removeEventListener(e, wake);
       window.removeEventListener('pointerdown', down, true);
       window.removeEventListener('click', click, true);
