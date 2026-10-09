@@ -5,7 +5,7 @@
 // chord symbols, rests, bars, lyrics (w:) and parts. Only the first tune and first
 // voice are read.
 
-import { lyricOf, songVerses } from '../verses';
+import { lyricOf, setLyricOf, songVerses } from '../verses';
 import type { Harmonica } from '../instruments';
 import { holeSoundText } from '../htab/serializer';
 import { beatsPerBar, type BarEvent, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine } from '../htab/types';
@@ -124,10 +124,13 @@ export function parseAbc(text: string): Imported {
   let lyricRest: (NoteEvent | null)[] = [];
   let continuesLine = false;
   let lastField = '';
+  // Each "w:" line under a music line is a verse of it (1, 2, …); "+:" goes on with the last one.
+  let verseCount = 0;
+  let verse = 0;
   const attachLyrics = (textLine: string, continued = false) => {
     // Tokenize: syllables separated by spaces or hyphens; _ * skip; | to next bar (approximate: ignored).
     const notes = continued ? lyricRest : pendingLyricNotes;
-    if (!continued && !notes.length && lastField === 'w') warnOnce('Only the first verse of the lyrics was imported.');
+    if (!continued) verse = verseCount++;
     let k = 0;
     const re = /(\\-|[^\s\-_*|~]|~)+-?|[_*]|\|/g;
     let m: RegExpExecArray | null;
@@ -139,10 +142,9 @@ export function parseAbc(text: string): Imported {
         continue;
       }
       const target = notes[k++];
-      if (target && !target.tied) target.lyric = tok.replace(/\\-/g, '-').replace(/~/g, ' ');
+      if (target && !target.tied) setLyricOf(target, verse, tok.replace(/\\-/g, '-').replace(/~/g, ' '));
     }
     lyricRest = notes.slice(k);
-    pendingLyricNotes = [];
   };
 
   const durationOf = (lenStr: string): number => {
@@ -208,7 +210,10 @@ export function parseAbc(text: string): Imported {
 
     // Music line. A "w:" line belongs to the music line just before it, so notes of a line
     // that had no lyrics aren't given the next line's words (unless it continued with "\").
-    if (!continuesLine) pendingLyricNotes = [];
+    if (!continuesLine) {
+      pendingLyricNotes = [];
+      verseCount = 0;
+    }
     continuesLine = /\\\s*$/.test(line);
     const events: TabEvent[] = [];
     let pendingChord: string | undefined;

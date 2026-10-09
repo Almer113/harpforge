@@ -1,5 +1,6 @@
 // MusicXML (partwise) import & export. Import reads the first part and first voice.
 
+import { lineVerses, lyricOf, setLyricOf } from '../verses';
 import { strFromU8, unzipSync } from 'fflate';
 import { isNoChord, parseChord } from '../chords';
 import type { Harmonica } from '../instruments';
@@ -49,6 +50,10 @@ export function parseMusicXml(xml: string): Imported {
   if (!parts.length) throw new Error('No parts found in this MusicXML file.');
   if (parts.length > 1) warnings.push(`Imported the first of ${parts.length} parts.`);
   const part = parts[0];
+  // Its lyric lines (numbered 1, 2…, or named), in order: verse 1, 2…
+  const numbers = [...new Set([...part.getElementsByTagName('lyric')].filter((l) => l.getAttribute('name') !== 'tab').map((l) => l.getAttribute('number') ?? '1'))];
+  if (numbers.every((n) => /^\d+$/.test(n))) numbers.sort((a, b) => Number(a) - Number(b));
+  const verseOf = new Map(numbers.map((n, k) => [n, k]));
 
   let divisions = 1;
   let voice: string | null = null;
@@ -211,12 +216,13 @@ export function parseMusicXml(xml: string): Imported {
           const ev: NoteEvent = { kind: 'note', sounds: [{ type: 'pitch', midi }], beats };
           if (pendingChord) ev.chord = pendingChord;
           pendingChord = undefined;
-          const all = [...el.getElementsByTagName('lyric')].filter((l) => l.getAttribute('name') !== 'tab');
-          const lyric = all.find((l) => (l.getAttribute('number') ?? '1') === '1') ?? all[0];
-          if (lyric) {
+          // Each lyric line (number 1, 2, …) is a verse; the tab HarpForge writes under the staff isn't.
+          for (const lyric of el.getElementsByTagName('lyric')) {
+            if (lyric.getAttribute('name') === 'tab') continue;
+            const v = verseOf.get(lyric.getAttribute('number') ?? '1');
             const t = text(lyric, 'text');
             const syl = text(lyric, 'syllabic');
-            if (t) ev.lyric = t + (syl === 'begin' || syl === 'middle' ? '-' : '');
+            if (v !== undefined && t && !lyricOf(ev, v)) setLyricOf(ev, v, t + (syl === 'begin' || syl === 'middle' ? '-' : ''));
           }
           events.push(ev);
           last = ev;
@@ -415,7 +421,9 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
   if (meta.artist) out.push(`<identification><creator type="composer">${esc(meta.artist)}</creator><encoding><software>HarpForge</software></encoding></identification>`);
   out.push('<part-list><score-part id="P1"><part-name>Harmonica</part-name><score-instrument id="P1-I1"><instrument-name>Harmonica</instrument-name></score-instrument><midi-instrument id="P1-I1"><midi-program>23</midi-program></midi-instrument></score-part></part-list>');
   out.push('<part id="P1">');
-  let wordOpen = false;
+  // A lyric line per verse (number 1, 2, …), then the tab; each verse's word under way.
+  const verses = Math.max(1, ...doc.lines.map(lineVerses));
+  const wordOpen: boolean[] = Array.from({ length: verses }, () => false);
   // A short first bar is a pickup: numbered 0 and marked implicit, as notation programs expect.
   const firstLen = measures[0]?.pieces.reduce((a, p) => a + p.beats, 0) ?? 0;
   const pickup = measures.length > 1 && firstLen > 1e-6 && firstLen < bpb - 1e-6;
@@ -451,15 +459,17 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
         let lyrics = '';
         if (k === 0 && n.first && n.ev.kind === 'note') {
           const ev = n.ev;
-          if (ev.lyric) {
-            const hyphen = ev.lyric.endsWith('-');
-            const word = hyphen ? ev.lyric.slice(0, -1) : ev.lyric;
-            const syllabic = wordOpen ? (hyphen ? 'middle' : 'end') : hyphen ? 'begin' : 'single';
-            wordOpen = hyphen;
-            lyrics += `<lyric number="1"><syllabic>${syllabic}</syllabic><text>${esc(word)}</text></lyric>`;
+          for (let v = 0; v < verses; v++) {
+            const lyric = lyricOf(ev, v);
+            if (!lyric) continue;
+            const hyphen = lyric.length > 1 && lyric.endsWith('-');
+            const word = hyphen ? lyric.slice(0, -1) : lyric;
+            const syllabic = wordOpen[v] ? (hyphen ? 'middle' : 'end') : hyphen ? 'begin' : 'single';
+            wordOpen[v] = hyphen;
+            lyrics += `<lyric number="${v + 1}"><syllabic>${syllabic}</syllabic><text>${esc(word)}</text></lyric>`;
           }
           const holes = ev.tied ? [] : ev.sounds.filter((s): s is HoleSound => s.type === 'hole');
-          if (holes.length) lyrics += `<lyric number="2" name="tab"><syllabic>single</syllabic><text>${esc(holes.map((h) => holeSoundText(h)).join(' '))}</text></lyric>`;
+          if (holes.length) lyrics += `<lyric number="${verses + 1}" name="tab"><syllabic>single</syllabic><text>${esc(holes.map((h) => holeSoundText(h)).join(' '))}</text></lyric>`;
         }
         out.push(`<note>${k > 0 ? '<chord/>' : ''}${pitch}<duration>${dur}</duration>${tieXml}${typeXml}${tiedXml}${lyrics}</note>`);
       });
