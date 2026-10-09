@@ -1,12 +1,13 @@
 // @vitest-environment happy-dom
-// Phases 9a and 9b: choosing a passage on the Play page, looping it, and counting in.
+// Phases 9a–9c: choosing a passage on the Play page, looping it, counting in, and the tempo trainer.
 
 import { beforeEach, expect, it, vi } from 'vitest';
 
 vi.mock('../audio/engine', async () => (await import('../test/fakeEngine')).fakeEngine());
 
 import * as engine from '../audio/engine';
-import { countBeats, extendPassage, play, playFrom, selectBar, selectEvent, stop, toggleLoop } from './playback';
+import { countBeats, extendPassage, holdTrainer, loopPassed, play, playFrom, selectBar, selectEvent, startTrainer, stop, stopTrainer, toggleLoop, trainerLabel } from './playback';
+import { DEFAULT_TRAINER } from './store';
 import { useApp } from './store';
 
 const TAB = '---\ntitle: Loop\n---\n4 4 4 4 | 5 5 5 5 | 6 6 6 6 | 7 7 7 7 |\n';
@@ -16,7 +17,7 @@ const playScore = engine.playScore as unknown as ReturnType<typeof vi.fn>;
 beforeEach(() => {
   stop();
   s().loadText(TAB, null);
-  useApp.setState({ loop: false, loopRange: null, page: 'play', countIn: false, countEachLoop: false });
+  useApp.setState({ loop: false, loopRange: null, page: 'play', countIn: false, countEachLoop: false, speed: 1, trainer: DEFAULT_TRAINER, training: null });
   playScore.mockClear();
 });
 
@@ -92,4 +93,46 @@ it('a loop can count in before each pass (and so before the first)', async () =>
   toggleLoop();
   await play();
   expect(playScore).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ countIn: 0 }));
+});
+
+// ---- Phase 9c: the tempo trainer
+
+it('the trainer loops the passage from its start speed, a step faster each pass, up to the goal', async () => {
+  selectBar({ start: 4, end: 8 }, false);
+  startTrainer();
+  await new Promise((r) => setTimeout(r, 0));
+  expect(s()).toMatchObject({ speed: 0.6, loop: true, loopRange: { start: 4, end: 8 }, training: { pass: 0, holding: false } });
+  expect(playScore).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ onLoop: loopPassed }));
+  loopPassed();
+  expect(s().speed).toBe(0.65);
+  for (let k = 0; k < 20; k++) loopPassed();
+  expect(s().speed).toBe(1);
+  expect(trainerLabel(s().training!, s().speed, 1)).toBe('Trainer at 100% ✓');
+});
+
+it('steps every few passes, holds when asked, and stops with the loop', () => {
+  useApp.setState({ trainer: { ...DEFAULT_TRAINER, every: 2, step: 0.1 } });
+  startTrainer();
+  loopPassed();
+  expect(s().speed).toBe(0.6);
+  loopPassed();
+  expect(s().speed).toBe(0.7);
+  expect(trainerLabel(s().training!, s().speed, 1)).toBe('Trainer · pass 3 · 70%');
+  holdTrainer(true);
+  loopPassed();
+  loopPassed();
+  expect(s().speed).toBe(0.7);
+  holdTrainer(false);
+  toggleLoop();
+  expect(s()).toMatchObject({ loop: false, training: null });
+  // Stopped, a pass does nothing.
+  loopPassed();
+  expect(s().speed).toBe(0.7);
+});
+
+it('stopping the trainer keeps the loop going at its speed', () => {
+  startTrainer();
+  loopPassed();
+  stopTrainer();
+  expect(s()).toMatchObject({ loop: true, training: null, speed: 0.65 });
 });

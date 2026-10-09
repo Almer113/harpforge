@@ -94,6 +94,8 @@ export interface PlaybackOptions {
   barStarts?: number[];
   /** Beats in a bar (for the count's accents when the metronome is off). */
   beatsPerBar?: number;
+  /** Called as each pass of a loop ends and the next begins (in time with what's heard). */
+  onLoop?: () => void;
   onEvent?: (index: number, on: boolean) => void;
   onEnd?: () => void;
 }
@@ -101,6 +103,7 @@ export interface PlaybackOptions {
 const scheduledVoices = new Set<Voice>();
 let metronomeId: number | null = null;
 let metronomeBpb = 4;
+let loopListener: ((time: number) => void) | null = null;
 // What the clicks need to know about the playing song (see clicks.ts).
 let clickInfo: ClickInfo = { offset: 0, countFrom: 0, count: 0 };
 const accented = (beat: number) => isAccent(beat, clickInfo, metronomeBpb);
@@ -224,6 +227,11 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
     else scheduleEnd();
   }
 
+  if (opts.onLoop) {
+    const onLoop = opts.onLoop;
+    loopListener = (time: number) => Tone.getDraw().schedule(onLoop, time);
+    t.on('loop', loopListener);
+  }
   clickInfo = { offset, barStarts: opts.barStarts, countFrom: startBeat - countIn, count: countIn };
   metronomeBpb = opts.metronomeBeatsPerBar ?? opts.beatsPerBar ?? (countIn || 4);
   if (opts.metronomeBeatsPerBar) scheduleMetronome(opts.metronomeBeatsPerBar);
@@ -266,6 +274,8 @@ export function stopPlayback() {
   t.cancel(0);
   Tone.getDraw().cancel(0);
   t.loop = false;
+  if (loopListener) t.off('loop', loopListener);
+  loopListener = null;
   metronomeId = null;
   for (const v of scheduledVoices) v.stop(Tone.immediate());
   if (scheduledVoices.size) soundingFor(0);

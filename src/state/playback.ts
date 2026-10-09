@@ -56,6 +56,7 @@ export async function play(opts: { count?: boolean } = {}) {
     countEachLoop: s.loop && s.countEachLoop,
     barStarts: barStarts(p.score),
     beatsPerBar: bpb,
+    onLoop: loopPassed,
     metronomeBeatsPerBar: s.metronome ? bpb : undefined,
     onEvent,
     onEnd: () => useApp.setState({ play: 'stopped', activeEvents: [] }),
@@ -227,7 +228,7 @@ export function currentPassage(): Passage | null {
 export function toggleLoop() {
   const s = useApp.getState();
   if (s.loop) {
-    useApp.setState({ loop: false, loopRange: null });
+    useApp.setState({ loop: false, loopRange: null, training: null });
     return;
   }
   const range = currentPassage();
@@ -240,5 +241,49 @@ export function toggleLoop() {
 
 /** Ends a passage loop (the loop chip's ✕); if it's playing, this pass is the last. */
 export function endPassageLoop() {
-  useApp.setState({ loop: false, loopRange: null });
+  useApp.setState({ loop: false, loopRange: null, training: null });
+}
+
+// ---- Tempo trainer ---------------------------------------------------------------------
+
+const roundSpeed = (x: number) => Math.round(x * 100) / 100;
+
+/**
+ * Starts the tempo trainer: the loop (the chosen passage, or the whole song) plays from the
+ * trainer's start speed, a step faster after every `every` passes, up to its goal.
+ */
+export function startTrainer() {
+  const s = useApp.getState();
+  if (s.recording) return;
+  const range = s.loop ? s.loopRange : currentPassage();
+  stop();
+  useApp.setState({ speed: s.trainer.start, loop: true, loopRange: range, training: { pass: 0, holding: false } });
+  void play();
+}
+
+export function stopTrainer() {
+  useApp.setState({ training: null });
+}
+
+/** Keeps the speed where it is (or lets it climb again). */
+export function holdTrainer(holding: boolean) {
+  const t = useApp.getState().training;
+  if (t) useApp.setState({ training: { ...t, holding } });
+}
+
+/** A pass of the loop ended: count it, and speed up when it's time. */
+export function loopPassed() {
+  const s = useApp.getState();
+  const t = s.training;
+  if (!t) return;
+  const pass = t.pass + 1;
+  const { step, every, goal } = s.trainer;
+  const due = !t.holding && pass % every === 0 && s.speed < goal - 1e-9;
+  useApp.setState({ training: { ...t, pass }, ...(due ? { speed: roundSpeed(Math.min(goal, s.speed + step)) } : {}) });
+}
+
+/** "Pass 3 · 70%", or "At 100% ✓" once at the goal. */
+export function trainerLabel(training: { pass: number }, speed: number, goal: number): string {
+  const pct = `${Math.round(speed * 100)}%`;
+  return speed >= goal - 1e-9 ? `Trainer at ${pct} ✓` : `Trainer · pass ${training.pass + 1} · ${pct}`;
 }

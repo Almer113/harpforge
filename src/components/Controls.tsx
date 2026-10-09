@@ -6,8 +6,8 @@ import { isKeyChange, keyDistance, setHarmonica, shiftOctave } from '../state/ac
 import { guessTonic, harpForPosition, octaveOptions, positionFor, positionName } from '../core/convert';
 import { mod12, transposeKey } from '../core/pitch';
 import { describePassage } from '../core/passage';
-import { endPassageLoop, playFrom, stop, toggleLoop, togglePlay } from '../state/playback';
-import { useApp, useParsed } from '../state/store';
+import { endPassageLoop, holdTrainer, playFrom, startTrainer, stop, stopTrainer, toggleLoop, togglePlay, trainerLabel } from '../state/playback';
+import { TRAINER_CHOICES, useApp, useParsed, type TrainerSettings } from '../state/store';
 import { Popover } from './Popover';
 
 export function HarmonicaPicker() {
@@ -155,6 +155,9 @@ const Icon = {
   stop: <svg viewBox="0 0 24 24" width="16" height="16"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" /></svg>,
   loop: <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l3 3-3 3" /><path d="M4 11V9a4 4 0 0 1 4-4h12" /><path d="M7 22l-3-3 3-3" /><path d="M20 13v2a4 4 0 0 1-4 4H4" /></svg>,
   metro: <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M9 3h6l4 18H5z" /><path d="M12 15l5-9" strokeLinecap="round" /></svg>,
+  gauge: <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 18a9 9 0 1 1 15 0" /><path d="M12 14l4-5" /><circle cx="12" cy="14" r="1.2" fill="currentColor" /></svg>,
+  hold: <svg viewBox="0 0 24 24" width="12" height="12"><path d="M6 4h4v16H6zM14 4h4v16h-4z" fill="currentColor" /></svg>,
+  resume: <svg viewBox="0 0 24 24" width="12" height="12"><path d="M7 4.5v15l13-7.5z" fill="currentColor" /></svg>,
   rec: <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="7" fill="currentColor" /></svg>,
 };
 
@@ -245,6 +248,7 @@ export function PlayStop() {
       <button className={`t-btn toggle ${metronome ? 'on' : ''}`} onClick={() => useApp.setState({ metronome: !metronome })} title="Metronome during playback" aria-label="Metronome" aria-pressed={metronome}>
         {Icon.metro}
       </button>
+      <TrainerButton />
       {looping && (
         <span className="loop-chip" role="status">
           {looping}
@@ -254,6 +258,78 @@ export function PlayStop() {
         </span>
       )}
     </div>
+  );
+}
+
+const pct = (x: number) => `${Math.round(x * 100)}%`;
+
+/**
+ * The tempo trainer: a button with its settings, and while it runs a chip with the pass and
+ * the speed, a hold button and ✕.
+ */
+function TrainerButton() {
+  const trainer = useApp((s) => s.trainer);
+  const training = useApp((s) => s.training);
+  const speed = useApp((s) => s.speed);
+  const recording = useApp((s) => s.recording);
+  const set = (patch: Partial<TrainerSettings>) => useApp.setState((s) => ({ trainer: { ...s.trainer, ...patch } }));
+  const choice = (key: keyof TrainerSettings, label: string, show: (x: number) => string) => (
+    <label className="pb-row">
+      <span>{label}</span>
+      <select value={trainer[key]} onChange={(e) => set({ [key]: parseFloat(e.target.value) })} aria-label={label}>
+        {TRAINER_CHOICES[key].map((x) => (
+          <option key={x} value={x}>{show(x)}</option>
+        ))}
+      </select>
+    </label>
+  );
+  return (
+    <>
+      <Popover
+        label={Icon.gauge}
+        buttonClass={`t-btn toggle ${training ? 'on' : ''}`}
+        title="Tempo trainer: loop slowly, speeding up pass by pass"
+        ariaLabel="Tempo trainer"
+        kind="panel"
+        panelClass="menu pb-menu trainer-menu"
+      >
+        {(close) => (
+          <div className="pb-settings">
+            <p className="trainer-intro">Loops the chosen passage (or the whole song), a little faster each time.</p>
+            {choice('start', 'Start at', pct)}
+            {choice('step', 'Speed up by', (x) => `+${Math.round(x * 100)}%`)}
+            {choice('every', 'Every', (x) => (x === 1 ? 'pass' : `${x} passes`))}
+            {choice('goal', 'Up to', pct)}
+            <div className="pb-row trainer-actions">
+              {training ? (
+                <button className="btn small" onClick={() => { stopTrainer(); close(); }}>Stop the trainer</button>
+              ) : (
+                <button className="btn small primary" disabled={!!recording} onClick={() => { startTrainer(); close(); }}>Start</button>
+              )}
+            </div>
+          </div>
+        )}
+      </Popover>
+      {training && (
+        <span className="loop-chip trainer-chip" role="status">
+          {trainerLabel(training, speed, trainer.goal)}
+          {speed < trainer.goal - 1e-9 && (
+            <button
+              className={`loop-chip-x ${training.holding ? 'on' : ''}`}
+              onClick={() => holdTrainer(!training.holding)}
+              title={training.holding ? 'Speed up again' : 'Hold this speed'}
+              aria-label={training.holding ? 'Speed up again' : 'Hold this speed'}
+              aria-pressed={training.holding}
+            >
+              {training.holding ? Icon.resume : Icon.hold}
+            </button>
+          )}
+          <button className="loop-chip-x" onClick={stopTrainer} title="Stop the trainer (the loop goes on at this speed)" aria-label="Stop the trainer">
+            ✕
+          </button>
+        </span>
+      )}
+    </>
   );
 }
 

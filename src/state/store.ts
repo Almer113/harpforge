@@ -167,6 +167,10 @@ export interface AppState {
   countIn: boolean;
   /** Count in again before each pass of a loop. Remembered. */
   countEachLoop: boolean;
+  /** The tempo trainer's settings (remembered): speeds as multipliers, step after `every` passes. */
+  trainer: TrainerSettings;
+  /** The tempo trainer while it runs: passes played, and whether it's holding the speed. */
+  training: { pass: number; holding: boolean } | null;
   /** Playback speed multiplier (practice slow-down). */
   speed: number;
   /** Live-held sounds by input id (mouse, key codes). */
@@ -247,6 +251,32 @@ const SHOW_ALL: SheetShow = {
   staff: { holes: true, lyrics: true, chords: true, header: false },
 };
 
+export interface TrainerSettings {
+  start: number;
+  step: number;
+  every: number;
+  goal: number;
+}
+export const DEFAULT_TRAINER: TrainerSettings = { start: 0.6, step: 0.05, every: 1, goal: 1 };
+/** The trainer's choices (what its menu offers). */
+export const TRAINER_CHOICES = {
+  start: [0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+  step: [0.02, 0.05, 0.1],
+  every: [1, 2, 3],
+  goal: [0.8, 0.9, 1, 1.1, 1.2],
+};
+
+/** Remembered trainer settings, each one of its allowed values. */
+function trainerFrom(v: unknown): Partial<TrainerSettings> {
+  if (!isObject(v)) return {};
+  const out: Partial<TrainerSettings> = {};
+  for (const k of Object.keys(TRAINER_CHOICES) as (keyof TrainerSettings)[]) {
+    const x = v[k];
+    if (typeof x === 'number' && TRAINER_CHOICES[k].some((c) => Math.abs(c - x) < 1e-9)) out[k] = x;
+  }
+  return out;
+}
+
 function loadPrefs(): {
   soundMode?: 'samples' | 'synth';
   harpSize?: HarpSize;
@@ -261,6 +291,7 @@ function loadPrefs(): {
   ownedHarps?: import('../core/instruments').HarmonicaSpec[];
   countIn?: boolean;
   countEachLoop?: boolean;
+  trainer?: Partial<TrainerSettings>;
 } {
   let raw: unknown;
   try {
@@ -285,6 +316,7 @@ function loadPrefs(): {
     showNoteNames: bool(p.showNoteNames),
     countIn: bool(p.countIn),
     countEachLoop: bool(p.countEachLoop),
+    trainer: trainerFrom(p.trainer),
     readAs: p.readAs === 'notes' ? 'notes' : p.readAs === 'holes' ? 'holes' : undefined,
     sheetShow: { tab: like(sheet.tab, SHOW_ALL.tab), numbers: like(sheet.numbers, SHOW_ALL.numbers), staff: like(sheet.staff, SHOW_ALL.staff) },
     printPrefs: print as Partial<import('../pages/PrintPage').PrintPrefs>,
@@ -339,6 +371,8 @@ export const useApp = create<AppState>((set) => ({
   metronome: false,
   countIn: prefs.countIn ?? false,
   countEachLoop: prefs.countEachLoop ?? false,
+  trainer: { ...DEFAULT_TRAINER, ...prefs.trainer },
+  training: null,
   speed: 1,
   held: {},
   keyOffset: 0,
@@ -421,16 +455,16 @@ export const useApp = create<AppState>((set) => ({
   loadSeq: 0,
   loadText: (text, docId = null, saved = false) =>
     // A different tab: the editor's caret and selection start over (they belonged to the old one).
-    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0 }, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, passage: null, loopRange: null, loop: s.loopRange ? false : s.loop, activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
+    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0 }, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, passage: null, loopRange: null, loop: s.loopRange ? false : s.loop, training: null, activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
   markSaved: (docId, text) => set((s) => ({ docId, savedText: text ?? s.text })),
   notify: (message) => set({ toast: { message, id: Date.now() } }),
 }));
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.ve.zoom === prev.ve.zoom && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps && s.countIn === prev.countIn && s.countEachLoop === prev.countEachLoop) return;
+  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.ve.zoom === prev.ve.zoom && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps && s.countIn === prev.countIn && s.countEachLoop === prev.countEachLoop && s.trainer === prev.trainer) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, zoom: s.ve.zoom, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps, countIn: s.countIn, countEachLoop: s.countEachLoop }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, zoom: s.ve.zoom, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps, countIn: s.countIn, countEachLoop: s.countEachLoop, trainer: s.trainer }));
   } catch {
     /* storage unavailable */
   }
