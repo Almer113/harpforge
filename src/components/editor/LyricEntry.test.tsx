@@ -81,10 +81,10 @@ it('Backspace in an empty box goes back a note', async () => {
 });
 
 it('types into the verse chosen', async () => {
-  useApp.setState((st) => ({ ve: { ...st.ve, verse: 1 } }));
+  await act(async () => useApp.setState((st) => ({ ve: { ...st.ve, verse: 1 } })));
   await act(async () => startLyrics());
   await change('one two');
   await key('Enter');
   expect(lyrics()).toEqual(['w:', 'w: one two']);
-  useApp.setState((st) => ({ ve: { ...st.ve, verse: 0 } }));
+  await act(async () => useApp.setState((st) => ({ ve: { ...st.ve, verse: 0 } })));
 });
