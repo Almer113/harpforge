@@ -64,6 +64,8 @@ import { isTyping, keysTaken, overlayOpen } from '../../live/focus';
 import { copyText, pasteText } from '../../core/edit/clipboard';
 import { openShortcuts } from '../Shortcuts';
 import { LyricInput, LyricsButton, startLyrics, stopLyrics, VerseSwitch } from './LyricEntry';
+import { FillLyricsDialog } from './FillLyrics';
+import { clearLyrics, shiftLyrics } from '../../core/edit/lyrics';
 import { lyricOf } from '../../core/verses';
 
 // ---- Helpers shared with the inspector ------------------------------------------------
@@ -450,6 +452,7 @@ export function VisualEditor() {
         <Inspector song={song} />
       </div>
       <Dock />
+      <FillLyricsDialog />
     </div>
   );
 }
@@ -529,6 +532,14 @@ export function VisualToolbar() {
 }
 
 /** Deletes the selected notes; the caret goes where they were (as with Del). */
+/** Moves the chosen verse's lyrics a note later or earlier, from the selected note on. */
+function moveLyrics(song: Song, dir: 1 | -1) {
+  const v = useApp.getState().ve;
+  const r = shiftLyrics(song, v.selection[0] ?? { m: 0, start: 0 }, v.verse, dir);
+  apply(r.song);
+  if (r.lost) useApp.getState().notify(`“${r.lost.replace(/-$/, '')}” had no note to go on: it was taken out (Ctrl+Z puts it back).`);
+}
+
 function deleteSelection() {
   const st = useApp.getState();
   const sel = st.ve.selection;
@@ -614,6 +625,21 @@ function Toolbar({ song }: { song: Song }) {
               <button className="menu-item" onClick={run(() => retabSelection(0))}>
                 <span className="mi-name">Make easier</span>
                 <span className="mi-hint">Same notes, easier holes: fewer bends and overblows, less jumping</span>
+              </button>
+              <div className="mi-label">Lyrics{ve.verse ? `: verse ${ve.verse + 1}` : ''}</div>
+              <button className="menu-item" onClick={run(() => useApp.setState({ fillLyricsOpen: true }))}>
+                <span className="mi-name">Fill lyrics from text…</span>
+                <span className="mi-hint">Paste the words; they go on note after note (with optional syllable suggestions)</span>
+              </button>
+              <button className="menu-item" onClick={run(() => apply(clearLyrics(song, sel.length ? sel : null, ve.verse)))}>
+                <span className="mi-name">Clear the lyrics{sel.length ? ' of the selection' : ''}</span>
+              </button>
+              <button className="menu-item" onClick={run(() => moveLyrics(song, 1))}>
+                <span className="mi-name">Move the lyrics a note later</span>
+                <span className="mi-hint">From the selected note on (or the first): for words a note out</span>
+              </button>
+              <button className="menu-item" onClick={run(() => moveLyrics(song, -1))}>
+                <span className="mi-name">Move the lyrics a note earlier</span>
               </button>
               <div className="mi-label">Measures</div>
               <button className="menu-item" onClick={run(() => apply(insertMeasure(song, song.measures.length), { caret: { m: song.measures.length, start: 0 }, measure: song.measures.length }))}>

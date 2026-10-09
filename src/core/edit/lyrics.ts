@@ -3,6 +3,7 @@
 // (a new word), "-" goes on joined ("Twin-kle"), "_" holds the syllable over the next note.
 
 import { lyricOf, setLyricOf } from '../verses';
+import { splitLyrics } from '../htab/parser';
 import { allPositions, EPS, findItem, updateItem, type Pos, type Song } from './model';
 
 /** The notes that take a syllable, in order: played notes (a tie continues the one before). */
@@ -99,4 +100,50 @@ export function songVerseCount(song: Song): number {
       });
     }
   return n;
+}
+
+/**
+ * Puts lyrics text on the notes from `from` (the first note if null), in verse `verse`: one
+ * syllable a note, as a "w:" line reads it — spaces between words, "-" between a word's
+ * syllables, "_" or "*" for a note without words. `placed`: each note given a syllable (or
+ * none); `extra`: syllables past the last note (left out).
+ */
+export function fillLyrics(song: Song, from: Pos | null, verse: number, text: string): { song: Song; placed: { pos: Pos; syllable: string | undefined }[]; extra: string[] } {
+  const syllables = splitLyrics(text.replace(/\n/g, ' '));
+  const start = lyricStart(song, from ?? undefined);
+  const notes = start ? singable(song).filter((p) => p.m > start.m || (p.m === start.m && p.start >= start.start - EPS)) : [];
+  let s = song;
+  const placed: { pos: Pos; syllable: string | undefined }[] = [];
+  syllables.slice(0, notes.length).forEach((syl, k) => {
+    const syllable = syl === '*' || syl === '_' ? undefined : syl;
+    s = setLyric(s, notes[k], verse, syllable);
+    placed.push({ pos: notes[k], syllable });
+  });
+  return { song: s, placed, extra: syllables.slice(notes.length).filter((x) => x !== '*' && x !== '_') };
+}
+
+/** Clears verse `verse`'s syllables on `positions` (every note when null). */
+export function clearLyrics(song: Song, positions: Pos[] | null, verse: number): Song {
+  let s = song;
+  for (const p of positions ?? allPositions(song)) if (findItem(s, p)) s = setLyric(s, p, verse, undefined);
+  return s;
+}
+
+/**
+ * Moves verse `verse`'s syllables from note `from` on one note later (1) or earlier (-1), for
+ * lyrics that are a note out. `lost`: a syllable that fell off the end (or, earlier, the one
+ * on `from`).
+ */
+export function shiftLyrics(song: Song, from: Pos, verse: number, dir: 1 | -1): { song: Song; lost: string | undefined } {
+  const start = lyricStart(song, from);
+  if (!start) return { song, lost: undefined };
+  const notes = singable(song).filter((p) => p.m > start.m || (p.m === start.m && p.start >= start.start - EPS));
+  const syls = notes.map((p) => lyricOf(findItem(song, p)!, verse));
+  const moved = dir === 1 ? [undefined, ...syls.slice(0, -1)] : [...syls.slice(1), undefined];
+  const lost = dir === 1 ? syls[syls.length - 1] : syls[0];
+  let s = song;
+  notes.forEach((p, k) => {
+    if (moved[k] !== syls[k]) s = setLyric(s, p, verse, moved[k]);
+  });
+  return { song: s, lost };
 }

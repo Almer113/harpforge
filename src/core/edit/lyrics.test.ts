@@ -3,7 +3,7 @@
 import { expect, it } from 'vitest';
 import { parseHtab } from '../htab/parser';
 import { lyricOf } from '../verses';
-import { lyricStart, shownLyric, singable, songVerseCount, stepSingable, typeLyric } from './lyrics';
+import { clearLyrics, fillLyrics, lyricStart, shiftLyrics, shownLyric, singable, songVerseCount, stepSingable, typeLyric } from './lyrics';
 import { findItem, fromDoc, type Pos, type Song } from './model';
 
 const song = (body: string) => fromDoc(parseHtab(`---\ntitle: L\n---\n${body}\n`).doc);
@@ -74,4 +74,34 @@ it('types into any verse, adding one', () => {
   // Clearing it takes the verse away again.
   s = typeLyric(s, notes[1], 1, '', shownLyric(s, notes[1], 1), 'done').song;
   expect(songVerseCount(s)).toBe(1);
+});
+
+it('fills lyrics text onto the notes, from a note on, saying what was left over', () => {
+  const s = song('4 4 6 6 | -6 -6 6~ |');
+  const r = fillLyrics(s, null, 0, 'Twin-kle twin-kle\nlit-tle star and more');
+  expect(words(r.song)).toEqual(['Twin-', 'kle', 'twin-', 'kle', 'lit-', 'tle', 'star']);
+  expect(r.extra).toEqual(['and', 'more']);
+  expect(r.placed).toHaveLength(7);
+  // From the third note, in verse 2; "_" leaves a note without words.
+  const two = fillLyrics(r.song, { m: 0, start: 2 }, 1, 'up _ the');
+  expect(words(two.song, 1)).toEqual(['', '', 'up', '', 'the', '', '']);
+  expect(words(two.song, 0)).toEqual(words(r.song, 0));
+});
+
+it('clears a verse, on the notes chosen or everywhere', () => {
+  const s = song('4 5 6 |\nw: a b c\nw: d e f');
+  expect(words(clearLyrics(s, [{ m: 0, start: 1 }], 0))).toEqual(['a', '', 'c']);
+  const cleared = clearLyrics(s, null, 1);
+  expect(words(cleared, 1)).toEqual(['', '', '']);
+  expect(words(cleared, 0)).toEqual(['a', 'b', 'c']);
+});
+
+it('moves lyrics a note later or earlier from a note on', () => {
+  const s = song('4 5 6 -6 |\nw: a b c');
+  const later = shiftLyrics(s, { m: 0, start: 1 }, 0, 1);
+  expect(words(later.song)).toEqual(['a', '', 'b', 'c']);
+  expect(later.lost).toBeUndefined();
+  const earlier = shiftLyrics(s, { m: 0, start: 0 }, 0, -1);
+  expect(words(earlier.song)).toEqual(['b', 'c', '', '']);
+  expect(earlier.lost).toBe('a');
 });

@@ -204,6 +204,9 @@ export function VerseSwitch({ song }: { song: Song }) {
           {options === count && <option value={count}>+ New verse</option>}
         </select>
       )}
+      <button className="link-btn fill-link" onClick={() => useApp.setState({ fillLyricsOpen: true })} title="Paste the words; they go on note after note">
+        Fill lyrics…
+      </button>
     </>
   );
 }

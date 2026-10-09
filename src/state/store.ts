@@ -243,6 +243,8 @@ export interface AppState {
   ownedHarps: import('../core/instruments').HarmonicaSpec[];
   /** Plain-text export: open, and its choices (remembered). */
   plainTextOpen: boolean;
+  /** The editor's "Fill lyrics from text" dialog. */
+  fillLyricsOpen: boolean;
   textPrefs: import('../core/formats/plaintext').PlainTextOptions;
   /** Print view choices (remembered). */
   printPrefs: import('../pages/PrintPage').PrintPrefs;
@@ -476,6 +478,7 @@ export const useApp = create<AppState>((set) => ({
   harpSize: prefs.harpSize ?? 'full',
   printPrefs: { view: 'tab', size: 'normal', title: true, details: true, chart: false, ...prefs.printPrefs },
   plainTextOpen: false,
+  fillLyricsOpen: false,
   ownedHarps: Array.isArray(prefs.ownedHarps) ? prefs.ownedHarps : [],
   textPrefs: { ...DEFAULT_PLAIN_TEXT, ...prefs.textPrefs },
   sheetShow: {
