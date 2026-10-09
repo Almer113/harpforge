@@ -7,6 +7,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { writeAbc } from '../core/formats/abc';
 import { eventKey } from '../core/score';
 import type { Parsed } from '../state/store';
+import { lineShown, lyricOf, songVerses } from '../core/verses';
 import { followTo } from './follow';
 
 interface Props {
@@ -98,7 +99,10 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
         first.setAttribute('font-weight', 'bold');
       }
     }
-  }, [abc, parsed, oneSvgPerLine, holes, staffWidth]);
+    // Words sung over a rest ("_"): the staff only puts words under notes, so they're drawn
+    // here, under the rest, in their verse's row.
+    if (lyrics) drawRestWords(elems, abc.order, parsed, holes, versesKey === undefined ? undefined : versesKey.split(',').map(Number));
+  }, [abc, parsed, oneSvgPerLine, holes, staffWidth, lyrics, versesKey]);
 
   // Highlight sounding + selected notes.
   useEffect(() => {
@@ -121,4 +125,51 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
   }, [activeEvents, selectedEvent, abc]);
 
   return <div className="staffview" ref={host} />;
+}
+
+/** Where the words under a staff line start (`line`: abcjs's line class, "abcjs-l2"), and one of them to copy. */
+function lyricRows(svg: SVGSVGElement, line: string): { ys: number[]; sample: SVGTextElement | null } {
+  const texts = [...svg.querySelectorAll<SVGTextElement>(`text.abcjs-lyric.${line}`)];
+  const ys = [...new Set(texts.map((t) => Number(t.getAttribute('y'))))].filter((y) => Number.isFinite(y)).sort((a, b) => a - b);
+  return { ys, sample: texts[texts.length - 1] ?? null };
+}
+
+/**
+ * Draws the syllables of sung rests under them, in the rows of their verses (the holes row
+ * first, when shown). Rows are found from the words already drawn on that staff line.
+ */
+function drawRestWords(elems: SVGElement[][], order: [number, number][], parsed: Parsed, holes: boolean, verses: number[] | undefined) {
+  const shown = verses ?? Array.from({ length: Math.max(1, songVerses(parsed.doc)) }, (_, k) => k);
+  order.forEach(([l, ei], k) => {
+    const ev = parsed.doc.lines[l]?.events[ei];
+    const set = elems[k];
+    if (!ev || ev.kind !== 'rest' || !set?.length) return;
+    const list = lineShown(parsed.doc.lines[l], shown);
+    const words = list.map((v) => lyricOf(ev, v));
+    if (!words.some(Boolean)) return;
+    const el = set[0];
+    const svg = el.ownerSVGElement;
+    const line = [...el.classList].find((c) => /^abcjs-l\d+$/.test(c));
+    if (!svg || !line) return;
+    const { ys, sample } = lyricRows(svg, line);
+    if (!ys.length || !sample) return;
+    let box: DOMRect;
+    try {
+      box = (el as unknown as SVGGraphicsElement).getBBox();
+    } catch {
+      return;
+    }
+    // (A note's rows are lines of one text, 1.2em apart: the holes, then each verse.)
+    const gap = Number(sample.getAttribute('font-size') || 16) * 1.2;
+    words.forEach((w, i) => {
+      if (!w) return;
+      const t = sample.cloneNode(false) as SVGTextElement;
+      t.setAttribute('x', String(box.x + box.width / 2));
+      t.setAttribute('y', String(ys[0] + (i + (holes ? 1 : 0)) * gap));
+      t.setAttribute('text-anchor', 'middle');
+      t.classList.add('sung-rest-word');
+      t.textContent = w;
+      sample.parentNode?.appendChild(t);
+    });
+  });
 }
