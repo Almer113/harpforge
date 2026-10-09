@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Phase 10a: performance mode.
+// Phases 10a–10b: performance mode, and reading ahead in it.
 
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -7,6 +7,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 vi.mock('../audio/engine', async () => (await import('../test/fakeEngine')).fakeEngine());
 
+import * as engine from '../audio/engine';
+import { followDelta, pageTurnKey } from '../components/follow';
 import { PlayPage } from '../pages/PlayPage';
 import { enterPerform, exitPerform, performResize, togglePerform } from './perform';
 import { play, stop } from './playback';
@@ -20,7 +22,7 @@ const s = () => useApp.getState();
 beforeEach(() => {
   stop();
   s().loadText(TAB, null);
-  useApp.setState({ page: 'play', performing: false, performSize: DEFAULT_PERFORM_SIZE, recording: null, practice: null, sheetView: 'tab' });
+  useApp.setState({ page: 'play', performing: false, performSize: DEFAULT_PERFORM_SIZE, performMove: 'scroll', performSilent: false, along: false, recording: null, practice: null, sheetView: 'tab' });
 });
 afterEach(() => exitPerform());
 
@@ -92,6 +94,82 @@ it('the page shows the bar and the music alone; F and Esc go in and out', async 
   await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', key: 'Escape' })));
   expect(s().performing).toBe(false);
   expect(host.querySelector('.stage')).not.toBeNull();
+  await act(async () => root.unmount());
+  host.remove();
+});
+
+const area = { top: 50, height: 700 };
+const at = (y: number, h = 100) => ({ top: area.top + y, bottom: area.top + y + h });
+
+it('scrolling keeps the playing line between 10% and 45% down, back to 30%', () => {
+  expect(followDelta('scroll', at(100), area)).toBeNull();
+  expect(followDelta('scroll', at(300), area)).toBeNull();
+  // Past 45%: it comes up to 30% (210 px).
+  expect(followDelta('scroll', at(400), area)).toBe(400 - 210);
+  // Behind (a loop starting again): back down to 30%.
+  expect(followDelta('scroll', at(-500), area)).toBe(-500 - 210);
+  // Too tall to fit below (a big staff line): moved up.
+  expect(followDelta('scroll', at(300, 450), area)).toBe(300 - 210);
+});
+
+it('pages stay still until the last quarter, then that line tops the next page', () => {
+  expect(followDelta('pages', at(0), area)).toBeNull();
+  expect(followDelta('pages', at(400), area)).toBeNull();
+  // The last line (bottom past 75%): it becomes the top, just under the bar.
+  expect(followDelta('pages', at(480), area)).toBe(480 - 16);
+  // Off the page either way: turned to it.
+  expect(followDelta('pages', at(900), area)).toBe(900 - 16);
+  expect(followDelta('pages', at(-300), area)).toBe(-300 - 16);
+});
+
+it('the page-turn keys are the pedals’ keys, without modifiers', () => {
+  const key = (code: string, extra: KeyboardEventInit = {}) => pageTurnKey(new KeyboardEvent('keydown', { code, ...extra }));
+  expect(key('PageDown')).toBe(1);
+  expect(key('ArrowRight')).toBe(1);
+  expect(key('ArrowDown')).toBe(1);
+  expect(key('PageUp')).toBe(-1);
+  expect(key('ArrowLeft')).toBe(-1);
+  expect(key('ArrowUp')).toBe(-1);
+  expect(key('Space')).toBeNull();
+  expect(key('ArrowDown', { shiftKey: true })).toBeNull();
+});
+
+it('silent: performing plays without the tune (and no clicks unless the metronome is on)', async () => {
+  const playScore = engine.playScore as unknown as ReturnType<typeof vi.fn>;
+  useApp.setState({ performSilent: true, metronome: false });
+  await play();
+  expect(playScore.mock.lastCall?.[1]).toMatchObject({ muted: false });
+  stop();
+  enterPerform();
+  await play();
+  expect(playScore.mock.lastCall?.[1]).toMatchObject({ muted: true, metronomeBeatsPerBar: undefined });
+  // Leaving performance mode mid-song: it carries on, with the tune.
+  playScore.mockClear();
+  exitPerform();
+  await vi.waitFor(() => expect(playScore).toHaveBeenCalledTimes(1));
+  expect(playScore.mock.lastCall?.[1]).toMatchObject({ muted: false });
+  stop();
+});
+
+it('in performance mode the arrows turn pages instead of reaching the harmonica', async () => {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const scrollBy = vi.fn();
+  window.scrollBy = scrollBy as never;
+  enterPerform();
+  await act(async () => root.render(<PlayPage />));
+  const later = vi.fn();
+  window.addEventListener('keydown', later);
+  const e = new KeyboardEvent('keydown', { code: 'PageDown', key: 'PageDown', cancelable: true });
+  await act(async () => window.dispatchEvent(e));
+  expect(e.defaultPrevented).toBe(true);
+  expect(scrollBy).toHaveBeenCalledTimes(1);
+  expect(scrollBy.mock.lastCall?.[0].top).toBeGreaterThan(0);
+  expect(later).not.toHaveBeenCalled();
+  await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft', key: 'ArrowLeft' })));
+  expect(scrollBy.mock.lastCall?.[0].top).toBeLessThan(0);
+  window.removeEventListener('keydown', later);
   await act(async () => root.unmount());
   host.remove();
 });

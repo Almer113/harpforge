@@ -4,13 +4,17 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PlayStop, SpeedControl, useTransportKeys } from './Controls';
+import { pageTurnKey, turnPage } from './follow';
 import { Popover } from './Popover';
+import { keysTaken } from '../live/focus';
 import { ReadAsSwitch, ShowMenu, ViewSwitch } from './Sheet';
 import { barAt, barStarts } from '../core/passage';
 import { exitPerform, performResize } from '../state/perform';
 import { PERFORM_SIZES, useApp, useParsed } from '../state/store';
 
 const IDLE_MS = 2500;
+/** The note last heard: "Bar 5" stays up through the gaps between notes. */
+let lastPlayed: number | null = null;
 const VIEW_NAMES = { simple: 'Simple tab', tab: 'Tab', staff: 'Staff', numbers: 'Numbers' };
 
 export function PerformBar() {
@@ -19,14 +23,33 @@ export function PerformBar() {
   const playing = useApp((s) => s.play === 'playing');
   const view = useApp((s) => s.sheetView);
   const readAs = useApp((s) => s.readAs);
+  const move = useApp((s) => s.performMove);
+  const silent = useApp((s) => s.performSilent);
   const size = useApp((s) => s.performSize);
-  // Where you are: the playing note, else the selected one.
-  const at = useApp((s) => s.activeEvents.at(-1) ?? s.selectedEvent);
+  // Where you are: the playing note (or the last one, between notes), else the selected one.
+  const at = useApp((s) => {
+    const now = s.activeEvents.at(-1);
+    if (now !== undefined || s.play === 'stopped') lastPlayed = now ?? null;
+    return now ?? lastPlayed ?? s.selectedEvent;
+  });
   const starts = useMemo(() => barStarts(score), [score]);
   const ev = at !== null && at !== undefined ? score.events[at] : undefined;
   const bar = ev ? barAt(score, ev.start, starts) + 1 : null;
 
   const idle = useIdle(playing);
+  // Page Down / Up and the arrows (and the pedals that send them) turn pages; first, so the
+  // harmonica's arrow keys and the page's own scrolling don't take them.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const dir = pageTurnKey(e);
+      if (dir === null || keysTaken(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      turnPage(dir);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
   const bar0 = useRef<HTMLDivElement>(null);
   // The bar's height, so the music starts below it and following keeps notes out from under it.
   useEffect(() => {
@@ -41,6 +64,18 @@ export function PerformBar() {
     <div ref={bar0} className={`perform-bar ${idle ? 'idle' : ''}`} role="toolbar" aria-label="Performance mode">
       <span className="pf-title" title={doc.meta.title || 'Untitled'}>{doc.meta.title || 'Untitled'}</span>
       <PlayStop />
+      <button
+        className={`t-btn toggle ${silent ? 'on' : ''}`}
+        onClick={() => useApp.setState({ performSilent: !silent })}
+        title={silent ? 'Silent: the music moves at tempo without the tune (click for the tune)' : 'Silent: the music moves at tempo without the tune, for playing it yourself'}
+        aria-label="Silent"
+        aria-pressed={silent}
+      >
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M4 9h4l5-4v14l-5-4H4z" />
+          {silent ? <path d="M17 9l5 6M22 9l-5 6" /> : <path d="M17 8.5a5 5 0 0 1 0 7M19.5 6a8.5 8.5 0 0 1 0 12" />}
+        </svg>
+      </button>
       <SpeedControl />
       <span className="pf-where t-value" aria-live="off">
         {bar ? `Bar ${bar} of ${starts.length}` : `${starts.length} bars`}
@@ -48,9 +83,18 @@ export function PerformBar() {
       <div className="pf-group">
         {view !== 'simple' && <ShowMenu view={view} />}
         {/* The view and Holes | Notes, in one menu: the bar stays one row on a laptop. */}
-        <Popover label={`${VIEW_NAMES[view]}${(view === 'tab' || view === 'simple') && readAs === 'notes' ? ' · Notes' : ''} ▾`} title="Choose the view" kind="panel" panelClass="menu pf-view-menu" panelLabel="View">
+        <Popover label={`${VIEW_NAMES[view]}${(view === 'tab' || view === 'simple') && readAs === 'notes' ? ' · Notes' : ''}${move === 'pages' ? ' · Pages' : ''} ▾`} title="Choose the view, and how it keeps up" kind="panel" panelClass="menu pf-view-menu" panelLabel="View">
           <ViewSwitch short />
           {(view === 'tab' || view === 'simple') && <ReadAsSwitch />}
+          <div className="seg" role="radiogroup" aria-label="Keeping up">
+            <button role="radio" aria-checked={move === 'scroll'} className={move === 'scroll' ? 'on' : ''} onClick={() => useApp.setState({ performMove: 'scroll' })} title="The music scrolls smoothly, keeping the playing line near the top">
+              Scroll
+            </button>
+            <button role="radio" aria-checked={move === 'pages'} className={move === 'pages' ? 'on' : ''} onClick={() => useApp.setState({ performMove: 'pages' })} title="The music stays still and turns a page at a time; the line you're on carries over">
+              Pages
+            </button>
+          </div>
+          <span className="mi-hint">Page Down / Up or the arrow keys turn pages (as do page-turner pedals).</span>
         </Popover>
       </div>
       <div className="seg pf-size" role="group" aria-label="Music size">

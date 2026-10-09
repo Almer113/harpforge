@@ -6,7 +6,7 @@ import { soundPitch } from '../core/instruments';
 import { barAt, barPassage, barStarts, eventPassage, joinPassages, type Passage } from '../core/passage';
 import { findItem, fromDoc, realBeat } from '../core/edit/model';
 import type { PassResult } from '../core/playAlong';
-import { getParsed, useApp } from './store';
+import { getParsed, useApp, type AppState } from './store';
 
 /**
  * Play along (playAlong.ts) checks the notes while the song plays. It plugs itself in here,
@@ -70,7 +70,8 @@ export async function play(opts: { count?: boolean } = {}) {
   const eachLoop = s.loop && s.countEachLoop;
   const counting = opts.count === true || eachLoop || (s.countIn && opts.count !== false);
   // Playing along without the tune: the clicks keep time instead.
-  const muted = s.along && !s.alongMelody;
+  const alongMuted = s.along && !s.alongMelody;
+  const muted = tuneMuted(s);
   if (s.along) along?.startChecking(range ?? { start: sel?.start ?? 0, end: p.score.totalBeats }, s.loop, eachLoop);
   engine.playScore(p.score, {
     tempo,
@@ -83,7 +84,7 @@ export async function play(opts: { count?: boolean } = {}) {
     beatsPerBar: bpb,
     onLoop: loopPassed,
     muted,
-    metronomeBeatsPerBar: s.metronome || muted ? bpb : undefined,
+    metronomeBeatsPerBar: s.metronome || alongMuted ? bpb : undefined,
     onEvent,
     onEnd: () => {
       if (useApp.getState().along) along?.passEnded('end');
@@ -212,9 +213,9 @@ useApp.subscribe((s, prev) => {
       useApp.setState({ passage: passage ?? null, loopRange: loopRange ?? null, ...(s.loopRange && !loopRange ? { loop: false, training: null } : {}) });
     }
   }
-  // Play along (or its tune) switched while playing: playback starts again from where it
-  // was, so the checking and the sound match.
-  if ((s.along !== prev.along || (s.along && s.alongMelody !== prev.alongMelody)) && s.play === 'playing') {
+  // Play along (or its tune) switched while playing, or the tune went silent or came back
+  // (performance mode): playback starts again from where it was, so the checking and the sound match.
+  if ((s.along !== prev.along || (s.along && s.alongMelody !== prev.alongMelody) || tuneMuted(s) !== tuneMuted(prev)) && s.play === 'playing') {
     const beat = engine.scoreBeatNow();
     const { score } = getParsed(s.text);
     const at = beat === null ? undefined : [...score.events].reverse().find((ev) => ev.start <= beat + 1e-6);
@@ -223,6 +224,11 @@ useApp.subscribe((s, prev) => {
     void play({ count: false });
   }
 });
+
+/** Whether playback leaves the tune out: playing along without it, or performing silently. */
+export function tuneMuted(s: Pick<AppState, 'along' | 'alongMelody' | 'performing' | 'performSilent'>): boolean {
+  return (s.along && !s.alongMelody) || (s.performing && s.performSilent);
+}
 
 /** A passage cut to the song's length (the same object when it fits), or null if none of it is left. */
 export function usablePassage(p: Passage, total: number): Passage | null {

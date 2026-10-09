@@ -187,6 +187,10 @@ export interface AppState {
   performing: boolean;
   /** How big the music is in performance mode (one of PERFORM_SIZES). Remembered. */
   performSize: number;
+  /** How performance mode keeps up: smooth scrolling, or whole pages. Remembered. */
+  performMove: 'scroll' | 'pages';
+  /** Performance mode without the tune: the music moves at tempo, silently. Remembered. */
+  performSilent: boolean;
   /** This pass's marks, by score index. */
   alongMarks: Record<number, import('../core/playAlong').Mark>;
   /** The last pass's marks (shown faded until each note comes round again). */
@@ -324,6 +328,8 @@ function loadPrefs(): {
   alongMelody?: boolean;
   micLatency?: number;
   performSize?: number;
+  performMove?: 'scroll' | 'pages';
+  performSilent?: boolean;
 } {
   let raw: unknown;
   try {
@@ -353,6 +359,8 @@ function loadPrefs(): {
     alongMelody: bool(p.alongMelody),
     micLatency: typeof p.micLatency === 'number' && p.micLatency >= 0 && p.micLatency <= 600 ? Math.round(p.micLatency) : undefined,
     performSize: PERFORM_SIZES.find((x) => x === p.performSize),
+    performMove: p.performMove === 'pages' || p.performMove === 'scroll' ? p.performMove : undefined,
+    performSilent: bool(p.performSilent),
     readAs: p.readAs === 'notes' ? 'notes' : p.readAs === 'holes' ? 'holes' : undefined,
     sheetShow: { tab: like(sheet.tab, SHOW_ALL.tab), numbers: like(sheet.numbers, SHOW_ALL.numbers), staff: like(sheet.staff, SHOW_ALL.staff) },
     printPrefs: print as Partial<import('../pages/PrintPage').PrintPrefs>,
@@ -415,6 +423,8 @@ export const useApp = create<AppState>((set) => ({
   micLatency: prefs.micLatency ?? null,
   performing: false,
   performSize: prefs.performSize ?? DEFAULT_PERFORM_SIZE,
+  performMove: prefs.performMove ?? 'scroll',
+  performSilent: prefs.performSilent ?? false,
   calibrating: false,
   alongMarks: {},
   alongPrev: {},
@@ -509,9 +519,9 @@ export const useApp = create<AppState>((set) => ({
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.ve.zoom === prev.ve.zoom && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps && s.countIn === prev.countIn && s.countEachLoop === prev.countEachLoop && s.trainer === prev.trainer && s.trainerCleanOnly === prev.trainerCleanOnly && s.alongMelody === prev.alongMelody && s.micLatency === prev.micLatency && s.performSize === prev.performSize) return;
+  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.ve.zoom === prev.ve.zoom && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps && s.countIn === prev.countIn && s.countEachLoop === prev.countEachLoop && s.trainer === prev.trainer && s.trainerCleanOnly === prev.trainerCleanOnly && s.alongMelody === prev.alongMelody && s.micLatency === prev.micLatency && s.performSize === prev.performSize && s.performMove === prev.performMove && s.performSilent === prev.performSilent) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, zoom: s.ve.zoom, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps, countIn: s.countIn, countEachLoop: s.countEachLoop, trainer: s.trainer, trainerCleanOnly: s.trainerCleanOnly, alongMelody: s.alongMelody, micLatency: s.micLatency ?? undefined, performSize: s.performSize }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, zoom: s.ve.zoom, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps, countIn: s.countIn, countEachLoop: s.countEachLoop, trainer: s.trainer, trainerCleanOnly: s.trainerCleanOnly, alongMelody: s.alongMelody, micLatency: s.micLatency ?? undefined, performSize: s.performSize, performMove: s.performMove, performSilent: s.performSilent }));
   } catch {
     /* storage unavailable */
   }

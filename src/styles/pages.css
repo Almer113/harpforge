@@ -202,6 +202,8 @@ html { scroll-padding-top: calc(var(--topbar-h) + var(--edit-head-h, 64px) + 14p
 /* Following keeps the playing line out from under the bar. */
 html.performing { scroll-padding-top: calc(var(--perform-bar-h, 56px) + 12px); }
 .perform-page { max-width: none; padding: calc(var(--perform-bar-h, 56px) + 16px) 32px 48px; }
+/* Room after the end, so the last lines can come up to the top too. */
+.perform-page .sheet.bare { padding-bottom: 70vh; }
 .sheet.bare { background: none; border: none; padding: 0; }
 .perform-bar {
   position: fixed; top: 0; left: 0; right: 0; z-index: 40;
@@ -213,12 +215,15 @@ html.performing { scroll-padding-top: calc(var(--perform-bar-h, 56px) + 12px); }
 .performing:has(.perform-bar.idle) { cursor: none; }
 .pf-title { font-weight: 700; font-size: 15px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .perform-bar .speed input[type='range'] { width: 80px; }
-.pf-view-menu { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px; right: 0; left: auto; }
+.pf-view-menu { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px; right: 0; left: auto; width: 260px; }
 .pf-where { min-width: 92px; font-variant-numeric: tabular-nums; }
 .pf-group { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .pf-size button { min-width: 36px; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .perform-bar { transition: none; } }
 /* A smaller laptop: one row still (the title is the song you chose; the slider says what it is). */
+@media (max-width: 1440px) {
+  .perform-bar .speed .t-label { display: none; }
+}
 @media (max-width: 1250px) {
-  .pf-title, .perform-bar .speed .t-label { display: none; }
+  .pf-title { display: none; }
 }
