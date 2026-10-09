@@ -1,6 +1,6 @@
 // Visual tab sheet: lines → measures → note cards, sized by duration.
 
-import { lineShown, lineVerse, lyricOf } from '../core/verses';
+import { lineShown, lineVerse, lineVerses, lyricOf } from '../core/verses';
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { BarStyle, NoteEvent, RestEvent, TabEvent } from '../core/htab/types';
 import { midiToName, keySpelling, type Spelling } from '../core/pitch';
@@ -219,7 +219,7 @@ const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, m
   const shown = lineShown(line, verses.split(',').map(Number));
   const lineList = shown.join(',');
   const sungHere = singing >= 0 ? lineVerse(line, singing) : -1;
-  const firstSung = shown.length > 1 ? shown.map((v) => line.events.findIndex((e) => e.kind !== 'bar' && !!lyricOf(e, v))) : [];
+  const firstSung = shown.length > 1 && lineVerses(line) > 1 ? shown.map((v) => line.events.findIndex((e) => e.kind !== 'bar' && !!lyricOf(e, v))) : [];
   const activeSet = indexSet(active);
   const passageSet = indexSet(inPassage);
   const loopSet = indexSet(inLoop);

@@ -132,7 +132,8 @@ const LyricsLine = memo(function LyricsLine({
     const sung = all.filter((r) => hasWords(r.words));
     return sung.length ? sung : all.slice(0, 1);
   }, [line, verses]);
-  const numbered = verses.includes(',');
+  // (Numbered where the line has more than one verse: a chorus with one isn't.)
+  const numbered = rows.length > 1;
   const sungHere = singing >= 0 ? lineVerse(line, singing) : -1;
   const set = (list: string) => new Set(list ? list.split(',').map(Number) : []);
   const activeSet = set(active);

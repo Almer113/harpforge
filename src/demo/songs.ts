@@ -69,14 +69,46 @@ w: Morn-ing bells are ring-ing, morn-ing bells are ring-ing,
 w: Ding, dang, dong! Ding, dang, dong!
 `;
 
+export const RIVER_SONG = `---
+title: Down by the River (a tour of HarpForge)
+artist: HarpForge demo
+harmonica: diatonic
+harp-key: C
+key: C
+tempo: 96
+time: 4/4
+lang: en
+---
+# A song to try things on (an original, written for HarpForge):
+# - The verse is between repeat signs: verse 1 the first time, verse 2 the second.
+# - The chorus has one verse: with "Verse 2" picked in Show, it still shows its words.
+# - "Oh" is held over two notes (_ in the lyrics); "roll" is sung while the harp rests
+#   (_ in the tab); "and~on" is two words on one note; -4' is a bend; (4 5 6) a chord.
+# Try: Perform (F) in the Lyrics view, Pages, Silent; Shift+click a passage, L to loop
+# it, the tempo trainer, play along and its report; Play all verses; in the editor,
+# Ctrl+L to type lyrics and Fill lyrics from text.
+@ Intro
+[C] 4 5 6 (4 5 6) | [G] -4 -5 -4~ |
+@ Verse
+|: [C] 4 4 5 6 | [F] -6 -6 6~ | [C] 6 5 4 5 | [G] -4~~~ :|
+w: Down by the ri-ver, I sing un-der the wil-low
+w: Light on the wa-ter, the moon, fol-low-ing me home
+@ Chorus
+[F] -6~ 6 -5 | [C] 6 _ 5 4 |
+w: Oh _ ri-ver, roll on and~on
+[F] -6 -6 [C] 6 5 | [G] -4' -4 [C] 4~ |]
+w: Car-ry me down to the sea.
+`;
+
 /** Demo songs with the library version that introduced them. */
 export const DEMOS: { text: string; since: number }[] = [
   { text: TWINKLE, since: 1 },
   { text: SHUFFLE, since: 1 },
   { text: ODE_TO_JOY, since: 1 },
   { text: FRERE_JACQUES, since: 2 },
+  { text: RIVER_SONG, since: 3 },
 ];
-export const DEMO_VERSION = 2;
+export const DEMO_VERSION = 3;
 
 export const BLANK = `---
 title: Untitled
