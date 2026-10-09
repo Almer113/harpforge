@@ -11,6 +11,7 @@ import * as engine from '../../audio/engine';
 import {
   advance,
   allPositions,
+  findItem,
   chainAt,
   chainLength,
   EPS,
@@ -142,6 +143,22 @@ function fitLyric(text: string, room: number): { shown: string; cut: boolean } {
 }
 
 /** Absolute start beat of each measure as played (short bars and overfull bars take their real length). */
+/** The last index in `list` where `test` holds (-1 if none). */
+function lastIndex<T>(list: T[], test: (x: T) => boolean): number {
+  for (let i = list.length - 1; i >= 0; i--) if (test(list[i])) return i;
+  return -1;
+}
+
+/** Where the arrow keys stop: each note and rest block, and each bar's start, in order. */
+export function arrowStops(song: Song): Pos[] {
+  const out: Pos[] = [];
+  song.measures.forEach((m, mi) => {
+    if (!m.items.some((it) => it.start < EPS)) out.push({ m: mi, start: 0 });
+    for (const it of [...m.items].sort((a, b) => a.start - b.start)) if (it.dur > EPS) out.push({ m: mi, start: it.start });
+  });
+  return out;
+}
+
 export function measureStarts(song: Song): number[] {
   const out: number[] = [];
   let t = 0;
@@ -175,27 +192,17 @@ export function playSounds(sounds: Sound[], beats = 0.6) {
 export function VisualEditor() {
   const parsed = useParsed();
   // Only what this level needs (the score and panels subscribe to their own parts).
-  const selection = useApp((s) => s.ve.selection);
   const setVe = useApp((s) => s.setVe);
   const asNotes = useApp((s) => s.readAs === 'notes');
   // The small line under each note: note names in Holes mode, holes in Notes mode.
   const showSecond = useApp((s) => (asNotes ? s.sheetShow.tab.holes : s.showNoteNames));
   const song = useMemo(() => fromDoc(parsed.doc), [parsed]);
-  const starts = useMemo(() => measureStarts(song), [song]);
   const text = useApp((s) => s.text);
   const flats = flatsFor(text, parsed.doc.meta.key ?? parsed.harp.spec.key);
   const hasBars = parsed.doc.lines.some((l) => l.events.some((e) => e.kind === 'bar'));
 
   useHarmonicaKeyboard(true, { arrows: false });
 
-  // Keep "play from here" in sync with the selected note.
-  useEffect(() => {
-    const first = selection[0];
-    if (!first) return;
-    const abs = starts[first.m] + first.start;
-    const idx = parsed.score.events.findIndex((e) => Math.abs(e.start - abs) < 1e-4 && !e.rest);
-    if (idx >= 0 && useApp.getState().selectedEvent !== idx) useApp.setState({ selectedEvent: idx });
-  }, [selection, starts, parsed]);
 
   // ---- Step entry & replacing notes from the harmonica ----
   const lastInsert = useRef<{ at: number; pos: Pos } | null>(null);
@@ -390,24 +397,33 @@ export function VisualEditor() {
           setVe({ insert: !v.insert });
           st.notify(v.insert ? 'Overwrite: new notes replace what’s there' : 'Insert: new notes push the rest along');
           return;
-        case 'Escape':
-          setVe({ selection: [] });
-          return;
         case 'ArrowLeft':
         case 'ArrowRight': {
           e.preventDefault();
-          const all = allPositions(s);
-          if (!all.length) return;
+          // The stops: every note (or rest block), and every bar's start — the next of
+          // either, so an empty start of a bar can be reached (and played from).
+          const stops = arrowStops(s);
+          if (!stops.length) return;
+          const right = e.key === 'ArrowRight';
           const cur = sel[sel.length - 1];
-          let i = cur ? all.findIndex((p) => samePos(p, cur)) : -1;
-          if (i < 0) {
-            // No selection: step from the caret (after the last note when nothing follows it).
-            const after = all.findIndex((p) => p.m > v.caret.m || (p.m === v.caret.m && p.start >= v.caret.start - EPS));
-            i = (after < 0 ? all.length : after) - (e.key === 'ArrowRight' ? 1 : 0);
+          const before = (a: Pos, b: Pos) => a.m < b.m || (a.m === b.m && a.start < b.start - EPS);
+          let j: number;
+          if (cur) j = stops.findIndex((p) => samePos(p, cur)) + (right ? 1 : -1);
+          else {
+            // No selection: from the caret. On a note there, Right takes that note.
+            const here = stops.findIndex((p) => samePos(p, v.caret));
+            const onNote = here >= 0 && !!findItem(s, v.caret);
+            j = here >= 0 ? here + (right ? (onNote ? 0 : 1) : -1) : right ? stops.findIndex((p) => before(v.caret, p)) : lastIndex(stops, (p) => before(p, v.caret));
+            if (right && j < 0 && here < 0) j = stops.length;
           }
-          const j = Math.max(0, Math.min(all.length - 1, i + (e.key === 'ArrowRight' ? 1 : -1)));
-          const p = all[j];
-          const it = s.measures[p.m].items.find((x) => Math.abs(x.start - p.start) < EPS)!;
+          j = Math.max(0, Math.min(stops.length - 1, j));
+          const p = stops[j];
+          const it = findItem(s, p);
+          if (!it) {
+            // An empty bar start: the caret there, nothing selected (Play starts here).
+            setVe({ selection: [], caret: p, measure: p.m });
+            return;
+          }
           setVe({ selection: [p], caret: advance(s, p, it.dur), measure: p.m });
           if (it.sounds.length) playSounds(it.sounds, it.dur);
           return;

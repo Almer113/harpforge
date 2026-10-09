@@ -14,7 +14,7 @@ const COLUMNS: Group[][] = [
       title: 'Anywhere',
       rows: [
         ['Enter', 'Play / pause'],
-        ['Esc', 'Stop, or stop recording; when stopped, end the loop or trainer, then let go of the passage'],
+        ['Esc', 'Stop, or stop recording; when stopped, a step a press: deselect (editor), end the loop, the trainer, let go of the passage, then back to the start'],
         ['L', 'Loop the chosen passage, or the whole song (Shift+L in the editor)'],
         ['F', 'Performance mode: the music fills the screen (Play); F or Esc leaves'],
         ['Ctrl+= / Ctrl+−', 'Performance mode: bigger / smaller music (Ctrl+0: the usual size)'],

@@ -3,7 +3,7 @@
 import * as engine from '../audio/engine';
 import { beatsPerBar } from '../core/htab/types';
 import { soundPitch } from '../core/instruments';
-import { barAt, barPassage, barStarts, eventPassage, joinPassages, type Passage } from '../core/passage';
+import { barAt, barPassage, barStarts, describePassage, eventPassage, joinPassages, type Passage } from '../core/passage';
 import { findItem, fromDoc, realBeat } from '../core/edit/model';
 import type { PassResult } from '../core/playAlong';
 import { playbackIndexOf, playbackScore, writtenScore, type PlaybackScore } from '../core/repeats';
@@ -43,11 +43,83 @@ let playingAt = -1;
 // What the sound was started with: changed since (even while paused), it starts again.
 let startedWith: { muted: boolean; played: PlaybackScore | null } = { muted: false, played: null };
 
-/** The score as it would be played now: repeats and verses, unless a passage loops. */
+/**
+ * Where the visual editor plays from, as you see it there: several notes selected, just
+ * them (`range`); one, from it; else from the caret (rests included) — from the start when
+ * the caret is past the last note. Null off the visual editor (the Play page goes by the note
+ * clicked, `selectedEvent`).
+ */
+export function editorStart(s: AppState): { beat: number; range?: Passage } | null {
+  if (s.page !== 'editor' || s.editorMode !== 'visual') return null;
+  const { doc, score } = getParsed(s.text);
+  const song = fromDoc(doc);
+  const sel = s.ve.selection.filter((p) => findItem(song, p));
+  if (sel.length > 1) {
+    let start = Infinity;
+    let end = -Infinity;
+    for (const p of sel) {
+      const at = realBeat(song, p);
+      start = Math.min(start, at);
+      end = Math.max(end, at + findItem(song, p)!.dur);
+    }
+    return { beat: start, range: { start, end } };
+  }
+  if (sel.length === 1) return { beat: realBeat(song, sel[0]) };
+  const beat = s.ve.caret.m >= song.measures.length ? score.totalBeats : realBeat(song, s.ve.caret);
+  return { beat: beat >= score.totalBeats - 1e-6 ? 0 : Math.max(0, beat) };
+}
+
+/** The stretch playback keeps to: the looped passage, or (the editor) the notes selected. */
+function playRange(s: AppState): Passage | undefined {
+  const total = getParsed(s.text).score.totalBeats;
+  const loop = s.loop && s.loopRange && usablePassage(s.loopRange, total);
+  if (loop) return loop;
+  const ed = editorStart(s)?.range;
+  return (ed && usablePassage(ed, total)) || undefined;
+}
+
+/** The score as it would be played now: repeats and verses, unless a stretch is kept to. */
 function playedScore(s: AppState): PlaybackScore {
   const p = getParsed(s.text);
-  const range = s.loop && s.loopRange && usablePassage(s.loopRange, p.score.totalBeats);
-  return range ? writtenScore(p.score) : playbackScore(p.doc, p.score, { repeats: s.playRepeats, allVerses: s.playAllVerses });
+  return playRange(s) ? writtenScore(p.score) : playbackScore(p.doc, p.score, { repeats: s.playRepeats, allVerses: s.playAllVerses });
+}
+
+/** What playback starts from now (when it changes while paused, the next Play starts fresh from it). */
+function startKey(s: AppState): string {
+  return s.page === 'editor' && s.editorMode === 'visual' ? JSON.stringify([s.ve.selection, s.ve.caret]) : String(s.selectedEvent);
+}
+let startedKey = '';
+
+/** Whether playback would start from the very start (nothing chosen, caret at the beginning). */
+export function atStart(s: AppState): boolean {
+  if (s.page === 'editor' && s.editorMode === 'visual') return !s.ve.selection.length && s.ve.caret.m === 0 && s.ve.caret.start < 1e-6;
+  return s.selectedEvent === null;
+}
+
+/** Back to the start: stopped, nothing chosen (the editor's caret at the beginning). */
+export function backToStart() {
+  const s = useApp.getState();
+  if (s.play !== 'stopped') stop();
+  useApp.setState({ selectedEvent: null });
+  if (s.page === 'editor') s.setVe({ selection: [], caret: { m: 0, start: 0 }, measure: 0, lyricAt: undefined, restDraft: undefined });
+}
+
+/** Where playback starts, said ("from the start", "from bar 3, beat 2", "bars 5–6"). */
+export function startLabel(s: AppState): string {
+  const { score } = getParsed(s.text);
+  const describe = (beat: number) => {
+    if (beat < 1e-6) return 'from the start';
+    const starts = barStarts(score);
+    const bar = barAt(score, beat, starts);
+    const inBar = +(beat - starts[bar] + 1).toFixed(2);
+    return `from bar ${bar + 1}${inBar > 1 + 1e-6 ? `, beat ${inBar}` : ''}`;
+  };
+  if (s.loop && s.loopRange) return `the loop, ${describePassage(score, s.loopRange)}`;
+  const ed = editorStart(s);
+  if (ed?.range) return `the selection, ${describePassage(score, ed.range)}`;
+  if (ed) return describe(ed.beat);
+  const ev = s.selectedEvent !== null ? score.events[s.selectedEvent] : undefined;
+  return describe(ev?.start ?? 0);
 }
 
 /** Whether the tune would be left out, and what would be played, if playback started now. */
@@ -66,8 +138,9 @@ function restartHere(record: boolean) {
   const pb = playing ?? writtenScore(getParsed(s.text).score);
   const at = beat === null ? undefined : [...pb.score.events].reverse().find((ev) => ev.start <= beat + 1e-6);
   stop({ record });
-  useApp.setState({ selectedEvent: at ? (pb.orig[at.index] ?? s.selectedEvent) : s.selectedEvent });
-  void play({ count: false, pass: at ? pb.pass[at.index] : undefined, round: at ? pb.round[at.index] : undefined });
+  const from = at ? pb.orig[at.index] : undefined;
+  if (from !== undefined && editorStart(s) === null) useApp.setState({ selectedEvent: from });
+  void play({ count: false, from, pass: at ? pb.pass[at.index] : undefined, round: at ? pb.round[at.index] : undefined });
 }
 
 // Bumped by stop(): a play() still waiting for the audio to start then doesn't go ahead.
@@ -85,7 +158,7 @@ export function countBeats(bpb: number, bpm: number): number {
  * Starts (or resumes) playback. `count: false` skips the count-in (jumping to a note mid-play),
  * `count: true` counts in whatever the setting (a drill).
  */
-export async function play(opts: { count?: boolean; pass?: number; round?: number } = {}) {
+export async function play(opts: { count?: boolean; from?: number; pass?: number; round?: number } = {}) {
   const s = useApp.getState();
   if (s.recording) return;
   // Playing ends a microphone calibration that's still listening.
@@ -99,6 +172,12 @@ export async function play(opts: { count?: boolean; pass?: number; round?: numbe
       restartHere(false);
       return;
     }
+    // (A new place chosen while paused: from there, not on from the old one.)
+    if (startKey(s) !== startedKey) {
+      stop();
+      void play(opts);
+      return;
+    }
     engine.resumePlayback();
     useApp.setState({ play: 'playing' });
     return;
@@ -108,12 +187,18 @@ export async function play(opts: { count?: boolean; pass?: number; round?: numbe
     s.notify('Nothing to play yet — add some tab first.');
     return;
   }
-  const range = (s.loop && s.loopRange && usablePassage(s.loopRange, p.score.totalBeats)) || undefined;
+  const range = playRange(s);
   // Repeats (and all verses) play when the song plays through (a looped passage is its own
-  // repeat). The selected note starts it: its `pass`-th time in round `round` (restarting there).
+  // repeat). It starts from `from` (restarting), else (the editor) from the caret or the notes
+  // selected, else (the Play page) the note clicked: its `pass`-th time in round `round`.
   const pb = playedScore(s);
-  const selAt = s.selectedEvent !== null ? playbackIndexOf(pb, s.selectedEvent, opts.pass, opts.round) : undefined;
+  const ed = opts.from === undefined ? editorStart(s) : null;
+  // (The editor's start is a beat: the written note there, and how far into it.)
+  const written = ed && !ed.range ? [...p.score.events].reverse().find((ev) => ev.start <= ed.beat + 1e-6) : undefined;
+  const fromIndex = opts.from ?? (ed ? written?.index : (s.selectedEvent ?? undefined));
+  const selAt = fromIndex !== undefined ? playbackIndexOf(pb, fromIndex, opts.pass, opts.round) : undefined;
   const sel = selAt !== undefined ? pb.score.events[selAt] : undefined;
+  const startBeat = sel ? sel.start + (written && ed ? Math.max(0, ed.beat - written.start) : 0) : 0;
   const bpb = beatsPerBar(p.doc.meta);
   const tempo = p.doc.meta.tempo * s.speed;
   // A loop that counts in before each pass counts in before the first one too (also when
@@ -123,13 +208,14 @@ export async function play(opts: { count?: boolean; pass?: number; round?: numbe
   // Playing along without the tune: the clicks keep time instead.
   const alongMuted = s.along && !s.alongMelody;
   const muted = tuneMuted(s);
-  if (s.along) along?.startChecking(range ?? { start: sel?.start ?? 0, end: pb.score.totalBeats }, s.loop, eachLoop, pb);
+  if (s.along) along?.startChecking(range ?? { start: startBeat, end: pb.score.totalBeats }, s.loop, eachLoop, pb);
   playing = pb;
   playingAt = selAt ?? 0;
   startedWith = { muted, played: pb };
+  startedKey = startKey(s);
   engine.playScore(pb.score, {
     tempo,
-    startBeat: sel?.start ?? 0,
+    startBeat,
     range,
     loop: s.loop,
     countIn: counting ? countBeats(bpb, tempo) : 0,
@@ -187,7 +273,7 @@ export function playFrom(index: number) {
   const now = s.play !== 'stopped' && playing ? { pass: playing.pass[playingAt], round: playing.round[playingAt] } : {};
   stop();
   useApp.setState({ selectedEvent: index });
-  void play({ count: false, ...now });
+  void play({ count: false, from: index, ...now });
 }
 
 /**
