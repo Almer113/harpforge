@@ -55,12 +55,29 @@ export function setSoundMode(m: SoundMode) {
 
 // ---- Shared output chain --------------------------------------------------------
 
-let chain: { synthIn: Tone.Gain; sampleIn: Tone.Gain } | null = null;
+/** The parts of the mix: the song's melody, its backing, the clicks, and what you play. */
+export type MixPart = 'tune' | 'backing' | 'clicks' | 'you';
+/** The harmonica's parts (they share its sound: reed resonances and room). */
+type HarpPart = 'tune' | 'you';
+
+let chain: {
+  synthIn: Tone.Gain;
+  sampleIn: Tone.Gain;
+  /** Each harmonica part's way in (its level), for synth and samples. */
+  parts: Record<HarpPart, { synth: Tone.Gain; sample: Tone.Gain }>;
+  /** The level of every part, the master volume last. */
+  levels: Record<MixPart, Tone.Gain[]>;
+  master: Tone.Gain;
+  /** Where the clicks and the backing go (after their levels). */
+  clicksIn: Tone.Gain;
+  backingIn: Tone.Gain;
+} | null = null;
 
 export function outputs() {
   if (chain) return chain;
   const limiter = new Tone.Limiter(-2).toDestination();
-  const reverb = new Tone.Reverb({ decay: 1.3, wet: 0.14 }).connect(limiter);
+  const master = new Tone.Gain(1).connect(limiter);
+  const reverb = new Tone.Reverb({ decay: 1.3, wet: 0.14 }).connect(master);
   const mix = new Tone.Gain(1).connect(reverb);
   // Synth: cupped-hands / mouth resonances and a touch of vibrato.
   const vibrato = new Tone.Vibrato({ frequency: 5.2, depth: 0.025 }).connect(mix);
@@ -68,8 +85,40 @@ export function outputs() {
   const formant1 = new Tone.Filter({ type: 'peaking', frequency: 1100, Q: 1.1, gain: 4 }).connect(formant2);
   const synthIn = new Tone.Gain(0.3).connect(formant1);
   const sampleIn = new Tone.Gain(0.45).connect(mix); // matched in loudness to the synth
-  chain = { synthIn, sampleIn };
+  const part = () => ({ synth: new Tone.Gain(1).connect(synthIn), sample: new Tone.Gain(1).connect(sampleIn) });
+  const parts = { tune: part(), you: part() };
+  // Clicks are dry; the backing has the room's reverb too.
+  const clicksIn = new Tone.Gain(1).connect(master);
+  const backingIn = new Tone.Gain(1).connect(mix);
+  chain = {
+    synthIn,
+    sampleIn,
+    parts,
+    levels: { tune: [parts.tune.synth, parts.tune.sample], you: [parts.you.synth, parts.you.sample], clicks: [clicksIn], backing: [backingIn] },
+    master,
+    clicksIn,
+    backingIn,
+  };
+  if (pendingMix) setMixLevels(pendingMix);
   return chain;
+}
+
+/** Each part's level (0–1, 0 when it's off) and the master volume. */
+export interface MixLevels {
+  master: number;
+  parts: Record<MixPart, number>;
+}
+let pendingMix: MixLevels | null = null;
+
+/** Sets the mix (smoothly, so a slider doesn't click). Before any sound, kept for when there is. */
+export function setMixLevels(mix: MixLevels) {
+  pendingMix = mix;
+  if (!chain) return;
+  const at = Tone.now();
+  // (Volume heard as even steps: the slider's square.)
+  const curve = (x: number) => Math.max(0, Math.min(1, x)) ** 2;
+  chain.master.gain.rampTo(curve(mix.master), 0.05, at);
+  for (const p of Object.keys(chain.levels) as MixPart[]) for (const g of chain.levels[p]) g.gain.rampTo(curve(mix.parts[p]), 0.05, at);
 }
 
 const db = (gain: number) => 20 * Math.log10(Math.max(1e-4, gain));
@@ -98,8 +147,8 @@ class SynthVoice implements Voice {
   private noiseFilter: Tone.Filter;
   private disposed = false;
 
-  constructor(level = 1) {
-    const out = outputs().synthIn;
+  constructor(level = 1, part: HarpPart = 'tune') {
+    const out = outputs().parts[part].synth;
     this.env = new Tone.AmplitudeEnvelope({ attack: 0.035, decay: 0.25, sustain: 0.86, release: RELEASE }).connect(out);
     this.flutterGain = new Tone.Gain(1).connect(this.env);
     this.tone = new Tone.Filter({ type: 'lowpass', frequency: 3000, Q: 0.5 }).connect(this.flutterGain);
@@ -221,8 +270,11 @@ class SampleVoice implements Voice {
   private env: Tone.AmplitudeEnvelope;
   private disposed = false;
 
-  constructor(private level = 1) {
-    this.env = new Tone.AmplitudeEnvelope({ attack: 0.008, decay: 0, sustain: 1, release: RELEASE + 0.03 }).connect(outputs().sampleIn);
+  constructor(
+    private level = 1,
+    part: HarpPart = 'tune',
+  ) {
+    this.env = new Tone.AmplitudeEnvelope({ attack: 0.008, decay: 0, sustain: 1, release: RELEASE + 0.03 }).connect(outputs().parts[part].sample);
   }
 
   start(midi: number, time: number, glideFrom?: number) {
@@ -265,8 +317,8 @@ class SampleVoice implements Voice {
   }
 }
 
-/** A voice in the current sound mode (synth until the samples have loaded). */
-export function createVoice(level = 1): Voice {
-  if (mode === 'samples' && bank) return new SampleVoice(level);
-  return new SynthVoice(level);
+/** A voice in the current sound mode (synth until the samples have loaded), in the mix's `part`. */
+export function createVoice(level = 1, part: HarpPart = 'tune'): Voice {
+  if (mode === 'samples' && bank) return new SampleVoice(level, part);
+  return new SynthVoice(level, part);
 }

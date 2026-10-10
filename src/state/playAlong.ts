@@ -191,13 +191,13 @@ export function passEnded(reason: 'loop' | 'end' = 'loop'): PassResult | null {
 }
 
 // The microphone turned on while playing along (or play along turned on with it on): the tune
-// goes off, so the microphone hears only you.
+// and the backing go off, so the microphone hears only you.
 useApp.subscribe((s, prev) => {
   const micOn = s.mic.status === 'on';
-  if (!s.along || !micOn || !s.alongMelody) return;
+  if (!s.along || !micOn || (s.mix.off.tune && s.mix.off.backing)) return;
   if (prev.mic.status !== 'on' || !prev.along) {
-    useApp.setState({ alongMelody: false });
-    s.notify('The tune is off while the microphone listens, so it hears only you.');
+    useApp.setState({ mix: { ...s.mix, off: { ...s.mix.off, tune: true, backing: true } } });
+    s.notify('The tune and the backing are off while the microphone listens, so it hears only you. (With headphones, you can turn them back on in the ♫ menu.)');
   }
 });
 

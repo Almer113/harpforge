@@ -7,7 +7,7 @@ import { soundSpans, type Score } from '../core/score';
 import { inCount, isAccent, type ClickInfo } from './clicks';
 import { createVoice, outputs, type Voice } from './voices';
 
-export { loadSamples, samplesReady, setSoundMode, setVoicing, type SoundMode, type Voicing } from './voices';
+export { loadSamples, samplesReady, setMixLevels, setSoundMode, setVoicing, type MixLevels, type MixPart, type SoundMode, type Voicing } from './voices';
 
 // ---- Live playing -------------------------------------------------------------
 
@@ -21,7 +21,7 @@ export async function ensureAudio(): Promise<void> {
 // Live notes start right away: Tone.now() is the scheduling time, a lookahead (0.1 s) ahead.
 export function noteOn(id: string, midi: number, glideFrom?: number) {
   noteOff(id);
-  const v = createVoice();
+  const v = createVoice(1, 'you');
   v.start(midi, Tone.immediate(), glideFrom);
   live.set(id, v);
 }
@@ -64,7 +64,7 @@ function click(time: number, accent: boolean) {
     oscillator: { type: 'triangle' },
     envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.02 },
     volume: -10,
-  }).toDestination();
+  }).connect(outputs().clicksIn);
   // The first beat of a bar is higher and louder.
   clickSynth.triggerAttackRelease(accent ? 1760 : 1175, 0.03, time, accent ? 1 : 0.55);
 }
@@ -103,6 +103,18 @@ export interface PlaybackOptions {
 }
 
 const scheduledVoices = new Set<Voice>();
+// The tune left out (its notes still light up): looked at as each note comes, so it can be
+// switched while the song plays.
+let tuneOff = false;
+
+/** The tune off or on, now: off, what's sounding stops. */
+export function setTuneOff(off: boolean) {
+  tuneOff = off;
+  if (!off) return;
+  for (const v of scheduledVoices) v.stop(Tone.immediate());
+  if (scheduledVoices.size) soundingFor(0);
+  scheduledVoices.clear();
+}
 let metronomeId: number | null = null;
 let metronomeBpb = 4;
 let loopListener: ((time: number) => void) | null = null;
@@ -190,6 +202,7 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
   const offset = countIn;
   // (A range that's no longer inside the song, after an edit, plays the song instead.)
   const range = opts.range && score && Math.min(opts.range.end, score.totalBeats) > opts.range.start + 1e-6 ? opts.range : undefined;
+  tuneOff = !!opts.muted;
   const startBeat = range ? range.start : (opts.startBeat ?? 0);
 
   if (score) {
@@ -211,7 +224,7 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
         // The note sounds through its ties; ties themselves only move the highlight.
         const soundDur = Tone.Time(beatTicks(Math.min(head.end, until) - from)).toSeconds();
         const soundGap = Math.min(0.06, soundDur * 0.12);
-        if (sounds && !opts.muted) ev.midis.forEach((m, k) => {
+        if (sounds && !tuneOff) ev.midis.forEach((m, k) => {
           if (m === null) return;
           const s = ev.sounds[k];
           const glide = s.type === 'hole' && s.bend > 0 ? m + s.bend : undefined;
@@ -322,7 +335,8 @@ export function previewMidis(midis: number[], seconds = 0.5, glides: (number | u
   const now = Tone.immediate();
   if (midis.length) soundingFor(seconds);
   midis.forEach((m, k) => {
-    const v = createVoice(midis.length > 1 ? 0.7 : 1);
+    // (A note you asked to hear: yours, so it sounds with the tune off.)
+    const v = createVoice(midis.length > 1 ? 0.7 : 1, 'you');
     v.start(m, now, glides[k]);
     v.stop(now + seconds);
   });

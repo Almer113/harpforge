@@ -139,6 +139,43 @@ export interface MidiState {
   miss?: string;
 }
 
+/** The parts of the mix: the song's melody, its backing, the metronome and count, and what you play. */
+export type MixPart = 'tune' | 'backing' | 'clicks' | 'you';
+export const MIX_PARTS: MixPart[] = ['tune', 'backing', 'clicks', 'you'];
+
+export interface Mix {
+  /** The master volume (0–1). */
+  master: number;
+  /** Each part's level (0–1). */
+  levels: Record<MixPart, number>;
+  /** Parts switched off (their level is kept for when they're back on). */
+  off: Record<MixPart, boolean>;
+}
+
+export const DEFAULT_MIX: Mix = {
+  master: 1,
+  levels: { tune: 1, backing: 0.7, clicks: 1, you: 1 },
+  off: { tune: false, backing: false, clicks: false, you: false },
+};
+
+/** A remembered mix, checked (anything that isn't a level or a switch goes back to the default). */
+function mixFrom(raw: unknown): Mix | undefined {
+  if (!isObject(raw)) return undefined;
+  const level = (v: unknown, d: number) => (typeof v === 'number' && v >= 0 && v <= 1 ? v : d);
+  const levels = isObject(raw.levels) ? raw.levels : {};
+  const off = isObject(raw.off) ? raw.off : {};
+  return {
+    master: level(raw.master, DEFAULT_MIX.master),
+    levels: Object.fromEntries(MIX_PARTS.map((p) => [p, level(levels[p], DEFAULT_MIX.levels[p])])) as Record<MixPart, number>,
+    off: Object.fromEntries(MIX_PARTS.map((p) => [p, off[p] === true])) as Record<MixPart, boolean>,
+  };
+}
+
+/** One part of the mix on or off. */
+export function setPartOff(part: MixPart, isOff: boolean) {
+  useApp.setState((s) => (s.mix.off[part] === isOff ? {} : { mix: { ...s.mix, off: { ...s.mix.off, [part]: isOff } } }));
+}
+
 export interface PracticeState {
   /** Score index of the note to play next. */
   index: number;
@@ -195,8 +232,6 @@ export interface AppState {
   trainerCleanOnly: boolean;
   /** Play along, checked: what you play during playback is matched to the song's notes. */
   along: boolean;
-  /** Hear the tune while playing along (off: only the clicks, so the microphone hears just you). Remembered. */
-  alongMelody: boolean;
   /** The microphone's delay in ms, from a calibration (null: not calibrated). Remembered. */
   micLatency: number | null;
   /** A microphone calibration is listening (Play ends it). */
@@ -207,8 +242,12 @@ export interface AppState {
   performSize: number;
   /** How performance mode keeps up: smooth scrolling, or whole pages. Remembered. */
   performMove: 'scroll' | 'pages';
-  /** Performance mode without the tune: the music moves at tempo, silently. Remembered. */
-  performSilent: boolean;
+  /**
+   * The mix: the master volume and each part's level, and which parts are off — the tune off
+   * is how the music plays silently (performing) or leaves the microphone to hear just you
+   * (playing along). Remembered.
+   */
+  mix: Mix;
   /** Play |: … :| sections twice. Remembered. */
   playRepeats: boolean;
   /** While playing: 2 when the note playing is a repeat's second time. */
@@ -363,11 +402,10 @@ function loadPrefs(): {
   countEachLoop?: boolean;
   trainer?: Partial<TrainerSettings>;
   trainerCleanOnly?: boolean;
-  alongMelody?: boolean;
   micLatency?: number;
   performSize?: number;
   performMove?: 'scroll' | 'pages';
-  performSilent?: boolean;
+  mix?: Mix;
   playRepeats?: boolean;
   playAllVerses?: boolean;
 } {
@@ -396,11 +434,10 @@ function loadPrefs(): {
     countEachLoop: bool(p.countEachLoop),
     trainer: trainerFrom(p.trainer),
     trainerCleanOnly: bool(p.trainerCleanOnly),
-    alongMelody: bool(p.alongMelody),
     micLatency: typeof p.micLatency === 'number' && p.micLatency >= 0 && p.micLatency <= 600 ? Math.round(p.micLatency) : undefined,
     performSize: PERFORM_SIZES.find((x) => x === p.performSize),
     performMove: p.performMove === 'pages' || p.performMove === 'scroll' ? p.performMove : undefined,
-    performSilent: bool(p.performSilent),
+    mix: mixFrom(p.mix),
     playRepeats: bool(p.playRepeats),
     playAllVerses: bool(p.playAllVerses),
     readAs: p.readAs === 'notes' ? 'notes' : p.readAs === 'holes' ? 'holes' : undefined,
@@ -461,12 +498,11 @@ export const useApp = create<AppState>((set) => ({
   training: null,
   trainerCleanOnly: prefs.trainerCleanOnly ?? false,
   along: false,
-  alongMelody: prefs.alongMelody ?? true,
   micLatency: prefs.micLatency ?? null,
   performing: false,
   performSize: prefs.performSize ?? DEFAULT_PERFORM_SIZE,
   performMove: prefs.performMove ?? 'scroll',
-  performSilent: prefs.performSilent ?? false,
+  mix: prefs.mix ?? DEFAULT_MIX,
   playRepeats: prefs.playRepeats ?? true,
   playPass: 1,
   playAllVerses: prefs.playAllVerses ?? false,
@@ -572,9 +608,9 @@ export const useApp = create<AppState>((set) => ({
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.ve.zoom === prev.ve.zoom && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps && s.countIn === prev.countIn && s.countEachLoop === prev.countEachLoop && s.trainer === prev.trainer && s.trainerCleanOnly === prev.trainerCleanOnly && s.alongMelody === prev.alongMelody && s.micLatency === prev.micLatency && s.performSize === prev.performSize && s.performMove === prev.performMove && s.performSilent === prev.performSilent && s.playRepeats === prev.playRepeats && s.playAllVerses === prev.playAllVerses) return;
+  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.ve.zoom === prev.ve.zoom && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps && s.countIn === prev.countIn && s.countEachLoop === prev.countEachLoop && s.trainer === prev.trainer && s.trainerCleanOnly === prev.trainerCleanOnly && s.micLatency === prev.micLatency && s.performSize === prev.performSize && s.performMove === prev.performMove && s.mix === prev.mix && s.playRepeats === prev.playRepeats && s.playAllVerses === prev.playAllVerses) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, zoom: s.ve.zoom, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps, countIn: s.countIn, countEachLoop: s.countEachLoop, trainer: s.trainer, trainerCleanOnly: s.trainerCleanOnly, alongMelody: s.alongMelody, micLatency: s.micLatency ?? undefined, performSize: s.performSize, performMove: s.performMove, performSilent: s.performSilent, playRepeats: s.playRepeats, playAllVerses: s.playAllVerses }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, zoom: s.ve.zoom, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps, countIn: s.countIn, countEachLoop: s.countEachLoop, trainer: s.trainer, trainerCleanOnly: s.trainerCleanOnly, micLatency: s.micLatency ?? undefined, performSize: s.performSize, performMove: s.performMove, mix: s.mix, playRepeats: s.playRepeats, playAllVerses: s.playAllVerses }));
   } catch {
     /* storage unavailable */
   }

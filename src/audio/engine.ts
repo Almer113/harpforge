@@ -6,10 +6,10 @@
 
 import type { Score } from '../core/score';
 import type { PlaybackOptions } from './engineImpl';
-import type { SoundMode, Voicing } from './voices';
+import type { MixLevels, SoundMode, Voicing } from './voices';
 
 export type { PlaybackOptions } from './engineImpl';
-export type { SoundMode, Voicing } from './voices';
+export type { MixLevels, MixPart, SoundMode, Voicing } from './voices';
 
 type Impl = typeof import('./engineImpl');
 
@@ -18,6 +18,7 @@ let loading: Promise<Impl> | null = null;
 // Settings made before the engine arrived, handed over when it does.
 let soundMode: SoundMode | null = null;
 let voicing: Voicing | null = null;
+let mix: MixLevels | null = null;
 let onLoadFailed: ((e: unknown) => void) | null = null;
 const ignore = () => {};
 
@@ -33,6 +34,7 @@ function load(quiet = false): Promise<Impl> {
       impl = m;
       if (voicing) m.setVoicing(voicing);
       if (soundMode) m.setSoundMode(soundMode);
+      if (mix) m.setMixLevels(mix);
       return m;
     },
     (e: unknown) => {
@@ -103,6 +105,17 @@ export function setVoicing(v: Voicing) {
 export function setSoundMode(m: SoundMode) {
   soundMode = m;
   impl?.setSoundMode(m);
+}
+
+/** The master volume and each part's level (0 for a part that's off). */
+export function setMix(levels: MixLevels) {
+  mix = levels;
+  impl?.setMixLevels(levels);
+}
+
+/** Leaves the tune out from now (or brings it back), while playing too. */
+export function setTuneOff(off: boolean) {
+  impl?.setTuneOff(off);
 }
 
 export async function loadSamples(): Promise<boolean> {

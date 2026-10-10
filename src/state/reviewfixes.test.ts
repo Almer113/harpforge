@@ -16,7 +16,7 @@ import { press, release } from '../live/livePlayer';
 import { songLog } from '../storage/practiceLog';
 import { loopPassed, pause, play, playFrom, selectBar, startTrainer, stop } from './playback';
 import { setAlong } from './playAlong';
-import { DEFAULT_TRAINER, getParsed, useApp } from './store';
+import { DEFAULT_MIX, DEFAULT_TRAINER, getParsed, useApp } from './store';
 
 const s = () => useApp.getState();
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -32,7 +32,7 @@ beforeEach(() => {
   stop();
   setAlong(false);
   clock.beat = 0;
-  useApp.setState({ page: 'play', loop: false, loopRange: null, speed: 1, countIn: false, countEachLoop: false, trainer: DEFAULT_TRAINER, training: null, trainerCleanOnly: false, micLatency: null, alongMelody: true, selectedEvent: null, playRepeats: true, playAllVerses: false, mic: { status: 'off', level: 0, reading: null } });
+  useApp.setState({ page: 'play', loop: false, loopRange: null, speed: 1, countIn: false, countEachLoop: false, trainer: DEFAULT_TRAINER, training: null, trainerCleanOnly: false, micLatency: null, mix: DEFAULT_MIX, selectedEvent: null, playRepeats: true, playAllVerses: false, mic: { status: 'off', level: 0, reading: null } });
   playScore.mockClear();
 });
 

@@ -12,7 +12,7 @@ import { followDelta, pageTurnKey } from '../components/follow';
 import { PlayPage } from '../pages/PlayPage';
 import { enterPerform, exitPerform, performResize, togglePerform } from './perform';
 import { play, stop } from './playback';
-import { DEFAULT_PERFORM_SIZE, PERFORM_SIZES, useApp } from './store';
+import { DEFAULT_MIX, DEFAULT_PERFORM_SIZE, PERFORM_SIZES, useApp } from './store';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -22,7 +22,7 @@ const s = () => useApp.getState();
 beforeEach(() => {
   stop();
   s().loadText(TAB, null);
-  useApp.setState({ page: 'play', performing: false, performSize: DEFAULT_PERFORM_SIZE, performMove: 'scroll', performSilent: false, along: false, recording: null, practice: null, sheetView: 'tab' });
+  useApp.setState({ page: 'play', performing: false, performSize: DEFAULT_PERFORM_SIZE, performMove: 'scroll', mix: DEFAULT_MIX, along: false, recording: null, practice: null, sheetView: 'tab' });
 });
 afterEach(() => exitPerform());
 
@@ -134,21 +134,19 @@ it('the page-turn keys are the pedals’ keys, without modifiers', () => {
   expect(key('ArrowDown', { shiftKey: true })).toBeNull();
 });
 
-it('silent: performing plays without the tune (and no clicks unless the metronome is on)', async () => {
+it('silent is the mix’s Tune off: it plays without the tune (no clicks unless the metronome is on), on either page', async () => {
   const playScore = engine.playScore as unknown as ReturnType<typeof vi.fn>;
-  useApp.setState({ performSilent: true, metronome: false });
-  await play();
-  expect(playScore.mock.lastCall?.[1]).toMatchObject({ muted: false });
-  stop();
+  useApp.setState({ mix: { ...DEFAULT_MIX, off: { ...DEFAULT_MIX.off, tune: true } }, metronome: false });
   enterPerform();
   await play();
   expect(playScore.mock.lastCall?.[1]).toMatchObject({ muted: true, metronomeBeatsPerBar: undefined });
-  // Leaving performance mode mid-song: it carries on, with the tune.
+  // Leaving performance mode mid-song: it carries on as it was (one switch), with no restart.
   playScore.mockClear();
   exitPerform();
-  await vi.waitFor(() => expect(playScore).toHaveBeenCalledTimes(1));
-  expect(playScore.mock.lastCall?.[1]).toMatchObject({ muted: false });
+  await new Promise((r) => setTimeout(r, 0));
+  expect(playScore).not.toHaveBeenCalled();
   stop();
+  useApp.setState({ mix: DEFAULT_MIX });
 });
 
 it('in performance mode the arrows turn pages instead of reaching the harmonica', async () => {

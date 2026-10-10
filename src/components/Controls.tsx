@@ -11,7 +11,7 @@ import { describePassage } from '../core/passage';
 import { ordinal, passageHasEndings } from '../core/endings';
 import { atStart, backToStart, currentPassage, endPassageLoop, extendPassage, holdTrainer, playFrom, startLabel, startTrainer, stop, stopTrainer, toggleLoop, togglePlay, trainerLabel } from '../state/playback';
 import { exitPerform, performResize, togglePerform } from '../state/perform';
-import { TRAINER_CHOICES, useApp, useParsed, type AppState, type TrainerSettings } from '../state/store';
+import { DEFAULT_MIX, setPartOff, TRAINER_CHOICES, useApp, useParsed, type AppState, type Mix, type MixPart, type TrainerSettings } from '../state/store';
 import { Popover } from './Popover';
 
 export function HarmonicaPicker() {
@@ -182,9 +182,11 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
   const { doc } = useParsed();
   const showSpeed = withSpeed && speed !== 1;
   const oneVerse = useMemo(() => songVerses(doc) < 2, [doc]);
+  // (The tune off is said on the button: it's easy to forget it's off.)
+  const tuneOff = useApp((s) => s.mix.off.tune);
   return (
     <Popover
-      label={`♫ ${soundMode === 'samples' ? 'Real' : 'Synth'}${showSpeed ? ` · ${Math.round(speed * 100)}%` : ''} ▾`}
+      label={`♫ ${soundMode === 'samples' ? 'Real' : 'Synth'}${showSpeed ? ` · ${Math.round(speed * 100)}%` : ''}${tuneOff ? ' · tune off' : ''} ▾`}
       buttonClass="btn small ghost"
       title={withSpeed ? 'Sound (real harmonica or synth), speed, counting in, repeats and verses' : 'Sound (real harmonica or synth), counting in, repeats and verses'}
       ariaLabel={withSpeed ? 'Sound, speed, counting in, repeats and verses' : 'Sound, counting in, repeats and verses'}
@@ -202,6 +204,7 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
           Synth
         </label>
         <span className="mi-hint pb-hint">A generated reed sound</span>
+        <MixControls />
         {withSpeed && (
           <label className="pb-row pb-speed">
             <span>Speed</span>
@@ -233,6 +236,53 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
         <span className="mi-hint pb-hint">{oneVerse ? 'This song has one verse' : 'The song plays through until every verse has been sung'}</span>
       </div>
     </Popover>
+  );
+}
+
+const MIX_ROWS: { part: MixPart; label: string; hint: string }[] = [
+  { part: 'tune', label: 'Tune', hint: 'The song’s melody (off: the music moves on silently — Silent in performance mode, or playing along to be heard by the microphone)' },
+  { part: 'clicks', label: 'Clicks', hint: 'The metronome and the count-in' },
+  { part: 'you', label: 'You', hint: 'What you play: the keys, the mouse, a MIDI keyboard, and notes you click to hear' },
+];
+
+/** The mix: the master volume, and each part's level and on/off. */
+function MixControls() {
+  const mix = useApp((s) => s.mix);
+  const set = (patch: Partial<Mix>) => useApp.setState((s) => ({ mix: { ...s.mix, ...patch } }));
+  const pct = (x: number) => `${Math.round(x * 100)}%`;
+  return (
+    <>
+      <span className="pb-head">Mix</span>
+      <label className="pb-row mix-row">
+        <span>Volume</span>
+        <input type="range" min={0} max={1} step={0.05} value={mix.master} aria-label="Volume" onChange={(e) => set({ master: parseFloat(e.target.value) })} onDoubleClick={() => set({ master: DEFAULT_MIX.master })} title="Everything the app plays (double-click to reset)" />
+        <span className="t-value">{pct(mix.master)}</span>
+      </label>
+      {MIX_ROWS.map(({ part, label, hint }) => (
+        <div className={`pb-row mix-row ${mix.off[part] ? 'off' : ''}`} key={part} title={hint}>
+          <button
+            className={`mix-on ${mix.off[part] ? '' : 'on'}`}
+            onClick={() => setPartOff(part, !mix.off[part])}
+            aria-pressed={!mix.off[part]}
+            aria-label={`${label} ${mix.off[part] ? 'off' : 'on'}`}
+            title={`${label}: ${mix.off[part] ? 'off (click to turn on)' : 'on (click to turn off)'}`}
+          >
+            {label}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={mix.levels[part]}
+            aria-label={`${label} level`}
+            onChange={(e) => set({ levels: { ...mix.levels, [part]: parseFloat(e.target.value) }, off: { ...mix.off, [part]: false } })}
+            onDoubleClick={() => set({ levels: { ...mix.levels, [part]: DEFAULT_MIX.levels[part] } })}
+          />
+          <span className="t-value">{mix.off[part] ? 'off' : pct(mix.levels[part])}</span>
+        </div>
+      ))}
+    </>
   );
 }
 

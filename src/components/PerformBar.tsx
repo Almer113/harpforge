@@ -11,7 +11,7 @@ import { ReadAsSwitch, ShowItems, ViewSwitch } from './Sheet';
 import { barAt, barStarts } from '../core/passage';
 import { exitPerform, performResize } from '../state/perform';
 import { setAlong } from '../state/playAlong';
-import { DEFAULT_PERFORM_SIZE, PERFORM_SIZES, useApp, useParsed } from '../state/store';
+import { DEFAULT_PERFORM_SIZE, PERFORM_SIZES, setPartOff, useApp, useParsed } from '../state/store';
 
 const IDLE_MS = 2500;
 /** The note last heard: "Bar 5" stays up through the gaps between notes. */
@@ -26,12 +26,11 @@ export function PerformBar() {
   const playing = useApp((s) => s.play === 'playing');
   const view = useApp((s) => s.sheetView);
   const move = useApp((s) => s.performMove);
-  const silent = useApp((s) => s.performSilent);
+  // Silent: the mix's Tune off (the same switch as playing along without the tune).
+  const silent = useApp((s) => s.mix.off.tune);
   const size = useApp((s) => s.performSize);
   const along = useApp((s) => s.along);
   const alongPasses = useApp((s) => s.alongPasses.length);
-  // Playing along without the tune: it's silent already, whatever this button says.
-  const alongSilent = useApp((s) => s.along && !s.alongMelody);
   // Where you are: the playing note (or the last one, between notes), else the selected one.
   const at = useApp((s) => {
     const now = s.activeEvents.at(-1);
@@ -94,22 +93,19 @@ export function PerformBar() {
         <span className="pf-title" title={doc.meta.title || 'Untitled'}>{doc.meta.title || 'Untitled'}</span>
         <PlayStop perform />
         <button
-          className={`t-btn toggle ${silent || alongSilent ? 'on' : ''}`}
-          onClick={() => !alongSilent && useApp.setState({ performSilent: !silent })}
-          aria-disabled={alongSilent}
+          className={`t-btn toggle ${silent ? 'on' : ''}`}
+          onClick={() => setPartOff('tune', !silent)}
           title={
-            alongSilent
-              ? 'Silent: the tune is off while you play along'
-              : silent
-                ? 'Silent: the music moves at tempo without the tune (click for the tune; the metronome gives a click)'
-                : 'Silent: the music moves at tempo without the tune, for playing it yourself (the metronome gives a click)'
+            silent
+              ? 'Silent: the music moves at tempo without the tune (click for the tune; the backing and the metronome still play)'
+              : 'Silent: the music moves at tempo without the tune, for playing it yourself (the backing and the metronome still play)'
           }
           aria-label="Silent"
-          aria-pressed={silent || alongSilent}
+          aria-pressed={silent}
         >
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M4 9h4l5-4v14l-5-4H4z" />
-            {silent || alongSilent ? <path d="M17 9l5 6M22 9l-5 6" /> : <path d="M17 8.5a5 5 0 0 1 0 7M19.5 6a8.5 8.5 0 0 1 0 12" />}
+            {silent ? <path d="M17 9l5 6M22 9l-5 6" /> : <path d="M17 8.5a5 5 0 0 1 0 7M19.5 6a8.5 8.5 0 0 1 0 12" />}
           </svg>
         </button>
         <SpeedControl />

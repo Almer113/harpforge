@@ -117,18 +117,21 @@ it('clicking a note in the second time plays on from that time', async () => {
   stop();
 });
 
-it('a change while paused takes effect on resume; one that changes nothing doesn’t restart', async () => {
+it('the tune switched off while paused goes off there and then, with no restart; a change that changes nothing doesn’t restart', async () => {
   const { pause } = await import('./playback');
+  const { setPartOff } = await import('./store');
+  const tuneOff = engine.setTuneOff as unknown as ReturnType<typeof vi.fn>;
   await play();
   clock.beat = 1.5;
   pause();
-  useApp.setState({ performing: true, performSilent: true });
+  tuneOff.mockClear();
+  setPartOff('tune', true);
+  expect(tuneOff).toHaveBeenLastCalledWith(true);
   playScore.mockClear();
   await play();
-  expect(playScore).toHaveBeenCalledTimes(1);
-  expect(last()[1]).toMatchObject({ muted: true, startBeat: 1 });
+  expect(playScore).not.toHaveBeenCalled();
   stop();
-  useApp.setState({ performing: false, performSilent: false });
+  setPartOff('tune', false);
   // Looping a passage plays it as written: repeats on or off, nothing to start again.
   useApp.setState({ loop: true, loopRange: { start: 1, end: 3 }, selectedEvent: 1 });
   await play();

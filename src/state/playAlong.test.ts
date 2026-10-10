@@ -15,7 +15,7 @@ import { loopPassed, play, selectBar, startTrainer, stop } from './playback';
 import { setAlong } from './playAlong';
 import { drill } from './report';
 import { songLog } from '../storage/practiceLog';
-import { DEFAULT_TRAINER, useApp } from './store';
+import { DEFAULT_MIX, DEFAULT_TRAINER, useApp } from './store';
 
 // C harp at 60 bpm (a beat is a second): 4 = C5, 5 = E5.
 const TAB = '---\ntempo: 60\n---\n4 5 4 5 | 4 4 4 4 |\n';
@@ -221,8 +221,8 @@ it('a corrupt practice history is ignored rather than breaking the report', () =
   expect(songLog('song-3')).toEqual([]);
 });
 
-it('the microphone going on while playing along turns the tune off', () => {
-  useApp.setState({ alongMelody: true, mic: { ...s().mic, status: 'on' } });
-  expect(s().alongMelody).toBe(false);
-  useApp.setState({ mic: { ...s().mic, status: 'off' }, alongMelody: true });
+it('the microphone going on while playing along turns the tune and the backing off', () => {
+  useApp.setState({ mix: DEFAULT_MIX, mic: { ...s().mic, status: 'on' } });
+  expect(s().mix.off).toMatchObject({ tune: true, backing: true, clicks: false, you: false });
+  useApp.setState({ mic: { ...s().mic, status: 'off' }, mix: DEFAULT_MIX });
 });

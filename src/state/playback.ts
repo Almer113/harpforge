@@ -7,7 +7,7 @@ import { barAt, barPassage, barStarts, describePassage, eventPassage, joinPassag
 import { findItem, fromDoc, realBeat } from '../core/edit/model';
 import type { PassResult } from '../core/playAlong';
 import { playbackIndexOf, playbackScore, writtenScore, type PlaybackScore } from '../core/repeats';
-import { getParsed, useApp, type AppState } from './store';
+import { getParsed, useApp, type AppState, type MixPart } from './store';
 
 /**
  * Play along (playAlong.ts) checks the notes while the song plays. It plugs itself in here,
@@ -43,7 +43,7 @@ function onEvent(index: number, on: boolean, pass?: number, verse?: number) {
 let playing: PlaybackScore | null = null;
 let playingAt = -1;
 // What the sound was started with: changed since (even while paused), it starts again.
-let startedWith: { muted: boolean; played: PlaybackScore | null; along: boolean } = { muted: false, played: null, along: false };
+let startedWith: { played: PlaybackScore | null; along: boolean } = { played: null, along: false };
 
 /**
  * Where the visual editor plays from, as you see it there: several notes selected, just
@@ -126,9 +126,9 @@ export function startLabel(s: AppState): string {
 
 /** Whether the tune would be left out, and what would be played, if playback started now. */
 function wanted(s: AppState): typeof startedWith {
-  return { muted: tuneMuted(s), played: playedScore(s), along: alongOn(s) };
+  return { played: playedScore(s), along: alongOn(s) };
 }
-const sameStart = (a: typeof startedWith, b: typeof startedWith) => a.muted === b.muted && a.played === b.played && a.along === b.along;
+const sameStart = (a: typeof startedWith, b: typeof startedWith) => a.played === b.played && a.along === b.along;
 
 /**
  * Starts playback again from where it is: the same note, the same time through a repeat.
@@ -208,12 +208,12 @@ export async function play(opts: { count?: boolean; from?: number; pass?: number
   const eachLoop = s.loop && s.countEachLoop;
   const counting = opts.count === true || eachLoop || (s.countIn && opts.count !== false);
   // Playing along without the tune: the clicks keep time instead.
-  const alongMuted = alongOn(s) && !s.alongMelody;
+  const alongMuted = alongOn(s) && tuneMuted(s);
   const muted = tuneMuted(s);
   if (alongOn(s)) along?.startChecking(range ?? { start: startBeat, end: pb.score.totalBeats }, s.loop, eachLoop, pb);
   playing = pb;
   playingAt = selAt ?? 0;
-  startedWith = { muted, played: pb, along: alongOn(s) };
+  startedWith = { played: pb, along: alongOn(s) };
   startedKey = startKey(s);
   engine.playScore(pb.score, {
     tempo,
@@ -363,10 +363,13 @@ useApp.subscribe((s, prev) => {
   if (s.speed !== prev.speed && s.play !== 'stopped') {
     engine.setTempo(getParsed(s.text).doc.meta.tempo * s.speed);
   }
+  if (s.mix !== prev.mix) applyMix();
+  // The tune off or back on, there and then (its notes go on lighting up).
+  if (tuneMuted(s) !== tuneMuted(prev) && s.play !== 'stopped') engine.setTuneOff(tuneMuted(s));
   // (Playing along without the tune, the clicks are the only timekeeping: they stay.)
-  const muted = alongOn(s) && !s.alongMelody;
-  if (s.metronome !== prev.metronome && s.play !== 'stopped' && !s.recording && !muted) {
-    engine.setMetronome(s.metronome ? beatsPerBar(getParsed(s.text).doc.meta) : null);
+  const clicksWanted = (x: AppState) => x.metronome || (alongOn(x) && tuneMuted(x));
+  if (clicksWanted(s) !== clicksWanted(prev) && s.play !== 'stopped' && !s.recording) {
+    engine.setMetronome(clicksWanted(s) ? beatsPerBar(getParsed(s.text).doc.meta) : null);
   }
   // Looping switches on and off in place; playback keeps going.
   if (s.loop !== prev.loop && s.play !== 'stopped') engine.setLoop(s.loop);
@@ -387,19 +390,27 @@ useApp.subscribe((s, prev) => {
       useApp.setState({ passage: passage ?? null, loopRange: loopRange ?? null, ...(s.loopRange && !loopRange ? { loop: false, training: null } : {}) });
     }
   }
-  // Play along (or its tune) switched while playing, or the tune went silent or came back
-  // (performance mode): playback starts again from where it was, so the checking and the sound match.
-  // Repeats switched on or off: the same, from the same note — when it changes what's played.
+  // Play along switched while playing: playback starts again from where it was, so the
+  // checking and the sound match. Repeats switched on or off: the same, from the same note —
+  // when it changes what's played.
   if (s.play === 'playing') {
-    if (alongOn(s) !== alongOn(prev) || (alongOn(s) && s.alongMelody !== prev.alongMelody)) restartHere(true);
-    else if ((tuneMuted(s) !== tuneMuted(prev) || s.playRepeats !== prev.playRepeats || s.playAllVerses !== prev.playAllVerses) && !sameStart(wanted(s), startedWith)) restartHere(false);
+    if (alongOn(s) !== alongOn(prev)) restartHere(true);
+    else if ((s.playRepeats !== prev.playRepeats || s.playAllVerses !== prev.playAllVerses) && !sameStart(wanted(s), startedWith)) restartHere(false);
   }
 });
 
-/** Whether playback leaves the tune out: playing along without it, or performing silently. */
-export function tuneMuted(s: Pick<AppState, 'along' | 'alongMelody' | 'performing' | 'performSilent' | 'page'>): boolean {
-  return (alongOn(s) && !s.alongMelody) || (s.performing && s.performSilent);
+/** Whether playback leaves the tune out (the mix's Tune off: performing silently, playing along without it…). */
+export function tuneMuted(s: Pick<AppState, 'mix'>): boolean {
+  return s.mix.off.tune;
 }
+
+/** The mix as the engine hears it: each part's level, or nothing when it's off. */
+function applyMix() {
+  const { mix } = useApp.getState();
+  const level = (p: MixPart) => (mix.off[p] ? 0 : mix.levels[p]);
+  engine.setMix({ master: mix.master, parts: { tune: level('tune'), backing: level('backing'), clicks: level('clicks'), you: level('you') } });
+}
+applyMix();
 
 /** Whether playing along is on here: it's the Play page's (the editor plays without it). */
 export function alongOn(s: Pick<AppState, 'along' | 'page'>): boolean {

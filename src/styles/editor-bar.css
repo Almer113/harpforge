@@ -24,6 +24,13 @@
 .pb-row > span:first-child { min-width: 46px; color: var(--muted); }
 .pb-row input[type='range'] { width: 120px; accent-color: var(--brass); }
 .pb-row .mi-hint { flex-basis: 100%; margin-left: 24px; }
+/* The mix: each part's switch (its name, lit when on), its level, and the level said. */
+.mix-row { padding-top: 3px; padding-bottom: 3px; flex-wrap: nowrap; gap: 8px; }
+.mix-row input[type='range'] { width: auto; flex: 1; min-width: 60px; }
+.mix-row .t-value { min-width: 34px; font-variant-numeric: tabular-nums; }
+.mix-on { min-width: 58px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border-2); background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-align: left; }
+.mix-on.on { border-color: rgba(227, 169, 72, 0.55); background: rgba(227, 169, 72, 0.12); color: var(--brass-2); }
+.mix-row.off input[type='range'] { opacity: 0.4; }
 .transport.compact { display: flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; box-shadow: none; position: static; }
 .transport.compact .t-btn { width: 34px; height: 32px; }
 

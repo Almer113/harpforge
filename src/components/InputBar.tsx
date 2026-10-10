@@ -10,7 +10,7 @@ import { hint, practiceTotal, startPractice, stopPractice } from '../state/pract
 import { calibrateMic, DEFAULT_MIC_LATENCY, describePass, setAlong } from '../state/playAlong';
 import { alongReport } from '../core/report';
 import { showReport } from '../state/report';
-import { useApp, useParsed } from '../state/store';
+import { setPartOff, useApp, useParsed } from '../state/store';
 
 const MicIcon = (
   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -181,7 +181,7 @@ function focusSoon(selector: string) {
  */
 function AlongControl() {
   const along = useApp((s) => s.along);
-  const melody = useApp((s) => s.alongMelody);
+  const melody = useApp((s) => !s.mix.off.tune);
   const passes = useApp((s) => s.alongPasses);
   const micOn = useApp((s) => s.mic.status === 'on');
   const latency = useApp((s) => s.micLatency);
@@ -212,7 +212,7 @@ function AlongControl() {
       </span>
       {passes.length > 1 && <span className="input-status">{clean} of {passes.length} clean</span>}
       <label className="check" title="Off: only the clicks play, so the microphone hears just you">
-        <input type="checkbox" checked={melody} onChange={(e) => useApp.setState({ alongMelody: e.target.checked })} />
+        <input type="checkbox" checked={melody} onChange={(e) => setPartOff('tune', !e.target.checked)} />
         Hear the tune
       </label>
       {micOn && melody && <span className="mi-hint along-warn">With the tune on, the microphone hears it too: turn it off to be checked.</span>}
