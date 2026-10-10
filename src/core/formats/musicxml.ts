@@ -107,8 +107,12 @@ export function parseMusicXml(xml: string): Imported {
       if (before?.kind === 'bar' && before.style === 'single') before.style = 'repeat-start';
       else events.push({ kind: 'bar', style: 'repeat-start' });
     }
-    // 1st and 2nd endings: the tab has none, so both are played, one after the other.
-    if (barlines.some((b) => child(b, 'ending'))) warnOnce('1st/2nd endings were written out in a row (a tab has no endings): check the repeats.');
+    // An ending starting here ("1." / "1, 2"): on the measure's first note or rest, once it's read.
+    const endingEl = barlines.map((b) => child(b, 'ending')).find((e) => e?.getAttribute('type') === 'start');
+    const endingNums = endingEl
+      ? [...new Set((endingEl.getAttribute('number') ?? '').split(/[,\s]+/).map(Number).filter((n) => Number.isInteger(n) && n >= 1))].sort((a, b) => a - b)
+      : [];
+    const measureFrom = events.length;
     for (const el of measure.children) {
       switch (el.nodeName) {
         case 'attributes': {
@@ -257,8 +261,14 @@ export function parseMusicXml(xml: string): Imported {
     // Bar line at the end of each measure.
     const barline = [...measure.getElementsByTagName('barline')].find((b) => (b.getAttribute('location') ?? 'right') === 'right');
     const style = text(barline, 'bar-style');
-    const repeat = barline ? child(barline, 'repeat')?.getAttribute('direction') : undefined;
-    events.push({ kind: 'bar', style: repeat === 'backward' ? 'repeat-end' : style === 'light-heavy' ? 'final' : style === 'light-light' ? 'double' : 'single' });
+    if (endingNums.length) {
+      const first = events.slice(measureFrom).find((e): e is NoteEvent | RestEvent => e.kind !== 'bar' && e.beats > 0);
+      if (first) first.ending = endingNums;
+    }
+    const repeatEl = barline ? child(barline, 'repeat') : undefined;
+    const repeat = repeatEl?.getAttribute('direction');
+    const times = Number(repeatEl?.getAttribute('times'));
+    events.push({ kind: 'bar', style: repeat === 'backward' ? 'repeat-end' : style === 'light-heavy' ? 'final' : style === 'light-light' ? 'double' : 'single', ...(repeat === 'backward' && times > 2 ? { times } : {}) });
     measuresInLine++;
     if (!explicitBreaks && measuresInLine >= 4) {
       lines.push({ events });
@@ -332,7 +342,18 @@ function harmonyXml(symbol: string): string {
 
 /** `section`: a section starting inside a bar (the line before ran on without a bar line). */
 type Piece = { beats: number; ev: NoteEvent | RestEvent; tieStart: boolean; tieStop: boolean; first: boolean; section?: string };
-type XmlMeasure = { pieces: Piece[]; endBar?: BarStyle; startBar?: BarStyle; section?: string; newLine?: boolean };
+type XmlMeasure = {
+  pieces: Piece[];
+  endBar?: BarStyle;
+  startBar?: BarStyle;
+  section?: string;
+  newLine?: boolean;
+  /** It starts an ending (the times through it's played), and a ":|" played more than twice. */
+  ending?: number[];
+  endTimes?: number;
+  /** An ending's bracket ends here: closed with a hook (":|") or left open. */
+  endingStop?: 'stop' | 'discontinue';
+};
 
 /**
  * Measures as the tab draws them (its own bar lines, so pickups and short bars stay);
@@ -353,11 +374,15 @@ function measuresOf(doc: TabDoc, bpb: number): XmlMeasure[] {
       if (e.kind === 'bar') {
         if (!cur().pieces.length) {
           if (e.style === 'repeat-start') cur().startBar = e.style;
-          else if (measures.length > 1) measures[measures.length - 2].endBar = e.style;
+          else if (measures.length > 1) {
+            measures[measures.length - 2].endBar = e.style;
+            if (e.times) measures[measures.length - 2].endTimes = e.times;
+          }
           continue;
         }
         // "|:" after a bar: the bar ends normally and the next one starts the repeat.
         cur().endBar = e.style === 'repeat-start' ? 'single' : e.style;
+        if (e.style === 'repeat-end' && e.times) cur().endTimes = e.times;
         measures.push({ pieces: [], startBar: e.style === 'repeat-start' ? e.style : undefined });
         room = bpb;
         continue;
@@ -373,6 +398,7 @@ function measuresOf(doc: TabDoc, bpb: number): XmlMeasure[] {
         cur().newLine = true;
         pendingLine = false;
       }
+      if (e.ending?.length && !cur().pieces.some((p) => p.beats > 0)) cur().ending = e.ending;
       let left = e.beats;
       let first = true;
       while (left > 1e-6) {
@@ -406,6 +432,19 @@ function measuresOf(doc: TabDoc, bpb: number): XmlMeasure[] {
     }
   }
   if (!cur().pieces.length && measures.length > 1) measures.pop();
+  // Where each ending's bracket stops: its ":|" (closed), a double or final bar line, the
+  // next "|:" or ending, or the end of its line (open).
+  measures.forEach((m, i) => {
+    if (!m.ending) return;
+    let j = i;
+    while (j + 1 < measures.length) {
+      const b = measures[j];
+      const next = measures[j + 1];
+      if (b.endBar === 'repeat-end' || b.endBar === 'double' || b.endBar === 'final' || next.startBar === 'repeat-start' || next.ending || next.newLine) break;
+      j++;
+    }
+    measures[j].endingStop = measures[j].endBar === 'repeat-end' ? 'stop' : 'discontinue';
+  });
   // Lengths no note value can show are written as tied pieces.
   for (const m of measures) {
     m.pieces = m.pieces.flatMap((p) => {
@@ -417,11 +456,16 @@ function measuresOf(doc: TabDoc, bpb: number): XmlMeasure[] {
   return measures;
 }
 
-const BARLINE: Partial<Record<BarStyle, string>> = {
-  double: '<barline location="right"><bar-style>light-light</bar-style></barline>',
-  final: '<barline location="right"><bar-style>light-heavy</bar-style></barline>',
-  'repeat-end': '<barline location="right"><bar-style>light-heavy</bar-style><repeat direction="backward"/></barline>',
-};
+const BAR_STYLE: Partial<Record<BarStyle, string>> = { double: 'light-light', final: 'light-heavy', 'repeat-end': 'light-heavy' };
+
+/** A measure's right bar line: its style, the end of an ending's bracket, the repeat back (and how many times). */
+function rightBarline(end: BarStyle, m: XmlMeasure, endingNums?: number[]): string {
+  const style = BAR_STYLE[end];
+  const ending = m.endingStop && endingNums ? `<ending number="${endingNums.join(', ')}" type="${m.endingStop}"/>` : '';
+  const repeat = end === 'repeat-end' ? `<repeat direction="backward"${m.endTimes && m.endTimes > 2 ? ` times="${m.endTimes}"` : ''}/>` : '';
+  if (!style && !ending && !repeat) return '';
+  return `<barline location="right">${style ? `<bar-style>${style}</bar-style>` : ''}${ending}${repeat}</barline>`;
+}
 
 /** Writes partwise MusicXML 3.1 with lyrics, chord symbols and the tab as a second lyric line. */
 export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
@@ -446,6 +490,8 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
   // A short first bar is a pickup: numbered 0 and marked implicit, as notation programs expect.
   const firstLen = measures[0]?.pieces.reduce((a, p) => a + p.beats, 0) ?? 0;
   const pickup = measures.length > 1 && firstLen > 1e-6 && firstLen < bpb - 1e-6;
+  // The ending whose bracket is open (its numbers, for the "stop" that closes it).
+  let endingNums: number[] | undefined;
   measures.forEach((m, mi) => {
     const num = pickup ? mi : mi + 1;
     out.push(`<measure number="${num}"${pickup && mi === 0 ? ' implicit="yes"' : ''}>`);
@@ -454,7 +500,12 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
       out.push(`<attributes><divisions>${DIVISIONS}</divisions><key><fifths>${fifths}</fifths><mode>${mode}</mode></key><time><beats>${beatsNum}</beats><beat-type>${beatType}</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>`);
       out.push(`<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${Math.round(meta.tempo)}</per-minute></metronome></direction-type><sound tempo="${Math.round(meta.tempo)}"/></direction>`);
     }
-    if (m.startBar === 'repeat-start') out.push('<barline location="left"><bar-style>heavy-light</bar-style><repeat direction="forward"/></barline>');
+    if (m.ending) endingNums = m.ending;
+    if (m.startBar === 'repeat-start' || m.ending) {
+      const ending = m.ending ? `<ending number="${m.ending.join(', ')}" type="start">${m.ending.map((n) => `${n}.`).join(' ')}</ending>` : '';
+      const repeat = m.startBar === 'repeat-start' ? '<repeat direction="forward"/>' : '';
+      out.push(`<barline location="left">${repeat ? '<bar-style>heavy-light</bar-style>' : ''}${ending}${repeat}</barline>`);
+    }
     if (m.section) out.push(`<direction placement="above"><direction-type><rehearsal>${esc(m.section)}</rehearsal></direction-type></direction>`);
     for (const n of m.pieces) {
       if (n.section) out.push(`<direction placement="above"><direction-type><rehearsal>${esc(n.section)}</rehearsal></direction-type></direction>`);
@@ -500,7 +551,9 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
       });
     }
     const end = m.endBar ?? (mi === measures.length - 1 ? 'final' : 'single');
-    if (BARLINE[end]) out.push(BARLINE[end]!);
+    const right = rightBarline(end, m, endingNums);
+    if (right) out.push(right);
+    if (m.endingStop) endingNums = undefined;
     out.push('</measure>');
   });
   out.push('</part>', '</score-partwise>');

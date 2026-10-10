@@ -154,7 +154,15 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    seedDemos().catch(() => undefined);
+    seedDemos()
+      .then((updated) => {
+        // The song open is a demo just brought up to date, with nothing changed since it was
+        // saved: it opens as it is now.
+        const s = useApp.getState();
+        const text = s.docId ? updated.get(s.docId) : undefined;
+        if (text && s.text === s.savedText && s.text !== text) s.loadText(text, s.docId, true);
+      })
+      .catch(() => undefined);
     openSharedFromUrl();
     const onHash = () => openSharedFromUrl();
     window.addEventListener('hashchange', onHash);

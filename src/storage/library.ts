@@ -201,10 +201,11 @@ export async function importLibrary(files: Record<string, Uint8Array>): Promise<
 
 const SEEDED_KEY = 'harpforge:seeded';
 
-let seeding: Promise<void> | null = null;
+let seeding: Promise<Map<string, string>> | null = null;
 
 /** Adds demo songs on first launch, and any demos added since the last visit (once, even if called twice). */
-export function seedDemos(): Promise<void> {
+/** Adds the demos new since last time; resolves to the tabs brought up to date (id → new text). */
+export function seedDemos(): Promise<Map<string, string>> {
   // A failure (storage blocked) is forgotten, so a later call can try again.
   seeding ??= seedOnce().catch((e) => {
     seeding = null;
@@ -213,18 +214,27 @@ export function seedDemos(): Promise<void> {
   return seeding;
 }
 
-async function seedOnce(): Promise<void> {
+async function seedOnce(): Promise<Map<string, string>> {
+  const updated = new Map<string, string>();
   let seen = 0;
   try {
     seen = parseInt(localStorage.getItem(SEEDED_KEY) ?? '0', 10) || 0;
-    if (seen >= DEMO_VERSION) return;
+    if (seen >= DEMO_VERSION) return updated;
   } catch {
-    return;
+    return updated;
   }
   const fresh = DEMOS.filter((d) => d.since > seen);
   await db.transaction('rw', db.tabs, async () => {
-    const have = new Set((await db.tabs.toArray()).map((t) => t.text));
-    for (const d of [...fresh].reverse()) if (!have.has(d.text)) await saveTab(d.text);
+    const tabs = await db.tabs.toArray();
+    const have = new Set(tabs.map((t) => t.text));
+    for (const d of [...fresh].reverse()) {
+      if (have.has(d.text)) continue;
+      // A demo brought up to date: an unchanged copy of its old version is updated in place
+      // (one you've changed is yours, and stays as it is beside the new one).
+      const old = tabs.find((t) => d.replaces?.includes(t.text));
+      await saveTab(d.text, old?.id);
+      if (old) updated.set(old.id, d.text);
+    }
   });
   // Only remember the demos once they're really in the library.
   try {
@@ -232,4 +242,5 @@ async function seedOnce(): Promise<void> {
   } catch {
     /* storage unavailable */
   }
+  return updated;
 }

@@ -37,10 +37,12 @@ describe('ABC import', () => {
     expect(lyrics(r.doc)).toEqual(['a', 'b', 'c', 'd']);
   });
 
-  it('writes "::" as a repeat end and start, and warns about endings', () => {
+  it('writes "::" as a repeat end and start, and reads the endings (Phase 11.5)', () => {
     const r = abc('|: CDEF :: GABc :| [1 C4 :| [2 E4 |]');
     expect(bars(r.doc).slice(0, 3)).toEqual(['repeat-start', 'repeat-end', 'repeat-start']);
-    expect(r.warnings.join(' ')).toMatch(/endings/);
+    expect(r.warnings.join(' ')).not.toMatch(/endings/);
+    const endings = r.doc.lines.flatMap((l) => l.events).filter((e) => e.kind === 'note' && e.ending);
+    expect(endings.map((e) => (e.kind === 'note' ? e.ending : undefined))).toEqual([[1], [2]]);
   });
 
   it('keeps an accidental on a note tied over the bar line', () => {

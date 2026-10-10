@@ -6,6 +6,7 @@ import { soundPitch, type Harmonica } from '../instruments';
 import type { NoteEvent, TabDoc, TabEvent } from '../htab/types';
 import { midiToName, keySpelling, type Spelling } from '../pitch';
 import type { HoleSound, Sound } from '../types';
+import { endingLabel } from '../endings';
 
 export interface PlainTextOptions {
   /** Write holes (4 -4) or notes (C5 D5). */
@@ -63,6 +64,8 @@ function noteToken(ev: NoteEvent, o: PlainTextOptions, flats: Spelling, harp: Ha
 
 interface Cell {
   tab: string;
+  /** A bar line ("|", "|:", ":|", ":|x3"): where a row may break. */
+  bar?: boolean;
   chord?: string;
   lyric?: string;
 }
@@ -71,24 +74,33 @@ interface Cell {
 function cellsOf(events: TabEvent[], o: PlainTextOptions, flats: Spelling, harp: Harmonica): Cell[] {
   const cells: Cell[] = [];
   let pendingChord: string | undefined;
+  // An ending's "1." goes over its first note, with the chord there.
+  let pendingEnding: string | undefined;
   for (const e of events) {
     if (e.kind === 'bar') {
-      if (o.bars && cells.length && cells[cells.length - 1].tab !== '|') cells.push({ tab: '|' });
+      // Repeats keep their signs; other bar lines are "|".
+      const tab = e.style === 'repeat-start' ? '|:' : e.style === 'repeat-end' ? `:|${e.times && e.times > 2 ? `x${e.times}` : ''}` : '|';
+      const prev = cells[cells.length - 1];
+      if (o.bars && prev?.bar && tab !== '|') prev.tab = prev.tab === '|' ? tab : `${prev.tab}${tab.replace(/^\|/, '')}`;
+      else if (o.bars && (cells.length || tab !== '|') && !prev?.bar) cells.push({ tab, bar: true });
       continue;
     }
+    if (e.ending?.length && e.beats > 0) pendingEnding = endingLabel(e.ending);
     if (e.chord) pendingChord = e.chord;
     // Rests and held-over (tied) notes aren't played: no column, but a chord on them waits for the next note.
     if (e.kind === 'rest' || e.tied || !e.sounds.length) continue;
-    cells.push({ tab: noteToken(e, o, flats, harp), chord: o.chords ? pendingChord : undefined, lyric: o.lyrics ? e.lyric : undefined });
+    const chord = [pendingEnding, o.chords ? pendingChord : undefined].filter(Boolean).join(' ') || undefined;
+    cells.push({ tab: noteToken(e, o, flats, harp), chord, lyric: o.lyrics ? e.lyric : undefined });
     pendingChord = undefined;
+    pendingEnding = undefined;
   }
-  while (cells.length && cells[cells.length - 1].tab === '|' && !o.bars) cells.pop();
+  while (cells.length && cells[cells.length - 1].bar && !o.bars) cells.pop();
   return cells;
 }
 
 /** Lays cells out in aligned rows (chords, tab, lyrics), breaking at bars to fit the width. */
 function layout(cells: Cell[], o: PlainTextOptions): string[] {
-  const widthOf = (c: Cell) => (c.tab === '|' ? 2 : Math.max(c.tab.length, (c.chord?.length ?? 0), (c.lyric?.length ?? 0)) + 1);
+  const widthOf = (c: Cell) => (c.bar ? c.tab.length + 1 : Math.max(c.tab.length, (c.chord?.length ?? 0), (c.lyric?.length ?? 0)) + 1);
   const rows: Cell[][] = [[]];
   let used = 0;
   // Break only at bar lines (or anywhere, if a bar is longer than the width).
@@ -108,10 +120,10 @@ function layout(cells: Cell[], o: PlainTextOptions): string[] {
       lastBar = -1;
     }
     const cur = rows[rows.length - 1];
-    if (c.tab === '|' && !cur.length) continue; // no bar at the start of a row
+    if (c.tab === '|' && !cur.length) continue; // no plain bar at the start of a row
     cur.push(c);
     used += w;
-    if (c.tab === '|') lastBar = cur.length - 1;
+    if (c.bar) lastBar = cur.length - 1;
   }
   const out: string[] = [];
   for (const row of rows) {

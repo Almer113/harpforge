@@ -17,7 +17,8 @@ import { setLyricOf } from '../verses';
 import type { Harmonica } from '../instruments';
 import { keyUsesFlats, mod12, parseKey, parsePitchClass, pitchClassName } from '../pitch';
 import type { BarEvent, NoteEvent, RestEvent, TabDoc, TabEvent, TabLine } from '../htab/types';
-import { splitLyrics } from '../htab/parser';
+import { placeEndings, splitLyrics } from '../htab/parser';
+import { endingText } from '../htab/serializer';
 import { eventMidis, keyFifths, notesMeta, type Imported } from './common';
 
 const MAJOR = [0, 2, 4, 5, 7, 9, 11];
@@ -178,7 +179,8 @@ function parseLine(s: string, doPc: number, warnings: string[], ctx: TieContext)
   let pendingChord: string | undefined;
   let group: (NoteEvent | RestEvent)[] | null = null;
   const last = () => {
-    const e = events[events.length - 1];
+    // (Not an ending's mark, which is put on the note after it.)
+    const e = events.filter((x) => x.kind === 'bar' || !x.ending || x.beats > 0).at(-1);
     return e && e.kind !== 'bar' ? e : undefined;
   };
   let i = 0;
@@ -195,13 +197,23 @@ function parseLine(s: string, doPc: number, warnings: string[], ctx: TieContext)
       else if (s.startsWith('||', i)) [style, len] = ['double', 2];
       else if (s.startsWith('|]', i)) [style, len] = ['final', 2];
       else if (s.startsWith('|:', i)) [style, len] = ['repeat-start', 2];
+      // ":|x3": played three times through.
+      const times = style === 'repeat-end' ? /^x(\d{1,2})/.exec(s.slice(i + len)) : null;
+      if (times) len += times[0].length;
       // A chord symbol right before a bar line, with no note after it, marks the end of its bar.
       if (pendingChord && !group) {
         events.push({ kind: 'rest', beats: 0, chord: pendingChord });
         pendingChord = undefined;
       }
-      events.push({ kind: 'bar', style });
+      events.push({ kind: 'bar', style, ...(times && Number(times[1]) > 2 ? { times: Number(times[1]) } : {}) });
       i += len;
+      continue;
+    }
+    // An ending ("[1.]"), as in the tab: a mark for now, put on its bar's first note below.
+    const ending = c === '[' ? /^\[((?:\d{1,2}\.)+)\]/.exec(s.slice(i)) : null;
+    if (ending) {
+      events.push({ kind: 'rest', beats: 0, ending: ending[1].split('.').filter(Boolean).map(Number) });
+      i += ending[0].length;
       continue;
     }
     if (c === '[') {
@@ -308,6 +320,7 @@ function parseLine(s: string, doPc: number, warnings: string[], ctx: TieContext)
   }
   // A chord symbol at the end of the line: a marker at the end of the bar.
   if (pendingChord) events.push({ kind: 'rest', beats: 0, chord: pendingChord });
+  placeEndings(events, []);
   return events;
 }
 
@@ -369,10 +382,12 @@ export function writeJianpu(doc: TabDoc, harp?: Harmonica): string {
     while (i < events.length) {
       const e = events[i];
       if (e.kind === 'bar') {
-        parts.push({ single: '|', double: '||', final: '|]', 'repeat-start': '|:', 'repeat-end': ':|' }[e.style]);
+        parts.push({ single: '|', double: '||', final: '|]', 'repeat-start': '|:', 'repeat-end': ':|' }[e.style] + (e.style === 'repeat-end' && e.times && e.times > 2 ? `x${e.times}` : ''));
         i++;
         continue;
       }
+      // An ending starts its bar: "[1.]" before its first note, as in the tab.
+      if (e.ending?.length && e.beats > 0) parts.push(endingText(e.ending));
       if (e.beats <= 0) {
         if (e.chord) parts.push(`[${e.chord}]`);
         i++;

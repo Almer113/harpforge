@@ -432,7 +432,7 @@ function joinTiesInBars(lines: TabLine[]) {
  * Puts each ending marker ("[1.]") on the first note or rest of the bar it starts. One that
  * isn't at the start of a bar (or a line), or with no music after it, is left out, and said.
  */
-function placeEndings(events: TabEvent[], issues: ParseIssue[]) {
+export function placeEndings(events: TabEvent[], issues: ParseIssue[]) {
   const EPS = 1e-6;
   const silent = (e: TabEvent) => e.kind !== 'bar' && e.beats <= EPS;
   for (let k = 0; k < events.length; k++) {

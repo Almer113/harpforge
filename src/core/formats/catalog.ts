@@ -26,7 +26,7 @@ export const EXPORTS: { id: ExportKind; name: string; ext: string; mime: string;
   { id: 'notes', name: 'Notes (no holes)', ext: 'htab', mime: 'text/plain', hint: 'Pitch names instead of holes — re-import for any harmonica', loses: 'Which holes and bends were used' },
   { id: 'abc', name: 'ABC notation', ext: 'abc', mime: 'text/vnd.abc', hint: 'Notes + tab line + lyrics', loses: 'Bends show as pitches' },
   { id: 'musicxml', name: 'MusicXML', ext: 'musicxml', mime: 'application/vnd.recordare.musicxml+xml', hint: 'For MuseScore, Finale, Sibelius…', loses: 'The tab is a lyric line after the verses; comments are left out' },
-  { id: 'midi', name: 'MIDI', ext: 'mid', mime: 'audio/midi', hint: 'Plays in any MIDI app', loses: 'Notes only: no tab, lyrics, chord symbols or sections' },
-  { id: 'chordpro', name: 'ChordPro', ext: 'cho', mime: 'text/plain', hint: 'Chords + lyrics only', loses: 'No melody or tab; only verse 1 of the lyrics' },
+  { id: 'midi', name: 'MIDI', ext: 'mid', mime: 'audio/midi', hint: 'Plays in any MIDI app', loses: 'Notes only, as written: no tab, lyrics, chord symbols or sections, and repeats aren’t played out' },
+  { id: 'chordpro', name: 'ChordPro', ext: 'cho', mime: 'text/plain', hint: 'Chords + lyrics only', loses: 'No melody or tab; only verse 1 of the lyrics; no repeat signs or endings' },
   { id: 'jianpu', name: 'Numbered notation', ext: 'txt', mime: 'text/plain', hint: 'Jianpu (1=C …), common for tremolo', loses: 'Harmonica chords keep only their top note; notes the harp can’t play become rests (and lose their syllable); no tab; only verse 1 of the lyrics' },
 ];

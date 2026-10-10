@@ -1,10 +1,15 @@
+// @vitest-environment happy-dom
 // Phase 11.5a: 1st/2nd endings ("[1.]", "[2.]", "[1.2.]") and repeats played more than twice
 // (":|x3") — written, read, kept by the editor, and played in order.
 
 import { describe, expect, it } from 'vitest';
 import { endingLabel, endingSpans, measureEndings } from './endings';
 import { fromDoc, toDoc, updateMeasure } from './edit/model';
-import { writeAbc } from './formats/abc';
+import { parseAbc, writeAbc } from './formats/abc';
+import { parseMusicXml, writeMusicXml } from './formats/musicxml';
+import { parseJianpu, writeJianpu } from './formats/jianpu';
+import { writePlainText } from './formats/plaintext';
+import type { TabDoc } from './htab/types';
 import { parseHtab } from './htab/parser';
 import { serializeHtab } from './htab/serializer';
 import { playbackScore } from './repeats';
@@ -149,5 +154,60 @@ describe('in the editor', () => {
     expect(parse('|: 4 | [1.2.] 5 :| [2.] 6 |').issues.map((i) => i.message).join(' ')).toMatch(/Two endings for the 2nd time/);
     // (The second repeat has no "|:": its endings are its own.)
     expect(parse('|: 4 | [1.] 5 :| [2.] 6 | 7 | [1.] 8 :| [2.] 9 |').issues).toEqual([]);
+  });
+});
+
+describe('in files', () => {
+  /** Each note's ending and each repeat's count, in order: what has to come back. */
+  const shape = (doc: TabDoc) =>
+    doc.lines
+      .flatMap((l) => l.events)
+      .map((e) => (e.kind === 'bar' ? (e.style === 'repeat-end' ? `:|${e.times ?? ''}` : e.style === 'repeat-start' ? '|:' : '|') : e.ending ? `[${e.ending.join('.')}]` : 'n'))
+      .filter((t) => t !== '|')
+      .join(' ');
+  const SONG = '|: 4 | [1.] 5 | 6 :| [2.] 7 ||\n|: 4 | [1.2.] 5 :| [3.] 6 |\n|: 7 7 :|x3';
+  it('ABC: written with "|1" / ":|2", read back', () => {
+    const { doc } = parse(SONG);
+    const back = parseAbc(writeAbc(doc, harmonicaFromMeta(doc.meta)).text);
+    expect(back.warnings.join(' ')).not.toMatch(/ending/);
+    expect(shape(back.doc)).toBe(shape(doc));
+  });
+
+  it('ABC from elsewhere: "[1", "|1,2", "1-3"', () => {
+    const abc = 'X:1\nT:E\nM:2/4\nL:1/4\nK:C\n|: c c |1,2 d d :|3 e e |]\n|: c c [1 d d :|2 e e |]\n';
+    const notes = parseAbc(abc).doc.lines.flatMap((l) => l.events).filter((e) => e.kind === 'note' && e.ending);
+    expect(notes.map((e) => (e.kind === 'note' ? e.ending : undefined))).toEqual([[1, 2], [3], [1], [2]]);
+  });
+
+  it('MusicXML: <ending> start and stop, <repeat times>, read back', () => {
+    const { doc } = parse(SONG);
+    const xml = writeMusicXml(doc, harmonicaFromMeta(doc.meta));
+    expect(xml).toContain('<ending number="1" type="start">1.</ending>');
+    expect(xml).toContain('<ending number="1" type="stop"/><repeat direction="backward"/>');
+    expect(xml).toContain('<ending number="2" type="discontinue"/>');
+    expect(xml).toContain('<ending number="1, 2" type="start">');
+    expect(xml).toContain('<repeat direction="backward" times="3"/>');
+    expect(shape(parseMusicXml(xml).doc)).toBe(shape(doc));
+  });
+});
+
+describe('in the text exports', () => {
+  const SONG = '|: 4 | [1.] 5 :| [2.] 6 |\n|: 7 7 :|x3';
+  it('numbered notation: "[1.]" and ":|x3", read back', () => {
+    const { doc } = parse(SONG);
+    const text = writeJianpu(doc, harmonicaFromMeta(doc.meta));
+    expect(text).toContain("|: 1' | [1.] 3' :| [2.] 5' |");
+    expect(text).toContain(':|x3');
+    const back = parseJianpu(text).doc.lines.flatMap((l) => l.events);
+    expect(back.filter((e) => e.kind === 'note' && e.ending).map((e) => (e.kind === 'note' ? e.ending : undefined))).toEqual([[1], [2]]);
+    expect(back.find((e) => e.kind === 'bar' && e.times)).toMatchObject({ times: 3 });
+  });
+
+  it('plain text: the repeat signs, and "1." / "2." over the endings', () => {
+    const { doc } = parse(SONG);
+    const text = writePlainText(doc, harmonicaFromMeta(doc.meta));
+    expect(text).toMatch(/^ *1\. +2\.$/m);
+    expect(text).toMatch(/\|: 4 \| 5 +:\| 6 \|/);
+    expect(text).toContain(':|x3');
   });
 });

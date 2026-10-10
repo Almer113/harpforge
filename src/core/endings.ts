@@ -2,7 +2,8 @@
 // stops. An ending runs from the bar it's written on to its ":|", a "||" or "|]", the next
 // "|:" or ending, or the end of the line (see repeats.ts for how they're played).
 
-import type { TabEvent } from './htab/types';
+import type { TabDoc, TabEvent } from './htab/types';
+import type { Score } from './score';
 
 const EPS = 1e-6;
 
@@ -94,4 +95,13 @@ export function measureEndings(bars: BarLike[]): ({ nums: number[]; start: boole
     i = j;
   }
   return out;
+}
+
+/** Whether a passage (in beats) holds the start of an ending: looped, it plays as written, every ending in turn. */
+export function passageHasEndings(doc: TabDoc, score: Score, range: { start: number; end: number }): boolean {
+  return score.events.some((ev) => {
+    if (ev.start < range.start - EPS || ev.start >= range.end - EPS) return false;
+    const src = doc.lines[ev.line]?.events[ev.eventIndex];
+    return !!src && src.kind !== 'bar' && !!src.ending?.length;
+  });
 }

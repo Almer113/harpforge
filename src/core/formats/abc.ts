@@ -239,6 +239,9 @@ export function parseAbc(text: string): Imported {
     let pendingChord: string | undefined;
     // Words written below a rest ("_roll"z2): sung over it (a verse each, " / " between).
     let pendingBelow: string | undefined;
+    // An ending to go on the next note or rest; a repeat count for the next ":|".
+    let pendingEnding: number[] | undefined;
+    let pendingTimes: number | undefined;
     let tuplet: { left: number; factor: number } | null = null;
     let broken: number | null = null; // multiplier for the next note
     const s = line;
@@ -256,6 +259,10 @@ export function parseAbc(text: string): Imported {
       if (pendingChord) {
         ev.chord = pendingChord;
         pendingChord = undefined;
+      }
+      if (pendingEnding) {
+        ev.ending = pendingEnding;
+        pendingEnding = undefined;
       }
       if (pendingBelow !== undefined) {
         if (ev.kind === 'rest') {
@@ -312,7 +319,9 @@ export function parseAbc(text: string): Imported {
       if (c === '"') {
         const j = s.indexOf('"', i + 1);
         const content = s.slice(i + 1, j < 0 ? s.length : j);
-        if (content && !/^[\^_<>@]/.test(content)) pendingChord = content.trim();
+        const timesMark = /^\^\s*(?:[×x]\s*(\d{1,2})|(\d{1,2})\s*[×x])\s*$/.exec(content);
+        if (timesMark) pendingTimes = Number(timesMark[1] ?? timesMark[2]);
+        else if (content && !/^[\^_<>@]/.test(content)) pendingChord = content.trim();
         else if (content.startsWith('_') && content.length > 1) pendingBelow = content.slice(1);
         i = j < 0 ? s.length : j + 1;
         continue;
@@ -365,25 +374,32 @@ export function parseAbc(text: string): Imported {
       }
       // Bars, repeats, endings
       if (c === '|' || c === ':' || (c === '[' && /^\[[|\d]/.test(s.slice(i)))) {
-        const m = /^(:*\[?\|+\]?:*|:+\|*:*|\[\d[\d,-]*|\[\|)\d*/.exec(s.slice(i));
+        // A bar line, maybe with an ending's numbers after it ("|1", ":|2", "|1,2"), or an
+        // ending on its own ("[1", "[1,2", "[1-3").
+        const m = /^(?:(:*\[?\|+\]?:*|:+\|*:*|\[\|)(\d[\d,-]*)?|\[(\d[\d,-]*))/.exec(s.slice(i));
         const tok = m ? m[0] : c;
         i += tok.length;
-        if (/^\[\d/.test(tok) || /\|\d/.test(tok)) warnOnce('1st/2nd endings were written out in a row (a tab has no endings): check the repeats.');
-        if (/^\[\d/.test(tok)) continue; // ending marker
-        if (/^:+\|*:+$/.test(tok) || /^:\|+:$/.test(tok)) {
+        const nums = m?.[2] ?? m?.[3];
+        if (nums) pendingEnding = endingNumbers(nums);
+        if (m?.[3]) continue; // an ending on its own
+        const bar = m?.[1] ?? tok;
+        // ":|" with "^×3" over its bar's last note: played three times.
+        const times = pendingTimes;
+        pendingTimes = undefined;
+        if (/^:+\|*:+$/.test(bar) || /^:\|+:$/.test(bar)) {
           // "::" / ":|:" — the end of one repeat and the start of the next.
-          events.push({ kind: 'bar', style: 'repeat-end' }, { kind: 'bar', style: 'repeat-start' });
+          events.push({ kind: 'bar', style: 'repeat-end', ...(times ? { times } : {}) }, { kind: 'bar', style: 'repeat-start' });
           barAcc = {};
           lyricBar++;
           continue;
         }
         let style: BarEvent['style'] = 'single';
-        if (tok.startsWith(':') && tok.endsWith(':')) style = 'repeat-end';
-        else if (tok.startsWith(':')) style = 'repeat-end';
-        else if (tok.endsWith(':')) style = 'repeat-start';
-        else if (tok.includes('||')) style = 'double';
-        else if (tok.includes('|]') || tok.includes('[|')) style = 'final';
-        events.push({ kind: 'bar', style });
+        if (bar.startsWith(':') && bar.endsWith(':')) style = 'repeat-end';
+        else if (bar.startsWith(':')) style = 'repeat-end';
+        else if (bar.endsWith(':')) style = 'repeat-start';
+        else if (bar.includes('||')) style = 'double';
+        else if (bar.includes('|]') || bar.includes('[|')) style = 'final';
+        events.push({ kind: 'bar', style, ...(style === 'repeat-end' && times ? { times } : {}) });
         barAcc = {};
         lyricBar++;
         continue;
@@ -490,6 +506,17 @@ export interface AbcExportOptions {
 }
 
 const LEN_DENS = [1, 2, 4, 8, 16, 32];
+
+/** "1,2" / "1-3" (an ABC ending's numbers) → [1, 2] / [1, 2, 3]. */
+function endingNumbers(text: string): number[] {
+  const out = new Set<number>();
+  for (const part of text.split(',')) {
+    const [a, b] = part.split('-').map(Number);
+    if (!Number.isFinite(a)) continue;
+    for (let n = a; n <= (Number.isFinite(b) ? Math.min(b, a + 20) : a); n++) if (n >= 1) out.add(n);
+  }
+  return [...out].sort((x, y) => x - y);
+}
 
 /** A part of a written line that's a bar line ("|", ":|", "|1"…), not music. */
 const BAR_PART = /^[|:\][]+\d*(,\d+)*$/;

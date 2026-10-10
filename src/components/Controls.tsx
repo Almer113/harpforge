@@ -8,7 +8,7 @@ import { isKeyChange, keyDistance, setHarmonica, shiftOctave } from '../state/ac
 import { guessTonic, harpForPosition, octaveOptions, positionFor, positionName } from '../core/convert';
 import { mod12, transposeKey } from '../core/pitch';
 import { describePassage } from '../core/passage';
-import { ordinal } from '../core/endings';
+import { ordinal, passageHasEndings } from '../core/endings';
 import { atStart, backToStart, currentPassage, endPassageLoop, extendPassage, holdTrainer, playFrom, startLabel, startTrainer, stop, stopTrainer, toggleLoop, togglePlay, trainerLabel } from '../state/playback';
 import { exitPerform, performResize, togglePerform } from '../state/perform';
 import { TRAINER_CHOICES, useApp, useParsed, type AppState, type TrainerSettings } from '../state/store';
@@ -249,8 +249,10 @@ export function PlayStop({ perform = false }: { perform?: boolean }) {
   const countIn = useApp((s) => s.countIn);
   // "Looping bars 5–8" while a passage loops; "Bars 5–8" for a chosen passage not looped yet.
   const loopRange = useApp((s) => (s.loop ? s.loopRange : null));
+  const { doc, score } = useParsed();
+  // (A passage holding an ending plays it as written: both endings, one after the other.)
+  const asWritten = useMemo(() => !!loopRange && passageHasEndings(doc, score, loopRange), [loopRange, doc, score]);
   const passage = useApp((s) => (s.page === 'play' && !s.loop ? s.passage : null));
-  const { score } = useParsed();
   const loopKey = page === 'editor' ? 'Shift+L' : 'L';
   const startHere = useApp(atStart);
   // (What Play starts from, said in its tooltip: worked out only when what it depends on changes.)
@@ -296,6 +298,11 @@ export function PlayStop({ perform = false }: { perform?: boolean }) {
         <span className="loop-chip">
           <span role="status">
             Looping {describePassage(score, loopRange)}
+            {asWritten && (
+              <span className="loop-note" title="A looped passage plays as it's written: its 1st and 2nd endings one after the other, not one each time through">
+                {' '}· as written
+              </span>
+            )}
           </span>
           <button className="loop-chip-x" onClick={() => { endPassageLoop(); focusLoop(); }} title={perform ? 'Stop looping this passage' : 'Stop looping this passage (Esc when stopped)'} aria-label="Stop looping this passage">
             ✕

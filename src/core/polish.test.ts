@@ -19,12 +19,13 @@ it('MusicXML: a repeat that starts part way through comes back where it was', ()
   expect(back).toMatch(/C5 C5 C5 C5 \|: E5 E5 E5 E5 :\| G5 G5 G5 G5/);
 });
 
-it('MusicXML: 1st and 2nd endings are warned about (both are played)', () => {
+it('MusicXML: 1st and 2nd endings are read as endings', () => {
   const xml = `<?xml version="1.0"?><score-partwise><part-list><score-part id="P1"><part-name>M</part-name></score-part></part-list><part id="P1">
     <measure number="1"><attributes><divisions>1</divisions><time><beats>1</beats><beat-type>4</beat-type></time></attributes><note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration><type>quarter</type></note></measure>
     <measure number="2"><barline location="left"><ending number="1" type="start"/></barline><note><pitch><step>E</step><octave>5</octave></pitch><duration>1</duration><type>quarter</type></note><barline location="right"><ending number="1" type="stop"/><repeat direction="backward"/></barline></measure>
   </part></score-partwise>`;
-  expect(parseMusicXml(xml).warnings.join(' ')).toMatch(/endings/);
+  const events = parseMusicXml(xml).doc.lines.flatMap((l) => l.events);
+  expect(events.filter((e) => e.kind === 'note').map((e) => (e.kind === 'note' ? e.ending : undefined))).toEqual([undefined, [1]]);
 });
 
 it('a repeat inside a repeat: a warning on the inner "|:"', () => {
