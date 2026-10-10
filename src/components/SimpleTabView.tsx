@@ -12,6 +12,7 @@ import { midiToName, keySpelling, type Spelling } from '../core/pitch';
 import { followTo } from './follow';
 import { indexesByLine, markClass, markMap, marksPerLine, useStableClick } from './TabView';
 import type { Mark } from '../core/playAlong';
+import { endingLabel, ordinal } from '../core/endings';
 
 interface Props {
   parsed: Parsed;
@@ -72,9 +73,12 @@ export function breathClass(ev: NoteEvent): string {
 
 interface SimpleMeasure {
   notes: { ev: NoteEvent; ei: number }[];
-  /** A repeat starts here ("|:") / ends here (":|"). */
+  /** A repeat starts here ("|:") / ends here (":|", played `times` times through when more than twice). */
   open?: boolean;
   close?: boolean;
+  times?: number;
+  /** It starts a 1st/2nd… ending. */
+  ending?: number[];
 }
 
 /**
@@ -88,12 +92,19 @@ function measuresOf(events: TabEvent[]): SimpleMeasure[] {
     if (ev.kind === 'bar') {
       if (ev.style === 'repeat-end') {
         const last = [...out].reverse().find((m) => m.notes.length);
-        if (last) last.close = true;
+        if (last) {
+          last.close = true;
+          if (ev.times && ev.times > 2) last.times = ev.times;
+        }
       }
       if (out[out.length - 1].notes.length) out.push({ notes: [] });
       if (ev.style === 'repeat-start') open = true;
-    } else if (ev.kind === 'note' && !ev.tied && ev.sounds.length) {
+    } else if (ev.kind !== 'note' || ev.tied || !ev.sounds.length) {
+      // (A bar starting with a rest: its ending still shows, at its first hole.)
+      if (ev.ending && !out[out.length - 1].notes.length) out[out.length - 1].ending = ev.ending;
+    } else {
       const m = out[out.length - 1];
+      if (ev.ending && !m.notes.length) m.ending = ev.ending;
       if (open && !m.notes.length) m.open = true;
       open = false;
       m.notes.push({ ev, ei });
@@ -192,6 +203,11 @@ const SimpleLine = memo(function SimpleLine({
       {measuresOf(doc.lines[li].events).map((m, mi) => (
         <span className="st-measure" key={mi}>
           {m.open && <span className="st-repeat" aria-label="Repeat from here" title="Repeat from here">|:</span>}
+          {m.ending && (
+            <span className="st-ending" title={`An ending: played the ${m.ending.map(ordinal).join(' and ')} time through`}>
+              {endingLabel(m.ending)}
+            </span>
+          )}
           {m.notes.map(({ ev, ei }) => {
             const idx = indexByKey.get(eventKey(li, ei));
             const isActive = idx !== undefined && activeSet.has(idx);
@@ -210,7 +226,11 @@ const SimpleLine = memo(function SimpleLine({
               </button>
             );
           })}
-          {m.close && <span className="st-repeat" aria-label="Repeat back" title="Repeat back to the |: (or the start)">:|</span>}
+          {m.close && (
+            <span className="st-repeat" aria-label={m.times ? `Repeat back, ${m.times} times in all` : 'Repeat back'} title={m.times ? `Repeat back: ${m.times} times through in all` : 'Repeat back to the |: (or the start)'}>
+              :|{m.times ? `×${m.times}` : ''}
+            </span>
+          )}
         </span>
       ))}
     </div>

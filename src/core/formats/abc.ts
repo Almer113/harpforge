@@ -491,6 +491,9 @@ export interface AbcExportOptions {
 
 const LEN_DENS = [1, 2, 4, 8, 16, 32];
 
+/** A part of a written line that's a bar line ("|", ":|", "|1"…), not music. */
+const BAR_PART = /^[|:\][]+\d*(,\d+)*$/;
+
 /** Whether any note of `line` (not a tie) has words in one of the verses `list`. */
 export function lineHasNoteWords(line: TabLine, list: number[]): boolean {
   return line.events.some((e) => e.kind === 'note' && !e.tied && list.some((v) => !!lyricOf(e, v)?.trim()));
@@ -612,6 +615,12 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
     while (i < events.length) {
       const e = events[i];
       if (e.kind === 'bar') {
+        // ":|x3": "×3" over the bar's last note (ABC has no repeat count of its own).
+        if (e.style === 'repeat-end' && e.times && e.times > 2) {
+          let k = parts.length - 1;
+          while (k >= 0 && BAR_PART.test(parts[k])) k--;
+          if (k >= 0) parts[k] = `"^×${e.times}"${parts[k]}`;
+        }
         parts.push({ single: '|', double: '||', final: '|]', 'repeat-start': '|:', 'repeat-end': ':|' }[e.style]);
         barAcc = {};
         pos = 0;
@@ -643,6 +652,14 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
     }
 
     function emit(ev: NoteEvent | RestEvent, l: number, ei: number, prefix: string, sc: number) {
+      // An ending starts here: its numbers on the bar line before it ("|1", ":|2"), else "[1".
+      if (ev.ending?.length) {
+        const nums = ev.ending.join(',');
+        const k = parts.length - 1;
+        if (k >= 0 && /^(\||:\||\|\||\|\])$/.test(parts[k])) parts[k] += nums;
+        else parts.push(`[${nums}`);
+        beam = null;
+      }
       const len = lengthText(ev.beats * sc, unit);
       const chord = ev.chord && withChords ? `"${ev.chord.replace(/"/g, '')}"` : '';
       order.push([l, ei]);

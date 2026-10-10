@@ -2,7 +2,9 @@
 // (":|x3") — written, read, kept by the editor, and played in order.
 
 import { describe, expect, it } from 'vitest';
+import { endingLabel, endingSpans } from './endings';
 import { fromDoc, toDoc } from './edit/model';
+import { writeAbc } from './formats/abc';
 import { parseHtab } from './htab/parser';
 import { serializeHtab } from './htab/serializer';
 import { playbackScore } from './repeats';
@@ -102,5 +104,29 @@ describe('played in order', () => {
   it('a song without endings plays as before', () => {
     expect(played('4 | 5 |: 6 | -6 :| 7 |')).toBe('4 5 6 -6 6 -6 7');
     expect(played('4 :| 5 :| 6')).toBe('4 4 5 5 6');
+  });
+});
+
+describe('shown on the sheet', () => {
+  const spans = (body: string) => parse(body).doc.lines.map((l) => endingSpans(l.events).map((e) => `${endingLabel(e.nums)}${e.first}-${e.last}${e.closed ? ']' : ''}`).join(' '));
+  it('a bracket from the ending’s first note to its last, hooked where it goes back', () => {
+    // Events: |: 4 | [1.] 5 | 6 :| [2.] 7 || 8 |  → the 1st ending is 5 and 6, the 2nd is 7.
+    expect(spans('|: 4 | [1.] 5 | 6 :| [2.] 7 || 8 |')).toEqual(['1.3-5] 2.7-7']);
+  });
+  it('an ending stops at the end of its line, at "|:", and at the next ending', () => {
+    expect(spans('|: 4 | [1.] 5 | 6\n7 :|')).toEqual(['1.3-5', '']);
+    expect(spans('|: 4 | [1. 2.] 5 |: 6 :|'.replace('[1. 2.]', '[1.2.]'))).toEqual(['1. 2.3-3']);
+    expect(spans('|: 4 | [1.] 5 :| [2.] 6 | [3.] 7 |')).toEqual(['1.3-3] 2.5-5 3.7-7']);
+  });
+
+  it('the staff: "|1" / ":|2" on the bar lines, "×3" over the last note before ":|x3"', () => {
+    const { doc } = parse('|: 4 | [1.] 5 :| [2.] 6 |\n|: 7 7 :|x3');
+    const music = writeAbc(doc, harmonicaFromMeta(doc.meta)).text.split('\n').filter((l) => l.includes('|'));
+    // (ABC's unit is an eighth: a beat is "2".)
+    expect(music[0]).toBe('|: c2 |1 e2 :|2 g2 |');
+    expect(music[1]).toBe('|: c\'2 "^×3"c\'2 :|');
+    // An ending at the start of a line: "[1".
+    const own = parse('|: 4 4 |\n[1.] 5 5 :|\n[2.] 6 6 |').doc;
+    expect(writeAbc(own, harmonicaFromMeta(own.meta)).text).toMatch(/^\[1 e2 e2 :\|2?$/m);
   });
 });

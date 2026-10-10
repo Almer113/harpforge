@@ -21,6 +21,19 @@
 .measure.bar-repeat-start { border-right: 5px double var(--muted); }
 .repeat-dots.right { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 4px; height: 14px; background: radial-gradient(circle, var(--muted) 1.6px, transparent 2px) 0 0 / 4px 7px; }
 .repeat-dots.left { display: none; }
+/* 1st/2nd endings: a bracket over their bars, "1." at its start, a hook where it goes back
+   (":|"). Above the bars, in the room bar numbers use (beside the number when there's one). */
+.tab-line.has-endings { padding-top: 24px; row-gap: 30px; }
+.measure.in-ending::after {
+  content: ''; position: absolute; left: -1px; right: -1px; top: -22px; height: 6px; pointer-events: none;
+  border-top: 1.5px solid var(--muted);
+}
+.measure.ending-start::after { border-left: 1.5px solid var(--muted); left: 2px; }
+.measure.ending-end.closed::after { border-right: 1.5px solid var(--muted); right: 3px; }
+.ending-label { position: absolute; top: -19px; left: 7px; font-size: 11px; font-weight: 700; color: var(--text); line-height: 12px; pointer-events: none; }
+.tab-line.numbered .ending-label { left: 22px; }
+/* ":|x3": how many times, by the repeat sign. */
+.repeat-times { position: absolute; top: -17px; right: 2px; font-size: 11px; font-weight: 700; color: var(--text); line-height: 12px; }
 
 .card {
   display: grid; grid-template-rows: 16px 1fr auto minmax(16px, auto); justify-items: center; align-items: center;
@@ -190,6 +203,9 @@
 /* Holes hidden: the words' holes go; notes without words stay, faint, so a break still shows. */
 .lyricsview.no-holes .ly-syl:not(.fill) .ly-hole { display: none; }
 .lyricsview.no-holes .ly-syl.fill .ly-note { font-size: 12px; opacity: 0.6; }
+
+/* An ending's number over the note it starts on, with the corner of its bracket. */
+.ly-ending { margin-bottom: 2px; padding: 0 4px; border-top: 1.5px solid var(--muted); border-left: 1.5px solid var(--muted); font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 10.5px; line-height: 13px; color: var(--text); }
 
 /* ---------- Verses: stacked under the notes, numbered at each line's first words ---------- */
 .card-lyric.verses { display: flex; flex-direction: column; align-items: stretch; }

@@ -3,6 +3,7 @@
 // The parser is forgiving: it never throws, collects issues with source spans,
 // and accepts common internet tab spellings (+4, 4D, -3b, <5 ...).
 
+import { ordinal } from '../endings';
 import { setLyricOf } from '../verses';
 import { parseNoteName } from '../pitch';
 import type { Breath, HoleSound, Sound } from '../types';
@@ -495,12 +496,6 @@ function checkRepeats(lines: TabLine[], issues: ParseIssue[]) {
     }
   }
   unanswered();
-}
-
-/** 2 → "2nd". */
-function ordinal(n: number): string {
-  const tail = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
-  return `${n}${tail}`;
 }
 
 /**

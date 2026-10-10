@@ -5,6 +5,7 @@
 import { lineShown, lineVerse } from '../core/verses';
 import { memo, useEffect, useMemo, useRef } from 'react';
 import type { NoteEvent, RestEvent } from '../core/htab/types';
+import { endingLabel, ordinal } from '../core/endings';
 import { hasWords, lyricsLine, type LyNote } from '../core/lyricsLayout';
 import { eventsIn, type Passage } from '../core/passage';
 import type { Mark } from '../core/playAlong';
@@ -151,15 +152,22 @@ const LyricsLine = memo(function LyricsLine({
   };
   const names = (idx: number | undefined) => (idx === undefined ? '' : (score.events[idx]?.midis ?? []).map((m) => (m === null ? '?' : midiToName(m, flats))).join(' + '));
 
-  const column = (n: LyNote, wordHere: boolean) => {
+  const column = (n: LyNote, wordHere: boolean, top: boolean) => {
     const ev = line.events[n.ei] as NoteEvent | RestEvent;
     const idx = indexOf(n);
     const isActive = idx !== undefined && activeSet.has(idx);
     const st = states(idx);
     const chord = chordRow && <span className="ly-chord">{n.chord ?? ''}</span>;
+    // An ending starting here: its number, over the note.
+    const ending = top && !!ev.ending?.length && (
+      <span className="ly-ending" title={`An ending: played the ${ev.ending.map(ordinal).join(' and ')} time through`}>
+        {endingLabel(ev.ending)}
+      </span>
+    );
     if (n.kind !== 'note' || ev.kind !== 'note') {
       return (
         <span key={n.ei} className={`ly-note ly-rest ${isActive ? 'active' : ''}`} data-index={idx}>
+          {ending}
           {chord}
           <span className="ly-hole" />
         </span>
@@ -178,6 +186,7 @@ const LyricsLine = memo(function LyricsLine({
         aria-label={`${names(idx)}${st.words ? ` · ${st.words}` : ''}`}
         title={`${names(idx)}${st.words ? ` · ${st.words}` : ''}`}
       >
+        {ending}
         {chord}
         <span className="ly-hole">{asNotes && idx !== undefined ? <NoteNames midis={score.events[idx]?.midis ?? []} flats={flats} /> : <Token ev={ev} />}</span>
       </button>
@@ -213,7 +222,7 @@ const LyricsLine = memo(function LyricsLine({
                 });
                 return (
                   <span key={si} className={`ly-syl ${s.joined ? 'joined' : ''} ${on ? 'active' : ''} ${s.text ? '' : 'fill'}`}>
-                    <span className="ly-notes">{s.notes.map((n, k) => column(n, k === 0 && !!s.text))}</span>
+                    <span className="ly-notes">{s.notes.map((n, k) => column(n, k === 0 && !!s.text, ri === 0))}</span>
                     {s.text && (
                       // The words play from their note too. The note above is the button for the
                       // keyboard, unless the holes are hidden: then the syllable is.

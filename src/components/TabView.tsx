@@ -5,6 +5,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { BarStyle, NoteEvent, RestEvent, TabEvent } from '../core/htab/types';
 import { midiToName, keySpelling, type Spelling } from '../core/pitch';
 import { eventKey } from '../core/score';
+import { endingLabel, endingSpans, ordinal } from '../core/endings';
 import { barNumberAt, barPassage, barStarts, eventsIn, type Passage } from '../core/passage';
 import type { Mark } from '../core/playAlong';
 import type { HoleSound, Sound } from '../core/types';
@@ -49,6 +50,8 @@ interface Props {
 interface Measure {
   items: { ev: NoteEvent | RestEvent; ei: number }[];
   bar?: BarStyle;
+  /** A repeat played more than twice (":|x3"). */
+  times?: number;
 }
 
 function toMeasures(events: TabEvent[]): Measure[] {
@@ -57,6 +60,7 @@ function toMeasures(events: TabEvent[]): Measure[] {
   events.forEach((ev, ei) => {
     if (ev.kind === 'bar') {
       cur.bar = ev.style;
+      if (ev.times) cur.times = ev.times;
       out.push(cur);
       cur = { items: [] };
     } else cur.items.push({ ev, ei });
@@ -225,17 +229,23 @@ const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, m
   const loopSet = indexSet(inLoop);
   const markOf = markMap(marks);
   const starts = onBarClick ? barStarts(score) : [];
+  const endings = endingSpans(line.events);
   return (
     <div className="tab-line-wrap">
       {line.section !== undefined && <div className="tab-section">{line.section}</div>}
       {line.events.length > 0 && (
-        <div className={`tab-line ${onBarClick ? 'numbered' : ''}`}>
+        <div className={`tab-line ${onBarClick ? 'numbered' : ''} ${endings.length ? 'has-endings' : ''}`}>
           {toMeasures(line.events).map((m, mi) => {
+            // Under an ending's bracket: where it starts (its label), and where it closes.
+            const eis = m.items.map((it) => it.ei);
+            const ending = endings.find((e) => eis.some((ei) => ei >= e.first && ei <= e.last));
+            const endingCls = ending ? `in-ending ${eis.includes(ending.first) ? 'ending-start' : ''} ${eis.includes(ending.last) ? `ending-end ${ending.closed ? 'closed' : ''}` : ''}` : '';
             // A bar number where a bar starts (not on the rest of a bar carried over from the line before).
             const firstIdx = m.items.map(({ ei }) => indexByKey.get(eventKey(li, ei))).find((x) => x !== undefined);
             const bar = onBarClick && firstIdx !== undefined ? barNumberAt(score, score.events[firstIdx].start, starts) : null;
             return (
-            <div className={`measure bar-${m.bar ?? 'open'}`} key={mi}>
+            <div className={`measure bar-${m.bar ?? 'open'} ${endingCls}`} key={mi}>
+              {ending && eis.includes(ending.first) && <span className="ending-label" title={`Played the ${ending.nums.map(ordinal).join(' and ')} time through`}>{endingLabel(ending.nums)}</span>}
               {bar !== null && onBarClick && (
                 <button className="bar-num" onClick={(e) => onBarClick(barPassage(score, bar - 1, starts), e.shiftKey)} title={`Bar ${bar}: choose it (Shift: choose up to it)`} aria-label={`Choose bar ${bar}`}>
                   {bar}
@@ -271,6 +281,7 @@ const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, m
                 );
               })}
               {m.bar === 'repeat-end' && <span className="repeat-dots right" />}
+              {m.bar === 'repeat-end' && m.times && m.times > 2 && <span className="repeat-times" title={`Played ${m.times} times through`}>×{m.times}</span>}
             </div>
             );
           })}

@@ -8,6 +8,7 @@ import { isKeyChange, keyDistance, setHarmonica, shiftOctave } from '../state/ac
 import { guessTonic, harpForPosition, octaveOptions, positionFor, positionName } from '../core/convert';
 import { mod12, transposeKey } from '../core/pitch';
 import { describePassage } from '../core/passage';
+import { ordinal } from '../core/endings';
 import { atStart, backToStart, currentPassage, endPassageLoop, extendPassage, holdTrainer, playFrom, startLabel, startTrainer, stop, stopTrainer, toggleLoop, togglePlay, trainerLabel } from '../state/playback';
 import { exitPerform, performResize, togglePerform } from '../state/perform';
 import { TRAINER_CHOICES, useApp, useParsed, type AppState, type TrainerSettings } from '../state/store';
@@ -419,9 +420,7 @@ export function usePlayingPass(): string | null {
 export function passLabel(s: Pick<AppState, 'play' | 'playVerses' | 'playLine' | 'playVerse' | 'playPass'>, linesVerses: number[]): string | null {
   if (s.play === 'stopped') return null;
   if (s.playVerses && s.playLine !== null && (linesVerses[s.playLine] ?? 1) > 1) return `Verse ${s.playVerse + 1}`;
-  if (s.playPass < 2) return null;
-  const n = s.playPass;
-  return `${n}${n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'} time`;
+  return s.playPass < 2 ? null : `${ordinal(s.playPass)} time`;
 }
 
 /** "2nd time" / "Verse 2" in the transport, while it's so. */
