@@ -268,7 +268,10 @@ export function parseMusicXml(xml: string): Imported {
     const repeatEl = barline ? child(barline, 'repeat') : undefined;
     const repeat = repeatEl?.getAttribute('direction');
     const times = Number(repeatEl?.getAttribute('times'));
-    events.push({ kind: 'bar', style: repeat === 'backward' ? 'repeat-end' : style === 'light-heavy' ? 'final' : style === 'light-light' ? 'double' : 'single', ...(repeat === 'backward' && times > 2 ? { times } : {}) });
+    // An ending that stops here without going back: a "||", the tab's way of ending one there.
+    const endingStops = !!barline && ['stop', 'discontinue'].includes(child(barline, 'ending')?.getAttribute('type') ?? '');
+    const plain = style === 'light-heavy' ? 'final' : style === 'light-light' || endingStops ? 'double' : 'single';
+    events.push({ kind: 'bar', style: repeat === 'backward' ? 'repeat-end' : plain, ...(repeat === 'backward' && times > 2 ? { times } : {}) });
     measuresInLine++;
     if (!explicitBreaks && measuresInLine >= 4) {
       lines.push({ events });

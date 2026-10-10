@@ -548,7 +548,8 @@ function MeasurePanel({ song, m }: { song: Song; m: number }) {
             onChange={(e) => apply(updateMeasure(song, m, { endTimes: Number(e.target.value) > 2 ? Number(e.target.value) : undefined }))}
             title="How many times the repeat is played in all (with endings, their numbers say it too)"
           >
-            {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+            {/* (A count written in the text past 8 is offered too.) */}
+            {[...new Set([2, 3, 4, 5, 6, 7, 8, meas.endTimes ?? 2])].sort((x, y) => x - y).map((n) => (
               <option key={n} value={n}>{n === 2 ? 'twice' : `${n} times (:|x${n})`}</option>
             ))}
           </select>

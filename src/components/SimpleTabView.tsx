@@ -85,32 +85,46 @@ interface SimpleMeasure {
  * Splits a line into measures of played notes (rests and ties are left out), with the repeat
  * signs: one by a measure of rests only goes on the nearest measure with notes.
  */
-function measuresOf(events: TabEvent[]): SimpleMeasure[] {
+function measuresOf(events: TabEvent[], carry: { open: boolean; last: SimpleMeasure | null } = { open: false, last: null }): SimpleMeasure[] {
   const out: SimpleMeasure[] = [{ notes: [] }];
-  let open = false;
   events.forEach((ev, ei) => {
     if (ev.kind === 'bar') {
       if (ev.style === 'repeat-end') {
-        const last = [...out].reverse().find((m) => m.notes.length);
+        // (After a line of rests, or at a line's start: the last bar with holes, on a line before.)
+        const last = [...out].reverse().find((m) => m.notes.length) ?? carry.last;
         if (last) {
           last.close = true;
           if (ev.times && ev.times > 2) last.times = ev.times;
         }
       }
       if (out[out.length - 1].notes.length) out.push({ notes: [] });
-      if (ev.style === 'repeat-start') open = true;
+      if (ev.style === 'repeat-start') carry.open = true;
     } else if (ev.kind !== 'note' || ev.tied || !ev.sounds.length) {
       // (A bar starting with a rest: its ending still shows, at its first hole.)
       if (ev.ending && !out[out.length - 1].notes.length) out[out.length - 1].ending = ev.ending;
     } else {
       const m = out[out.length - 1];
       if (ev.ending && !m.notes.length) m.ending = ev.ending;
-      if (open && !m.notes.length) m.open = true;
-      open = false;
+      if (carry.open && !m.notes.length) m.open = true;
+      carry.open = false;
       m.notes.push({ ev, ei });
+      carry.last = m;
     }
   });
   return out.filter((m) => m.notes.length);
+}
+
+const songMeasures = new WeakMap<TabDoc, SimpleMeasure[][]>();
+
+/** Each line's measures, read over the song: a "|:" at a line's end opens the next line's first bar. */
+function measuresFor(doc: TabDoc): SimpleMeasure[][] {
+  let hit = songMeasures.get(doc);
+  if (!hit) {
+    const carry = { open: false, last: null as SimpleMeasure | null };
+    hit = doc.lines.map((l) => measuresOf(l.events, carry));
+    songMeasures.set(doc, hit);
+  }
+  return hit;
 }
 
 /** The first lines of a tab in Simple Tab style, not clickable (library cards). */
@@ -147,7 +161,9 @@ export function SimpleTabView({ parsed, activeEvents, selectedEvent, onSelect, p
     followTo(root.current.querySelector(`[data-index="${activeEvents[activeEvents.length - 1]}"]`));
   }, [activeEvents]);
 
-  const lines = doc.lines.map((l, li) => ({ li, has: l.events.some((e) => e.kind !== 'bar') })).filter((l) => l.has);
+  // (Lines with holes to show, and a section's name on a line of its own.)
+  const measures = measuresFor(doc);
+  const lines = doc.lines.map((l, li) => ({ li, has: measures[li].length > 0 || l.section !== undefined })).filter((l) => l.has);
   if (!lines.length) return <div className="tab-empty"><p>This tab is empty.</p></div>;
 
   // Each line redraws only when its own notes start or stop sounding (or are selected).
@@ -199,8 +215,9 @@ const SimpleLine = memo(function SimpleLine({
   return (
     <>
     {section && <div className="st-section">{section}</div>}
+    {measuresFor(doc)[li].length > 0 && (
     <div className="st-line">
-      {measuresOf(doc.lines[li].events).map((m, mi) => (
+      {measuresFor(doc)[li].map((m, mi) => (
         <span className="st-measure" key={mi}>
           {m.open && <span className="st-repeat" aria-label="Repeat from here" title="Repeat from here">|:</span>}
           {m.ending && (
@@ -234,6 +251,7 @@ const SimpleLine = memo(function SimpleLine({
         </span>
       ))}
     </div>
+    )}
     </>
   );
 });

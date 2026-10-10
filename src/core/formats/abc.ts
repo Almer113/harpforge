@@ -44,6 +44,10 @@ export function parseAbc(text: string): Imported {
   // The bar (counted along the music lines a "w:" line belongs to) each of those notes is in.
   let pendingLyricBars: number[] = [];
   let lyricBar = 0;
+  // An ending to go on the next note or rest (":|2" at a line's end: on the next line's first).
+  let pendingEnding: number[] | undefined;
+  // Words below a rest are sung words only in files HarpForge wrote (elsewhere "_Fine" is a direction).
+  const ownRestWords = /^%\s*HarpForge\b.*below the rests/m.test(src);
   let lastNote: PendingNote | null = null;
   let tieOpen = false;
   let barAcc: Record<string, number> = {};
@@ -239,8 +243,7 @@ export function parseAbc(text: string): Imported {
     let pendingChord: string | undefined;
     // Words written below a rest ("_roll"z2): sung over it (a verse each, " / " between).
     let pendingBelow: string | undefined;
-    // An ending to go on the next note or rest; a repeat count for the next ":|".
-    let pendingEnding: number[] | undefined;
+    // A repeat count for the next ":|".
     let pendingTimes: number | undefined;
     let tuplet: { left: number; factor: number } | null = null;
     let broken: number | null = null; // multiplier for the next note
@@ -322,7 +325,7 @@ export function parseAbc(text: string): Imported {
         const timesMark = /^\^\s*(?:[×x]\s*(\d{1,2})|(\d{1,2})\s*[×x])\s*$/.exec(content);
         if (timesMark) pendingTimes = Number(timesMark[1] ?? timesMark[2]);
         else if (content && !/^[\^_<>@]/.test(content)) pendingChord = content.trim();
-        else if (content.startsWith('_') && content.length > 1) pendingBelow = content.slice(1);
+        else if (ownRestWords && content.startsWith('_') && content.length > 1) pendingBelow = content.slice(1).replace(/\\%/g, '%');
         i = j < 0 ? s.length : j + 1;
         continue;
       }
@@ -573,6 +576,8 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
   const keyText = keyFifths(meta.key) !== null ? meta.key!.replace(/^\s*(Low|High)\s+/i, '') : 'C';
   const unit = 1 / 8;
   const out: string[] = [`X:${opts.index ?? 1}`];
+  // (Words sung over rests written below them: said, so they're read back as words.)
+  let wroteRestWords = false;
   if (withHeader) {
     out.push(`T:${meta.title || 'Untitled'}`);
     if (meta.artist) out.push(`C:${meta.artist}`);
@@ -592,13 +597,18 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
     let len = 0;
     for (const line of doc.lines) {
       for (const e of line.events) {
-        if (e.kind === 'bar') return len;
+        // (A bar line before any music, as a "|:" opening the song, isn't the first bar's end.)
+        if (e.kind === 'bar') {
+          if (len > 1e-6) return len;
+          continue;
+        }
         len += e.beats;
       }
     }
     return len;
   })();
   const barLen = beatsPerBar(meta);
+  let anyMusic = false;
   let pos = firstBar > 1e-6 && firstBar < barLen - 1e-6 ? barLen - firstBar : 0;
   let beam: { group: number; end: number } | null = null;
   /** The parts written, as a line: a part in `glued` touches the one before it (a beam). */
@@ -650,7 +660,8 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
         }
         parts.push({ single: '|', double: '||', final: '|]', 'repeat-start': '|:', 'repeat-end': ':|' }[e.style]);
         barAcc = {};
-        pos = 0;
+        // (A bar line before any music — the song's opening "|:" — leaves a pickup's place.)
+        if (anyMusic) pos = 0;
         beam = null;
         i++;
         continue;
@@ -692,9 +703,11 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
       order.push([l, ei]);
       const start = pos;
       pos += ev.beats;
+      anyMusic = true;
       if (ev.kind === 'rest') {
-        const words = restsBelow ? lineList.map((v) => lyricOf(ev, v)?.trim().replace(/["/]/g, '') ?? '') : [];
+        const words = restsBelow ? lineList.map((v) => lyricOf(ev, v)?.trim().replace(/["/]/g, '').replace(/%/g, '\\%') ?? '') : [];
         const below = words.some(Boolean) ? `"_${words.slice(0, words.map(Boolean).lastIndexOf(true) + 1).join(' / ')}"` : '';
+        if (below && opts.restWords) wroteRestWords = true;
         parts.push(`${prefix}${chord}${below}z${len}`);
         lastTieable = null;
         beam = null;
@@ -751,5 +764,6 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
       out.push('w: ' + text);
     }
   });
+  if (wroteRestWords) out.splice(1, 0, '% HarpForge: words sung over rests are written below the rests');
   return { text: out.join('\n') + '\n', order };
 }

@@ -159,7 +159,10 @@ export function stopChecking(record = true) {
  */
 function endPass(wrap: boolean) {
   if (!checker) return;
-  const result = asWritten(checker.result());
+  // With the microphone listening, a note at the loop's very end is heard only after it comes
+  // round: it isn't counted either way (rather than always missed).
+  const heardBy = wrap && loop && useApp.getState().mic.status === 'on' ? loop.end - micLag() : undefined;
+  const result = asWritten(checker.result(heardBy));
   const marks = useApp.getState().alongMarks;
   checker.reset();
   if (result.total === 0) return;
@@ -247,9 +250,9 @@ const CAL_CLICKS = 8;
 /**
  * Measures the microphone's delay: plays a bar of clicks to get ready, then 8 more; you play
  * any note on your harmonica with each of those. Saves and returns the delay in ms (null if
- * too few notes were heard near the clicks).
+ * too few notes were heard near the clicks; 'cancelled' when stopped, or Play took over).
  */
-export async function calibrateMic(): Promise<number | null> {
+export async function calibrateMic(): Promise<number | null | 'cancelled'> {
   stop();
   if (useApp.getState().mic.status !== 'on') await startMic();
   if (useApp.getState().mic.status !== 'on') return null;
@@ -268,7 +271,11 @@ export async function calibrateMic(): Promise<number | null> {
   const until = Date.now() + ((total + 1) * 60 * 1000) / CAL_BPM;
   while (Date.now() < until && useApp.getState().calibrating) await new Promise((r) => setTimeout(r, 100));
   off();
-  if (!useApp.getState().calibrating) return null;
+  if (!useApp.getState().calibrating) {
+    // (Stopped, or the page left: the clicks stop too — unless Play has taken over.)
+    if (useApp.getState().play === 'stopped') engine.stopPlayback();
+    return 'cancelled';
+  }
   useApp.setState({ calibrating: false });
   engine.stopPlayback();
   const ms = latencyFrom(offsets, CAL_BPM);

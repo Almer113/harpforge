@@ -112,8 +112,9 @@ export function englishForSinging(word: string, parts: string[]): string[] {
   if (last.length > 3 && /ing$/i.test(last) && /[aeiouy]/i.test(last.slice(0, -3))) parts = [...parts.slice(0, -1), last.slice(0, -3), last.slice(-3)];
   const first = parts[0] ?? word;
   const vcv = lower.length >= 3 && isVowel(lower[0]) && !isVowel(lower[1]) && !'yw'.includes(lower[1]) && isVowel(lower[2]);
-  // (A word ending in a silent e — "use", "are", "eve", "used", "ones" — is one syllable.)
-  const silentE = (lower.length === 3 && lower[2] === 'e') || /^[aeiou][^aeiou]e[ds]$/.test(lower);
+  // (A word ending in a silent e — "use", "are", "eve", "used", "ones" — is one syllable; not
+  // "ages", "aces": after a hissing sound, "-es" is a syllable of its own.)
+  const silentE = (lower.length === 3 && lower[2] === 'e') || /^[aeiou](?:[^aeiou]ed|[^aeioucgsxz]es)$/.test(lower);
   if (vcv && !silentE && first.length >= 3) return [word.slice(0, 1), first.slice(1), ...parts.slice(1)];
   return parts;
 }

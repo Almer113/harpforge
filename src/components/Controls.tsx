@@ -247,6 +247,7 @@ export function PlayStop({ perform = false }: { perform?: boolean }) {
   const recording = useApp((s) => s.recording);
   const page = useApp((s) => s.page);
   const countIn = useApp((s) => s.countIn);
+  const calibrating = useApp((s) => s.calibrating);
   // "Looping bars 5–8" while a passage loops; "Bars 5–8" for a chosen passage not looped yet.
   const loopRange = useApp((s) => (s.loop ? s.loopRange : null));
   const { doc, score } = useParsed();
@@ -268,8 +269,9 @@ export function PlayStop({ perform = false }: { perform?: boolean }) {
       {/* Stopped, Stop goes back to the start (when a place is chosen). */}
       <button
         className="t-btn"
-        onClick={() => (play === 'stopped' ? backToStart() : stop())}
-        disabled={(play === 'stopped' && startHere) || !!recording}
+        // (A microphone calibration's clicks stop too.)
+        onClick={() => (play === 'stopped' && !calibrating ? backToStart() : stop())}
+        disabled={(play === 'stopped' && startHere && !calibrating) || !!recording}
         title={play === 'stopped' ? 'Back to the start' : perform ? 'Stop' : 'Stop (Esc)'}
         aria-label={play === 'stopped' ? 'Back to the start' : 'Stop'}
       >
@@ -541,7 +543,7 @@ export function useTransportKeys() {
         // (In full screen the browser takes Esc itself, and leaving it ends performance mode.)
         if (st.performing) exitPerform();
         else if (st.recording) stopRecording();
-        else if (st.play !== 'stopped') stop();
+        else if (st.play !== 'stopped' || st.calibrating) stop();
         // Stopped, a step a press: the editor's selection, the passage loop, the trainer, the
         // chosen passage, then back to the start.
         else if (st.page === 'editor' && st.ve.selection.length) st.setVe({ selection: [] });

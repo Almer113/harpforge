@@ -233,7 +233,11 @@ async function seedOnce(): Promise<Map<string, string>> {
       // (one you've changed is yours, and stays as it is beside the new one).
       const old = tabs.find((t) => d.replaces?.includes(t.text));
       await saveTab(d.text, old?.id);
-      if (old) updated.set(old.id, d.text);
+      if (old) {
+        // (Not a change of yours: it keeps its place in "Recently changed".)
+        await db.tabs.update(old.id, { updatedAt: old.updatedAt });
+        updated.set(old.id, d.text);
+      }
     }
   });
   // Only remember the demos once they're really in the library.

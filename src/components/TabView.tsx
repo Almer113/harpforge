@@ -1,11 +1,11 @@
 // Visual tab sheet: lines → measures → note cards, sized by duration.
 
 import { lineShown, lineVerse, lineVerses, lyricOf } from '../core/verses';
-import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { BarStyle, NoteEvent, RestEvent, TabEvent } from '../core/htab/types';
 import { midiToName, keySpelling, type Spelling } from '../core/pitch';
 import { eventKey } from '../core/score';
-import { endingLabel, endingSpans, ordinal } from '../core/endings';
+import { endingLabel, lineEndings, ordinal, type EndingSpan } from '../core/endings';
 import { barNumberAt, barPassage, barStarts, eventsIn, type Passage } from '../core/passage';
 import type { Mark } from '../core/playAlong';
 import type { HoleSound, Sound } from '../core/types';
@@ -97,6 +97,8 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, sh
   const root = useRef<HTMLDivElement>(null);
   const click = useStableClick(onCardClick);
   const barClick = useStableClick(onBarClick);
+  // Each line's ending brackets, worked out over the song (a 1st ending may wrap).
+  const endingsByLine = useMemo(() => lineEndings(doc).map((list) => JSON.stringify(list)), [doc]);
 
   useEffect(() => {
     if (!follow || !activeEvents.length || !root.current) return;
@@ -141,6 +143,7 @@ export function TabView({ parsed, activeEvents, selectedEvent, showNoteNames, sh
           showLyrics={showLyrics}
           verses={verses.join(',')}
           singing={singing ?? -1}
+          endings={endingsByLine[li]}
           showChords={showChords}
           numbers={numbers}
           asNotes={asNotes}
@@ -172,6 +175,8 @@ interface TabLineProps {
   verses: string;
   /** The verse being sung (-1: none). */
   singing: number;
+  /** This line's ending brackets, as JSON (compared as a string). */
+  endings: string;
   showChords: boolean;
   numbers: boolean;
   asNotes: boolean;
@@ -215,7 +220,7 @@ export function markClass(mark: string | undefined): { cls: string; words: strin
 }
 
 /** One line of the sheet (redrawn only when something in it changes). */
-const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, marks, selected, showNoteNames, showLyrics, verses, singing, showChords, numbers, asNotes, flats, doPc, onCardClick, onBarClick }: TabLineProps) {
+const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, marks, selected, showNoteNames, showLyrics, verses, singing, endings: endingsJson, showChords, numbers, asNotes, flats, doPc, onCardClick, onBarClick }: TabLineProps) {
   const { doc, score, indexByKey, harp } = parsed;
   const line = doc.lines[li];
   // More than one verse: each row is numbered at the line's first syllable of it.
@@ -229,7 +234,7 @@ const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, m
   const loopSet = indexSet(inLoop);
   const markOf = markMap(marks);
   const starts = onBarClick ? barStarts(score) : [];
-  const endings = endingSpans(line.events);
+  const endings = JSON.parse(endingsJson) as EndingSpan[];
   return (
     <div className="tab-line-wrap">
       {line.section !== undefined && <div className="tab-section">{line.section}</div>}
@@ -239,13 +244,14 @@ const TabLine = memo(function TabLine({ parsed, li, active, inPassage, inLoop, m
             // Under an ending's bracket: where it starts (its label), and where it closes.
             const eis = m.items.map((it) => it.ei);
             const ending = endings.find((e) => eis.some((ei) => ei >= e.first && ei <= e.last));
-            const endingCls = ending ? `in-ending ${eis.includes(ending.first) ? 'ending-start' : ''} ${eis.includes(ending.last) ? `ending-end ${ending.closed ? 'closed' : ''}` : ''}` : '';
+            const opens = !!ending && !ending.continued && eis.includes(ending.first);
+            const endingCls = ending ? `in-ending ${opens ? 'ending-start' : ''} ${eis.includes(ending.last) ? `ending-end ${ending.closed ? 'closed' : ''}` : ''}` : '';
             // A bar number where a bar starts (not on the rest of a bar carried over from the line before).
             const firstIdx = m.items.map(({ ei }) => indexByKey.get(eventKey(li, ei))).find((x) => x !== undefined);
             const bar = onBarClick && firstIdx !== undefined ? barNumberAt(score, score.events[firstIdx].start, starts) : null;
             return (
             <div className={`measure bar-${m.bar ?? 'open'} ${endingCls}`} key={mi}>
-              {ending && eis.includes(ending.first) && <span className="ending-label" title={`Played the ${ending.nums.map(ordinal).join(' and ')} time through`}>{endingLabel(ending.nums)}</span>}
+              {ending && opens && <span className="ending-label" title={`Played the ${ending.nums.map(ordinal).join(' and ')} time through`}>{endingLabel(ending.nums)}</span>}
               {bar !== null && onBarClick && (
                 <button className="bar-num" onClick={(e) => onBarClick(barPassage(score, bar - 1, starts), e.shiftKey)} title={`Bar ${bar}: choose it (Shift: choose up to it)`} aria-label={`Choose bar ${bar}`}>
                   {bar}

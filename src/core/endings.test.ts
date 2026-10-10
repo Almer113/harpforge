@@ -152,8 +152,9 @@ describe('in the editor', () => {
 
   it('warns about two endings for the same time through, but not across repeats', () => {
     expect(parse('|: 4 | [1.2.] 5 :| [2.] 6 |').issues.map((i) => i.message).join(' ')).toMatch(/Two endings for the 2nd time/);
-    // (The second repeat has no "|:": its endings are its own.)
-    expect(parse('|: 4 | [1.] 5 :| [2.] 6 | 7 | [1.] 8 :| [2.] 9 |').issues).toEqual([]);
+    // (The second repeat has no "|:": its endings are its own, once the first's 2nd ending
+    // has ended — here at "||".)
+    expect(parse('|: 4 | [1.] 5 :| [2.] 6 || 7 | [1.] 8 :| [2.] 9 |').issues).toEqual([]);
   });
 });
 

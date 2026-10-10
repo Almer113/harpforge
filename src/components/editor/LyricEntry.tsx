@@ -73,6 +73,8 @@ export function LyricInput({ pos, verse, draft }: { pos: Pos; verse: number; dra
   const live = useRef({ text, was });
   // An input method putting a word together (its Space and Enter choose, they don't move on).
   const composing = useRef(false);
+  // (What the input method finished with: some browsers send it again as a change, after.)
+  const composed = useRef<string | null>(null);
   useEffect(() => {
     live.current = { text, was };
   });
@@ -180,12 +182,18 @@ export function LyricInput({ pos, verse, draft }: { pos: Pos; verse: number; dra
       size={Math.max(4, text.length + 1)}
       aria-label={`Words for this note${verse ? ` (verse ${verse + 1})` : ''}`}
       aria-describedby="lyric-keys"
-      onChange={(e) => (composing.current ? setText(e.target.value) : take(e.target.value))}
+      onChange={(e) => {
+        if (composing.current) return setText(e.target.value);
+        if (composed.current === e.target.value) return;
+        composed.current = null;
+        take(e.target.value);
+      }}
       onCompositionStart={() => {
         composing.current = true;
       }}
       onCompositionEnd={(e) => {
         composing.current = false;
+        composed.current = e.currentTarget.value;
         take(e.currentTarget.value);
       }}
       // A paste: its lines are words like any others (and it's one undo step).
@@ -218,7 +226,8 @@ export function LyricInput({ pos, verse, draft }: { pos: Pos; verse: number; dra
         let action: LyricKey | 'cancel' | 'beat' | null = null;
         // (By the key's place: Option+Space on a Mac types a non-breaking space. Ctrl+→ too,
         // where the system takes Alt+Space for itself.)
-        if ((e.code === 'Space' && e.altKey) || (ctrl && key === 'ArrowRight')) action = 'beat';
+        // (Ctrl only: Cmd+→ and Ctrl+Shift+→ keep moving and selecting in the box.)
+        if ((e.code === 'Space' && e.altKey) || (e.ctrlKey && !e.metaKey && !e.shiftKey && key === 'ArrowRight')) action = 'beat';
         else if (key === ' ' || key === 'Tab') action = e.shiftKey ? 'prev' : 'next';
         else if (key === '-') action = 'join';
         else if (key === '_') action = 'hold';

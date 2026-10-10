@@ -23,6 +23,7 @@ export interface Parsed {
 }
 
 let parsedCache: Parsed | null = null;
+let parsedBefore: Parsed | null = null;
 
 /** Parses .htab text into everything the views need (not cached). */
 export function makeParsed(text: string): Parsed {
@@ -34,9 +35,17 @@ export function makeParsed(text: string): Parsed {
   return { text, doc, harp, score: built.score, issues: [...issues, ...built.issues], indexByKey };
 }
 
-/** Parses the current text (memoized on the text). */
+/**
+ * Parses the current text (memoized on the text). The one before is kept too: after an edit,
+ * what changed is worked out from both, without parsing either again.
+ */
 export function getParsed(text: string): Parsed {
   if (parsedCache && parsedCache.text === text) return parsedCache;
+  if (parsedBefore && parsedBefore.text === text) {
+    [parsedCache, parsedBefore] = [parsedBefore, parsedCache];
+    return parsedCache!;
+  }
+  parsedBefore = parsedCache;
   parsedCache = makeParsed(text);
   return parsedCache;
 }

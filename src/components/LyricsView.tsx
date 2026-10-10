@@ -240,6 +240,8 @@ const LyricsLine = memo(function LyricsLine({
                         }}
                       >
                         {s.text}
+                        {/* (Its own element: the mark of a note played along goes on ::after.) */}
+                        {s.joined && <span className="ly-dash" aria-hidden />}
                       </span>
                     )}
                   </span>

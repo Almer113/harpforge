@@ -1,6 +1,7 @@
 // Performance mode: the Play page's music fills the screen (in full screen when the browser
 // allows it), bigger, with the screen kept awake. Leaving full screen (Esc) leaves it too.
 
+import { lastPlayedNote } from './playback';
 import { stopPractice } from './practice';
 import { DEFAULT_PERFORM_SIZE, PERFORM_SIZES, useApp } from './store';
 
@@ -64,10 +65,10 @@ export function performResize(dir: -1 | 0 | 1) {
   useApp.setState({ performSize: next });
 }
 
-/** The note you're at: the one playing, else the selected one (its element on the sheet). */
+/** The note you're at: the one playing (or paused at), else the selected one (its element on the sheet). */
 function noteHere(): Element | null {
   const s = useApp.getState();
-  const at = s.activeEvents.at(-1) ?? s.selectedEvent;
+  const at = s.activeEvents.at(-1) ?? lastPlayedNote() ?? s.selectedEvent;
   return at !== null && at !== undefined ? document.querySelector(`.sheet [data-index="${at}"]`) : null;
 }
 
@@ -76,7 +77,14 @@ function noteHere(): Element | null {
 useApp.subscribe((s, prev) => {
   if (!s.performing || s.play === 'playing' || (s.performSize === prev.performSize && s.sheetView === prev.sheetView)) return;
   if (typeof requestAnimationFrame === 'undefined') return;
-  requestAnimationFrame(() => requestAnimationFrame(() => noteHere()?.scrollIntoView({ block: 'center' })));
+  // (A view loaded for the first time can take a few frames to be drawn.)
+  let tries = 0;
+  const go = () => {
+    const note = noteHere();
+    if (note) note.scrollIntoView({ block: 'center' });
+    else if (++tries < 60) requestAnimationFrame(go);
+  };
+  requestAnimationFrame(() => requestAnimationFrame(go));
 });
 
 // Another page (Back, a link) ends performance mode.

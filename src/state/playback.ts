@@ -268,6 +268,12 @@ export function togglePlay() {
   else void play();
 }
 
+/** The written note last started, while playing or paused (null when stopped). */
+export function lastPlayedNote(): number | null {
+  if (useApp.getState().play === 'stopped' || !playing || playingAt < 0) return null;
+  return playing.orig[playingAt] ?? null;
+}
+
 /** Plays from event `index` (clicking a card while playing jumps there). */
 export function playFrom(index: number) {
   const s = useApp.getState();

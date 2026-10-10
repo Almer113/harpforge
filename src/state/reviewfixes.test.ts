@@ -188,3 +188,16 @@ describe('the pass shown while playing', () => {
     expect(s().playLine).toBeNull();
   });
 });
+
+it('paused, the note you’re at is the one last played (performance mode goes back to it)', async () => {
+  const { lastPlayedNote } = await import('./playback');
+  s().loadText('---\ntitle: P\n---\n4 5 6 7 |\n', null);
+  useApp.setState({ selectedEvent: 0 });
+  await play();
+  (last()[1] as unknown as { onEvent: (i: number, on: boolean) => void }).onEvent(2, true);
+  pause();
+  expect(s().activeEvents).toEqual([]);
+  expect(lastPlayedNote()).toBe(2);
+  stop();
+  expect(lastPlayedNote()).toBeNull();
+});

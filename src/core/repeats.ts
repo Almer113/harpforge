@@ -7,7 +7,8 @@
 // end of that repeat (or the start of the song). :|: ends one repeat and starts the next.
 // First and second endings aren't written in the format, so they aren't played.
 
-import type { BarStyle, TabDoc } from './htab/types';
+import { docBars, type WrittenBar } from './endings';
+import type { TabDoc } from './htab/types';
 import type { Score, ScoreEvent } from './score';
 import { lineVerses } from './verses';
 
@@ -25,82 +26,6 @@ export interface PlaybackScore {
   verse: number[];
   /** Whether it isn't just the written score (repeats or verses played). */
   repeats: boolean;
-}
-
-/** A bar as written, for working out the order it's played in. */
-interface WrittenBar {
-  from: number;
-  to: number;
-  line: number;
-  /** A repeat starts here ("|:"). */
-  start: boolean;
-  /** It ends a repeat (":|"), played `times` times through (unset: as many as its endings say, else 2). */
-  end: boolean;
-  times?: number;
-  /** How it ends: a double or final bar line stops an ending. */
-  endStyle: BarStyle | 'none';
-  /** It starts an ending ("[1.]"). */
-  ending?: number[];
-  /** The ending it's part of (its first bar's index) and the times through that ending plays. */
-  region?: { id: number; nums: number[] };
-}
-
-/** The song's bars as written (a line's end without a bar line ends one too). */
-function writtenBars(doc: TabDoc): WrittenBar[] {
-  const bars: WrittenBar[] = [];
-  let t = 0;
-  let cur: WrittenBar = { from: 0, to: 0, line: 0, start: false, end: false, endStyle: 'none' };
-  let touched = false;
-  const close = (style: BarStyle | 'none', times?: number) => {
-    cur.to = t;
-    cur.endStyle = style;
-    if (style === 'repeat-end') {
-      cur.end = true;
-      if (times) cur.times = times;
-    }
-    bars.push(cur);
-    cur = { from: t, to: t, line: cur.line, start: false, end: false, endStyle: 'none' };
-    touched = false;
-  };
-  doc.lines.forEach((line, li) => {
-    if (touched) close('none');
-    cur.line = li;
-    for (const ev of line.events) {
-      if (ev.kind === 'bar') {
-        if (touched) close(ev.style, ev.times);
-        // ("|: :|" with nothing between: an empty repeat, which plays nothing.)
-        else if (ev.style === 'repeat-end' && cur.start) close(ev.style, ev.times);
-        else if (ev.style === 'repeat-end' && bars.length) {
-          // (":|" with no music since the last bar line: it ends that bar.)
-          const last = bars[bars.length - 1];
-          last.end = true;
-          last.endStyle = 'repeat-end';
-          if (ev.times) last.times = ev.times;
-        }
-        if (ev.style === 'repeat-start') cur.start = true;
-        continue;
-      }
-      if (ev.beats <= EPS) continue;
-      if (!touched && ev.ending) cur.ending = ev.ending;
-      touched = true;
-      t += ev.beats;
-    }
-  });
-  if (touched) close('none');
-  // An ending runs from its bar to its ":|", a double or final bar line, the next "|:" or
-  // ending, or the end of its line — whichever comes first.
-  for (let i = 0; i < bars.length; i++) {
-    const nums = bars[i].ending;
-    if (!nums) continue;
-    const region = { id: i, nums };
-    for (let j = i; j < bars.length; j++) {
-      const b = bars[j];
-      if (j > i && (b.start || b.ending || b.line !== bars[i].line)) break;
-      b.region = region;
-      if (b.end || b.endStyle === 'double' || b.endStyle === 'final') break;
-    }
-  }
-  return bars;
 }
 
 /** How many times through the repeat from bar `start` to its ":|" at bar `end`: its "x3", else its highest ending, else 2. */
@@ -121,7 +46,7 @@ function timesThrough(bars: WrittenBar[], start: number, end: number): number {
  * endings that went back, and goes on from the ending numbered for it.
  */
 export function playOrder(doc: TabDoc, total: number): { from: number; to: number; pass: number }[] {
-  const bars = writtenBars(doc).filter((b) => b.to > b.from + EPS || b.end);
+  const bars = docBars(doc).filter((b) => b.to > b.from + EPS || b.end);
   const out: { from: number; to: number; pass: number }[] = [];
   const play = (b: WrittenBar, pass: number) => {
     if (b.to <= b.from + EPS) return;
@@ -129,12 +54,12 @@ export function playOrder(doc: TabDoc, total: number): { from: number; to: numbe
     if (last && last.pass === pass && Math.abs(last.to - b.from) < EPS) last.to = b.to;
     else out.push({ from: b.from, to: b.to, pass });
   };
-  // Where a ":|" goes back to, which time through this is, and whether the repeat has been left
-  // by skipping the ending that went back (its last ending still plays as that time through).
+  // Where a ":|" goes back to, which time through this is, and whether the repeat is done with
+  // (its last time through: the endings right after it still play as that time).
   let start = 0;
   let pass = 1;
   let leaving = false;
-  for (let i = 0, guard = 0; i < bars.length && guard < 100000; guard++) {
+  for (let i = 0, guard = 0; i < bars.length && guard < bars.length * 64 + 1000; guard++) {
     const b = bars[i];
     if (b.start && i !== start) {
       start = i;
@@ -161,12 +86,12 @@ export function playOrder(doc: TabDoc, total: number): { from: number; to: numbe
       if (pass < timesThrough(bars, start, i)) {
         pass++;
         i = start;
+        leaving = false;
         continue;
       }
-      // Done: a ":|" after this goes back to just after it.
-      start = i + 1;
-      pass = 1;
-      leaving = false;
+      // Done: the endings straight after it are its last time's; then a ":|" goes back to
+      // just after them.
+      leaving = true;
     }
     i++;
   }
@@ -220,7 +145,9 @@ export function playbackScore(doc: TabDoc, score: Score, opts: { repeats?: boole
   const key = `${repeats}:${rounds}`;
   const hit = cache.get(score)?.get(key);
   if (hit) return hit;
-  const result = rounds === 1 && order.length === 1 && order[0].from < EPS ? writtenScore(score) : unroll(score, order, rounds, times, versesOf);
+  // (A song with endings plays every time through to its end, so a repeat ends on its last ending.)
+  const endings = doc.lines.some((l) => l.events.some((e) => e.kind !== 'bar' && !!e.ending?.length));
+  const result = rounds === 1 && order.length === 1 && order[0].from < EPS ? writtenScore(score) : unroll(score, order, rounds, times, versesOf, endings);
   if (!cache.has(score)) cache.set(score, new Map());
   cache.get(score)!.set(key, result);
   return result;
@@ -239,7 +166,7 @@ function linePasses(score: Score, order: Stretch[]): Map<number, number> {
   return most;
 }
 
-function unroll(score: Score, order: Stretch[], rounds: number, times: Map<number, number>, versesOf: number[]): PlaybackScore {
+function unroll(score: Score, order: Stretch[], rounds: number, times: Map<number, number>, versesOf: number[], endings: boolean): PlaybackScore {
   const events: ScoreEvent[] = [];
   const orig: number[] = [];
   const pass: number[] = [];
@@ -253,7 +180,7 @@ function unroll(score: Score, order: Stretch[], rounds: number, times: Map<numbe
     for (const { from, to, pass: n } of order) {
       // In the last time through, a stretch whose words have all been sung (a third verse
       // that only fills half of a repeat) isn't played again.
-      if (r > 0 && r === rounds - 1) {
+      if (r > 0 && r === rounds - 1 && !endings) {
         const sung = score.events.filter((ev) => ev.start >= from - EPS && ev.start < to - EPS && (versesOf[ev.line] ?? 1) > 1);
         if (sung.length && sung.every((ev) => verseAt(ev, r, n) >= versesOf[ev.line])) continue;
       }
@@ -262,9 +189,11 @@ function unroll(score: Score, order: Stretch[], rounds: number, times: Map<numbe
       for (const ev of score.events) {
         if (ev.start < from - EPS || ev.start >= to - EPS) continue;
         // A tie whose note isn't the one played just before it (the start of a repeat, after
-        // the jump back) has nothing to continue: it's played as a note of its own.
+        // the jump back) has nothing to continue: it's played as a note of its own — unless
+        // that note sounds the same (a note tied into both a 1st and a 2nd ending).
         const after = events.at(-1);
-        const tied = ev.tied && !!after && orig.at(-1) === ev.index - 1 && !after.rest;
+        const sameSound = !!after && after.midis.join() === ev.midis.join();
+        const tied = ev.tied && !!after && !after.rest && (orig.at(-1) === ev.index - 1 || sameSound);
         events.push({ ...ev, index: events.length, start: at + ev.start - from, soundBeats: ev.beats, tied });
         orig.push(ev.index);
         pass.push(n);

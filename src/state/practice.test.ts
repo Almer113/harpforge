@@ -89,3 +89,21 @@ describe('practice mode follows the order played', () => {
     useApp.setState({ practice: null, playRepeats: true });
   });
 });
+
+it('switching repeats off mid-practice goes on from the same note', () => {
+  useApp.getState().loadText('---\nharmonica: diatonic\nharp-key: C\n---\n|: 4 5 :| 6 |\n', null);
+  useApp.setState({ selectedEvent: null, playRepeats: true });
+  startPractice();
+  for (const hole of [4, 5, 4]) {
+    play('k', hole, 'blow');
+    release('k');
+  }
+  // The second time through, at its 5.
+  expect(useApp.getState().practice!.index).toBe(1);
+  useApp.setState({ playRepeats: false });
+  play('k', 5, 'blow');
+  release('k');
+  // As written now: on to the 6.
+  expect(useApp.getState().practice!.index).toBe(2);
+  useApp.setState({ practice: null, playRepeats: true });
+});

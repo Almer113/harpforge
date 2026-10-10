@@ -193,8 +193,8 @@
 .ly-syl.joined + .ly-syl .ly-text { padding-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
 /* (Clear of the letters by its own transparent ends; never shorter than a hyphen, so a word
    whose notes are close together still reads as one: "ri - ver", not "ri ver".) */
-.ly-syl.joined .ly-text::after {
-  content: ''; flex: 1; min-width: 12px; height: 1.5px; opacity: 0.6;
+.ly-syl.joined .ly-text > .ly-dash {
+  flex: 1; min-width: 12px; height: 1.5px; opacity: 0.6;
   background: linear-gradient(90deg, transparent 3px, currentColor 3px, currentColor calc(100% - 3px), transparent calc(100% - 3px));
 }
 /* Fills (notes with no words, lines without lyrics): a compact row of holes. */

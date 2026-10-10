@@ -149,6 +149,13 @@ export function practiceTotal(): number {
   return practiceOrder().score.events.filter(playable).length;
 }
 
+// Repeats switched on or off while practising: the same note, found in the new order.
+useApp.subscribe((s, prev) => {
+  if (!s.practice || s.playRepeats === prev.playRepeats || s.text !== prev.text) return;
+  const at = playbackIndexOf(practiceOrder(), s.practice.index);
+  if (at !== undefined && at !== s.practice.at) useApp.setState({ practice: { ...s.practice, at } });
+});
+
 // Editing the tab (or opening another) ends practice; after a few notes, the session joins
 // that song's history.
 useApp.subscribe((s, prev) => {

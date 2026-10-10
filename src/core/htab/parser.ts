@@ -3,7 +3,7 @@
 // The parser is forgiving: it never throws, collects issues with source spans,
 // and accepts common internet tab spellings (+4, 4D, -3b, <5 ...).
 
-import { ordinal } from '../endings';
+import { docBars, ordinal } from '../endings';
 import { setLyricOf } from '../verses';
 import { parseNoteName } from '../pitch';
 import type { Breath, HoleSound, Sound } from '../types';
@@ -250,9 +250,10 @@ function parseRange(ctx: Ctx, from: number, to: number, inGroup: boolean): TabEv
     }
 
     // An ending: "[1.]", "[2.]", "[1.2.]" — the bar it starts is played those times through.
-    const ending = c === '[' ? /^\[((?:\d{1,2}\.)+)\]/.exec(s.slice(i, to)) : null;
+    // (Also "[1.2]" and "[1. 2.]": a number with a dot first, so a chord like "[1]" stays one.)
+    const ending = c === '[' ? /^\[(\d{1,2}\.(?:\s*\d{1,2}\.?)*)\s*\]/.exec(s.slice(i, to)) : null;
     if (ending) {
-      const nums = ending[1].split('.').filter(Boolean).map(Number);
+      const nums = (ending[1].match(/\d+/g) ?? []).map(Number);
       if (inGroup) issue(ctx, 'An ending ("[1.]") starts a bar: it can’t go inside { }', i, i + ending[0].length);
       else if (nums.some((n) => n < 1)) issue(ctx, 'Endings are numbered from 1', i, i + ending[0].length, 'warning');
       // (A marker for now: it goes onto the bar's first note or rest once the line is read.)
@@ -459,65 +460,65 @@ export function placeEndings(events: TabEvent[], issues: ParseIssue[]) {
 
 /**
  * Repeats that won't play as they look, said: a "|:" while another repeat is still open
- * (repeats inside repeats aren't played: the first "|:" is forgotten); a 1st ending with no
- * ":|" to go back from; a 2nd (or later) ending with no 1st before it; two endings for the
- * same time through.
+ * (repeats inside repeats aren't played: the first "|:" is forgotten); a 1st ending that
+ * doesn't reach a ":|" to go back from; a 2nd (or later) ending with no 1st before it; two
+ * endings for the same time through; a ":|x3" whose endings stop short of the 3rd time.
+ * (Endings by the same rule they're played by: see endings.ts.)
  */
 function checkRepeats(lines: TabLine[], issues: ParseIssue[]) {
   let open = false;
-  // Since the last "|:" (or the start): an ending that plays the first time through, and a
-  // 1st ending still waiting for its ":|".
-  let hadFirst = false;
-  let waiting: Span | null = null;
-  // The times through this repeat's endings are for so far; they're done with once a bar with
-  // no ending comes after its ":|" (a repeat with no "|:" of its own starts afresh).
-  const taken = new Set<number>();
-  let pastEnd = false;
-  let barStart = true;
-  const unanswered = () => {
-    if (waiting) issues.push({ message: 'A 1st ending goes back to the start of its repeat: end it with ":|"', span: waiting, severity: 'warning' });
-    waiting = null;
-  };
   for (const line of lines) {
-    barStart = true;
     for (const ev of line.events) {
-      if (ev.kind !== 'bar') {
-        if (ev.beats <= 1e-6) continue;
-        const first = barStart;
-        barStart = false;
-        if (first && !ev.ending && pastEnd) {
-          taken.clear();
-          hadFirst = false;
-          pastEnd = false;
-        }
-        if (!ev.ending) continue;
-        const twice = ev.ending.filter((n) => taken.has(n));
-        if (twice.length && ev.src) issues.push({ message: `Two endings for the ${twice.map(ordinal).join(' and ')} time through: only the first is played`, span: ev.src, severity: 'warning' });
-        for (const n of ev.ending) taken.add(n);
-        if (ev.ending.includes(1)) {
-          hadFirst = true;
-          waiting ??= ev.src ?? null;
-        } else if (!hadFirst && ev.src) {
-          issues.push({ message: `A ${ordinal(ev.ending[0])} ending with no 1st ending before it: put "[1.]" on the bar played the first time`, span: ev.src, severity: 'warning' });
-        }
-        continue;
-      }
-      barStart = true;
+      if (ev.kind !== 'bar') continue;
       if (ev.style === 'repeat-start') {
         if (open && ev.src) issues.push({ message: 'A repeat inside a repeat: the first "|:" is forgotten, and only this one repeats', span: ev.src, severity: 'warning' });
-        unanswered();
         open = true;
-        hadFirst = false;
-        taken.clear();
-        pastEnd = false;
-      } else if (ev.style === 'repeat-end') {
-        open = false;
-        waiting = null;
-        pastEnd = true;
-      }
+      } else if (ev.style === 'repeat-end') open = false;
     }
   }
-  unanswered();
+  const bars = docBars({ lines });
+  const spanOf = (k: number, which: 'first' | 'last') => {
+    const b = bars[k];
+    return lines[b.line]?.events[b[which]]?.src;
+  };
+  const warn = (message: string, span: Span | undefined) => span && issues.push({ message, span, severity: 'warning' });
+  // The endings of one repeat: their numbers so far, whether a 1st was among them, whether
+  // its ":|" has gone by (a bar with no ending after it ends the group), and its "x3".
+  const taken = new Set<number>();
+  let hadFirst = false;
+  let pastEnd = false;
+  let times: { n: number; at: number } | null = null;
+  const closeGroup = () => {
+    if (times && taken.size && !taken.has(times.n) && Math.max(...taken) < times.n) {
+      warn(`Played ${times.n} times, but the endings stop at the ${ordinal(Math.max(...taken))}: number one for the ${ordinal(times.n)} time ("[${times.n}.]")`, spanOf(times.at, 'last'));
+    }
+    taken.clear();
+    hadFirst = false;
+    pastEnd = false;
+    times = null;
+  };
+  bars.forEach((b, k) => {
+    if (b.start || (pastEnd && !b.region)) closeGroup();
+    const region = b.region;
+    if (region && region.id === k) {
+      const twice = region.nums.filter((n) => taken.has(n));
+      if (twice.length) warn(`Two endings for the ${twice.map(ordinal).join(' and ')} time through: only the first is played`, spanOf(k, 'first'));
+      if (!region.nums.includes(1) && !hadFirst) warn(`A ${ordinal(region.nums[0])} ending with no 1st ending before it: put "[1.]" on the bar played the first time`, spanOf(k, 'first'));
+      if (region.nums.includes(1)) {
+        hadFirst = true;
+        // (Its bars, to see whether it goes back.)
+        let j = k;
+        while (j < bars.length && bars[j].region === region && !bars[j].end) j++;
+        if (j >= bars.length || bars[j].region !== region) warn('A 1st ending goes back to the start of its repeat: end it with ":|"', spanOf(k, 'first'));
+      }
+      for (const n of region.nums) taken.add(n);
+    }
+    if (b.end) {
+      pastEnd = true;
+      if (b.times && b.times > 2) times = { n: b.times, at: k };
+    }
+  });
+  closeGroup();
 }
 
 /**
@@ -526,9 +527,16 @@ function checkRepeats(lines: TabLine[], issues: ParseIssue[]) {
  */
 function resolveTies(lines: TabLine[], issues: ParseIssue[]) {
   let last: NoteEvent | RestEvent | null = null;
+  // The note before a 1st ending: a 2nd ending comes after it too (it's played instead of the
+  // 1st), so a tie starting a 2nd ending continues it.
+  let beforeFirst: NoteEvent | RestEvent | null | undefined;
   for (const line of lines) {
     line.events.forEach((ev, k) => {
       if (ev.kind === 'bar' || ev.beats <= 0) return;
+      if (ev.ending?.length) {
+        if (ev.ending.includes(1)) beforeFirst = last;
+        else if (beforeFirst !== undefined) last = beforeFirst;
+      }
       if (ev.kind === 'note' && ev.tied) {
         if (last && last.kind === 'note') ev.sounds = last.sounds;
         else {
