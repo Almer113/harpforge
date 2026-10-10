@@ -7,16 +7,24 @@ import { MIC_ID } from '../live/inputs';
 import { onLive } from '../live/livePlayer';
 import { stop as stopPlayback } from './playback';
 import { getParsed, useApp } from './store';
+import { playbackIndexOf, playbackScore, type PlaybackScore } from '../core/repeats';
+import type { ScoreEvent } from '../core/score';
 import { practiceReport } from '../core/report';
 import { keepAlongSession, showReport } from './report';
 import { logSession } from '../storage/practiceLog';
 
-function nextPlayable(from: number): number | null {
-  const { score } = getParsed(useApp.getState().text);
-  for (let i = Math.max(0, from); i < score.events.length; i++) {
-    const ev = score.events[i];
-    if (!ev.rest && !ev.tied && ev.midis.some((m) => m !== null)) return i;
-  }
+/** The song in the order it's played (its repeats and endings, when they're played), one verse. */
+function practiceOrder(): PlaybackScore {
+  const s = useApp.getState();
+  const { doc, score } = getParsed(s.text);
+  return playbackScore(doc, score, { repeats: s.playRepeats });
+}
+
+const playable = (ev: ScoreEvent) => !ev.rest && !ev.tied && ev.midis.some((m) => m !== null);
+
+/** The next note to play, from place `from` in the order played. */
+function nextPlayable(pb: PlaybackScore, from: number): number | null {
+  for (let i = Math.max(0, from); i < pb.score.events.length; i++) if (playable(pb.score.events[i])) return i;
   return null;
 }
 
@@ -25,14 +33,17 @@ export function startPractice() {
   missed.clear();
   used.clear();
   stopPlayback();
-  const first = nextPlayable(s.selectedEvent ?? 0) ?? nextPlayable(0);
-  if (first === null) {
+  const pb = practiceOrder();
+  const from = s.selectedEvent !== null ? (playbackIndexOf(pb, s.selectedEvent) ?? 0) : 0;
+  const at = nextPlayable(pb, from) ?? nextPlayable(pb, 0);
+  const first = at === null ? null : pb.orig[at];
+  if (at === null || first === undefined || first === null) {
     s.notify('Nothing to practise yet — this tab has no playable notes.');
     return;
   }
   // (Practice and play along take turns: a play-along session joins the song's history.)
   keepAlongSession();
-  useApp.setState({ practice: { index: first, played: 0, mistakes: 0, startedAt: Date.now(), wrongAt: 0, mistakesAt: {} }, selectedEvent: first, along: false, alongMarks: {} });
+  useApp.setState({ practice: { index: first, at, played: 0, mistakes: 0, startedAt: Date.now(), wrongAt: 0, mistakesAt: {} }, selectedEvent: first, along: false, alongMarks: {} });
 }
 
 /**
@@ -93,13 +104,15 @@ function advance(id: string) {
   used.add(id);
   for (const held of Object.keys(s.held)) used.add(held);
   missed.clear();
-  const next = nextPlayable(p.index + 1);
-  if (next === null) {
+  const pb = practiceOrder();
+  const at = nextPlayable(pb, (p.at ?? p.index) + 1);
+  if (at === null) {
     useApp.setState({ practice: { ...p, played: p.played + 1 } });
     finish();
     return;
   }
-  useApp.setState({ practice: { ...p, index: next, played: p.played + 1 }, selectedEvent: next });
+  const next = pb.orig[at];
+  useApp.setState({ practice: { ...p, index: next, at, played: p.played + 1 }, selectedEvent: next });
 }
 
 onLive((e) => {
@@ -133,8 +146,7 @@ onLive((e) => {
 
 /** Total notes to play in practice (ties and rests aren't played). */
 export function practiceTotal(): number {
-  const { score } = getParsed(useApp.getState().text);
-  return score.events.filter((ev) => !ev.rest && !ev.tied && ev.midis.some((m) => m !== null)).length;
+  return practiceOrder().score.events.filter(playable).length;
 }
 
 // Editing the tab (or opening another) ends practice; after a few notes, the session joins

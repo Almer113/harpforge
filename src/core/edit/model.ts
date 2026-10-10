@@ -32,6 +32,10 @@ export interface Measure {
   startBar?: BarStyle;
   /** 'none': no bar line is written (the bar carries on on the next line of text). */
   endBar: BarStyle | 'none';
+  /** A repeat end played more than twice (":|x3"): how many times through. */
+  endTimes?: number;
+  /** This bar starts a 1st/2nd… ending ("[1.]"): the times through it's played. */
+  ending?: number[];
   /** Starts a new line of the sheet. */
   lineBreak: boolean;
   section?: string;
@@ -95,8 +99,9 @@ export function fromDoc(doc: TabDoc): Song {
   let lineStart = true;
 
   // A tab without bar lines is cut into measures for the editor, but none are written back.
-  const close = (endBar: Measure['endBar'] = hasBars ? 'single' : 'none') => {
+  const close = (endBar: Measure['endBar'] = hasBars ? 'single' : 'none', times?: number) => {
     cur.endBar = endBar;
+    if (times) cur.endTimes = times;
     // Pickups and other short bars (and a line of an unbarred tab) keep their length instead of
     // being filled with rests; so does a bar made longer by rests (nothing written is lost).
     if (Math.abs(t - cap) > EPS && t > EPS) cur.len = t;
@@ -113,7 +118,7 @@ export function fromDoc(doc: TabDoc): Song {
       if (ev.kind === 'bar') {
         if (!touched()) {
           if (ev.style !== 'single') cur.startBar = ev.style;
-        } else close(ev.style);
+        } else close(ev.style, ev.times);
         continue;
       }
       if (ev.beats <= EPS) {
@@ -131,6 +136,7 @@ export function fromDoc(doc: TabDoc): Song {
         lineStart = false;
       }
       cur.src ??= li;
+      if (ev.ending && !cur.items.length && t <= EPS) cur.ending = [...ev.ending];
       if (pendingSection !== undefined) {
         cur.section = pendingSection;
         pendingSection = undefined;
@@ -202,7 +208,10 @@ export function toDoc(song: Song): TabDoc {
       prev = null;
       prevEvent = null;
     }
-    if (m.endBar !== 'none') events.push({ kind: 'bar', style: m.endBar });
+    // (An ending goes on the bar's first note or rest.)
+    const first = m.ending?.length ? events.slice(measureFrom).find((e): e is NoteEvent | RestEvent => e.kind !== 'bar' && e.beats > EPS) : undefined;
+    if (first) first.ending = [...m.ending!];
+    if (m.endBar !== 'none') events.push({ kind: 'bar', style: m.endBar, ...(m.endBar === 'repeat-end' && m.endTimes ? { times: m.endTimes } : {}) });
   });
   return { meta: song.meta, lines };
 }
@@ -595,11 +604,11 @@ export function duplicateMeasure(song: Song, m: number): Song {
   if (!src) return song;
   if (src.endBar === 'none') src.endBar = 'single';
   if (m === s.measures.length - 1 && src.endBar === 'final') {
-    s.measures.splice(m + 1, 0, { ...src, items: src.items.map((it) => ({ ...it })), lineBreak: false, section: undefined, startBar: undefined, src: undefined });
+    s.measures.splice(m + 1, 0, { ...src, items: src.items.map((it) => ({ ...it })), lineBreak: false, section: undefined, startBar: undefined, ending: undefined, src: undefined });
     s.measures[m].endBar = 'single';
     return s;
   }
-  s.measures.splice(m + 1, 0, { ...src, items: src.items.map((it) => ({ ...it })), lineBreak: false, section: undefined, startBar: undefined, src: undefined });
+  s.measures.splice(m + 1, 0, { ...src, items: src.items.map((it) => ({ ...it })), lineBreak: false, section: undefined, startBar: undefined, ending: undefined, src: undefined });
   return s;
 }
 
@@ -661,7 +670,7 @@ function rebar(
   // Where bar lines must fall: repeat signs and double bars.
   const keep = new Set<number>();
   for (const mk of marks) {
-    if (mk.m.startBar && mk.m.startBar !== 'single') keep.add(mk.at);
+    if ((mk.m.startBar && mk.m.startBar !== 'single') || mk.m.ending) keep.add(mk.at);
     if (mk.m.endBar !== 'single' && mk.m.endBar !== 'none' && mk.m.endBar !== 'final') keep.add(mk.end);
   }
   const fixed = [...keep].filter((x) => x > EPS && x < total - 1e-3).sort((a, b) => a - b);
@@ -737,12 +746,16 @@ function rebar(
     nm.src ??= mk.m.src;
     // Bar lines move with the music when a new bar line falls on the same beat.
     if (mk.m.startBar && near(startOf(mi), mk.at)) nm.startBar = mk.m.startBar;
+    if (mk.m.ending && near(startOf(mi), mk.at)) nm.ending = mk.m.ending;
     if (mk.m.endBar !== 'single' && mk.m.endBar !== 'none' && !opts.noBars) {
       const ei = Math.max(0, Math.min(count - 1, indexAt(mk.end - 1e-3)));
       // A bar line past the end of the music (after trailing rests) goes on the last bar,
       // unless that already ends with its own sign (a repeat before the rests stays).
       const onLast = ei === count - 1 && (measures[ei].endBar === 'single' || measures[ei].endBar === 'none');
-      if (near(startOf(ei) + spanOf(ei), mk.end) || onLast) measures[ei].endBar = mk.m.endBar;
+      if (near(startOf(ei) + spanOf(ei), mk.end) || onLast) {
+        measures[ei].endBar = mk.m.endBar;
+        if (mk.m.endTimes) measures[ei].endTimes = mk.m.endTimes;
+      }
     }
   }
   // A short last bar stays short; so does the last bar after a bar was shortened for a repeat

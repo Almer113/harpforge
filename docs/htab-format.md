@@ -58,8 +58,30 @@ Aliases accepted on import: `instrument` = `harmonica`, `bpm` = `tempo`, `meter`
 | `\|` `\|\|` `\|]` `\|:` `:\|` | bar lines: single, double, final, repeat start/end. Also accepted: `:\|:` (end one repeat, start the next), `\|\|:`, and `:\|` right after a note (`4:\|`). A repeat plays twice; a repeat inside another isn't played as one (a warning says so) |
 | `[G7]` | chord symbol shown above the next note or rest (right before a bar line: at the end of that bar) |
 | `w: Twin-kle twin-kle` | lyrics for the tab line above: one syllable per note (and per sung rest `_`); `_` or `*` skips a note; `~` joins words (`Hello~my` is one syllable); `\-` is a real hyphen (`x\-` doesn't join the next syllable). Several `w:` lines under a tab line are its verses 1, 2, 3…; an empty `w:` keeps a verse's place when the line has no words in it |
+| `[1.]` `[2.]` `[1.2.]` | a **1st/2nd ending**, right after a bar line (or at the start of a line): the bar it starts is played only those times through the repeat (see Repeats and endings) |
+| `:\|x3` | a repeat played **three** times through (any number from 2) |
 | `@ Chorus` | section heading |
 | `# text` | comment (at line start or after whitespace; in a `w:` line `#` is part of the words, as in `w: Sing #1`) |
+
+### Repeats and endings
+
+A `|: … :|` section is played twice (`:|x3`: three times). With no `|:` before it, a `:|`
+goes back to the start, or to just after the last repeat.
+
+Endings change the last bar or bars each time through:
+
+```
+|: 4 4 5 6 | [1.] 6 5 4 5 :| [2.] -4~~~ ||
+```
+
+plays `4 4 5 6 6 5 4 5`, back, `4 4 5 6`, then the 2nd ending `-4`. An ending runs
+from its bar to its `:|`, a `||` or `|]`, the next `|:` or ending, or the end of its
+line — whichever comes first. `[1.2.] … :| [3.]` plays the section three times, the
+first two with the same ending. The verses follow the times through: the second time
+(the 2nd ending included) sings verse 2.
+
+A repeat inside a repeat isn't played as one, and a 1st ending without a `:|`, or a 2nd
+without a 1st, gets a warning.
 
 ### Ties
 

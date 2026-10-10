@@ -171,6 +171,8 @@ describe('the pass shown while playing', () => {
     expect(passLabel({ ...at, playLine: 1 }, lines)).toBe('Verse 2');
     expect(passLabel({ ...at, playLine: 0 }, lines)).toBe('2nd time');
     expect(passLabel({ ...at, playLine: 0, playPass: 1 }, lines)).toBeNull();
+    // (A repeat played three times, ":|x3".)
+    expect(passLabel({ ...at, playLine: 0, playPass: 3 }, lines)).toBe('3rd time');
     expect(passLabel({ ...at, playLine: 1, play: 'stopped' }, lines)).toBeNull();
   });
 

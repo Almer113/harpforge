@@ -22,6 +22,8 @@ export interface NoteEvent {
    * (written as a bare "~", e.g. "6~ | ~~ 5"). Its sounds are the previous note's.
    */
   tied?: boolean;
+  /** Its bar starts a 1st/2nd… ending ("[1.]"): the times through the repeat it's played (1-based). */
+  ending?: number[];
   src?: Span;
 }
 
@@ -34,6 +36,8 @@ export interface RestEvent {
   verses?: (string | undefined)[];
   /** Written "_": the harp rests while a syllable is sung (the "w:" line counts it like a note). */
   sung?: boolean;
+  /** Its bar starts an ending (see NoteEvent.ending). */
+  ending?: number[];
   src?: Span;
 }
 
@@ -42,6 +46,8 @@ export type BarStyle = 'single' | 'double' | 'final' | 'repeat-start' | 'repeat-
 export interface BarEvent {
   kind: 'bar';
   style: BarStyle;
+  /** A repeat end played more than twice (":|x3"): how many times through in all. */
+  times?: number;
   src?: Span;
 }
 

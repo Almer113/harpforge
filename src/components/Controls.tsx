@@ -224,7 +224,7 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
           <input type="checkbox" checked={playRepeats} onChange={(e) => useApp.setState({ playRepeats: e.target.checked })} />
           Play repeats
         </label>
-        <span className="mi-hint pb-hint">Sections between repeat signs (|: and :|) play twice, verse 2 the second time; not when looping a passage or playing notes selected in the editor</span>
+        <span className="mi-hint pb-hint">Sections between repeat signs (|: and :|) play twice (or as marked: :|x3), with their 1st and 2nd endings, verse 2 the second time; not when looping a passage or playing notes selected in the editor</span>
         <label className="check">
           <input type="checkbox" checked={allVerses} onChange={(e) => useApp.setState({ playAllVerses: e.target.checked })} />
           Play all verses
@@ -406,7 +406,7 @@ function TrainerButton() {
 
 /**
  * Which time through the music is playing, when that matters: "Verse 2" (a song with several
- * verses, going through them), else "2nd time" (in a repeat); null otherwise.
+ * verses, going through them), else "2nd time", "3rd time" (in a repeat); null otherwise.
  */
 export function usePlayingPass(): string | null {
   const { doc } = useParsed();
@@ -419,7 +419,9 @@ export function usePlayingPass(): string | null {
 export function passLabel(s: Pick<AppState, 'play' | 'playVerses' | 'playLine' | 'playVerse' | 'playPass'>, linesVerses: number[]): string | null {
   if (s.play === 'stopped') return null;
   if (s.playVerses && s.playLine !== null && (linesVerses[s.playLine] ?? 1) > 1) return `Verse ${s.playVerse + 1}`;
-  return s.playPass === 2 ? '2nd time' : null;
+  if (s.playPass < 2) return null;
+  const n = s.playPass;
+  return `${n}${n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'} time`;
 }
 
 /** "2nd time" / "Verse 2" in the transport, while it's so. */

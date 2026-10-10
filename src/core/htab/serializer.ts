@@ -189,6 +189,11 @@ function stretchText(events: Sounding[], opts: SerializeOptions, fromEnd: boolea
   return out;
 }
 
+/** An ending's mark: "[1.]", "[1.2.]". */
+export function endingText(nums: number[]): string {
+  return `[${nums.map((n) => `${n}.`).join('')}]`;
+}
+
 /** Serializes one line of events (without lyrics). */
 export function eventsText(events: TabEvent[], opts: SerializeOptions = {}): string {
   const out: string[] = [];
@@ -199,6 +204,9 @@ export function eventsText(events: TabEvent[], opts: SerializeOptions = {}): str
     // The first bar of a line, when it's short, is a pickup: its beats count from its end.
     const len = stretch.reduce((a, e) => a + e.beats, 0);
     const short = opts.barBeats === undefined || len < opts.barBeats - EPS;
+    // An ending is written at the start of its bar ("[1.]"), before its first note.
+    const ending = stretch.find((e) => e.beats > EPS)?.ending;
+    if (ending?.length) out.push(endingText(ending));
     out.push(...stretchText(stretch, opts, lineStart && beforeBar && short));
     stretch = [];
     lineStart = false;
@@ -206,7 +214,7 @@ export function eventsText(events: TabEvent[], opts: SerializeOptions = {}): str
   for (const e of events) {
     if (e.kind === 'bar') {
       flush(true);
-      out.push(BAR_TEXT[e.style]);
+      out.push(BAR_TEXT[e.style] + (e.style === 'repeat-end' && e.times && e.times > 2 ? `x${e.times}` : ''));
       continue;
     }
     stretch.push(e);

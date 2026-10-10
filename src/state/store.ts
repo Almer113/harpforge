@@ -133,6 +133,8 @@ export interface MidiState {
 export interface PracticeState {
   /** Score index of the note to play next. */
   index: number;
+  /** Where that is in the order played (repeats and endings): an index into the playback score. */
+  at?: number;
   played: number;
   mistakes: number;
   startedAt: number;

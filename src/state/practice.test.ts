@@ -64,3 +64,28 @@ describe('practice mode', () => {
     expect(practice().index).toBe(0);
   });
 });
+
+describe('practice mode follows the order played', () => {
+  const tap = (hole: number) => {
+    play('k', hole, 'blow');
+    release('k');
+  };
+  it('through the repeat and its endings (and not with repeats off)', async () => {
+    const { practiceTotal } = await import('./practice');
+    useApp.getState().loadText('---\nharmonica: diatonic\nharp-key: C\n---\n|: 4 | [1.] 5 :| [2.] 6 |\n');
+    useApp.setState({ selectedEvent: null, playRepeats: true });
+    startPractice();
+    expect(practiceTotal()).toBe(4);
+    const seen = [useApp.getState().practice!.index];
+    for (const hole of [4, 5, 4]) {
+      tap(hole);
+      seen.push(useApp.getState().practice!.index);
+    }
+    // 4, the 1st ending's 5, 4 again, then the 2nd ending's 6.
+    expect(seen).toEqual([0, 1, 0, 2]);
+    useApp.setState({ practice: null, playRepeats: false });
+    startPractice();
+    expect(practiceTotal()).toBe(3);
+    useApp.setState({ practice: null, playRepeats: true });
+  });
+});

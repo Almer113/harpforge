@@ -13,6 +13,7 @@ import {
   type ParseIssue,
   type ParseResult,
   type RestEvent,
+  type Span,
   type TabEvent,
   type TabLine,
   type TabMeta,
@@ -229,9 +230,33 @@ function parseRange(ctx: Ctx, from: number, to: number, inGroup: boolean): TabEv
       else if (s.startsWith('||', i)) [style, len] = ['double', 2];
       else if (s.startsWith('|]', i)) [style, len] = ['final', 2];
       else if (s.startsWith('|:', i)) [style, len] = ['repeat-start', 2];
+      // ":|x3": the repeat is played three times through.
+      const times = style === 'repeat-end' ? /^x(\d{1,2})(?![\w.])/.exec(s.slice(i + len)) : null;
+      if (times) {
+        const n = parseInt(times[1], 10);
+        if (n < 2) issue(ctx, `A repeat is played at least twice ("x${n}" isn't a repeat)`, i + len, i + len + times[0].length, 'warning');
+        len += times[0].length;
+        if (!inGroup) {
+          events.push({ kind: 'bar', style, ...(n >= 2 ? { times: n } : {}), src: { start: ctx.base + i, end: ctx.base + i + len } });
+          i += len;
+          continue;
+        }
+      }
       if (inGroup) issue(ctx, 'Bar lines are not allowed inside { }', i, i + len);
       else events.push({ kind: 'bar', style, src: { start: ctx.base + i, end: ctx.base + i + len } });
       i += len;
+      continue;
+    }
+
+    // An ending: "[1.]", "[2.]", "[1.2.]" — the bar it starts is played those times through.
+    const ending = c === '[' ? /^\[((?:\d{1,2}\.)+)\]/.exec(s.slice(i, to)) : null;
+    if (ending) {
+      const nums = ending[1].split('.').filter(Boolean).map(Number);
+      if (inGroup) issue(ctx, 'An ending ("[1.]") starts a bar: it can’t go inside { }', i, i + ending[0].length);
+      else if (nums.some((n) => n < 1)) issue(ctx, 'Endings are numbered from 1', i, i + ending[0].length, 'warning');
+      // (A marker for now: it goes onto the bar's first note or rest once the line is read.)
+      else events.push({ kind: 'rest', beats: 0, ending: [...new Set(nums)].sort((a, b) => a - b), src: { start: ctx.base + i, end: ctx.base + i + ending[0].length } });
+      i += ending[0].length;
       continue;
     }
 
@@ -403,20 +428,79 @@ function joinTiesInBars(lines: TabLine[]) {
 }
 
 /**
- * A "|:" while another repeat is still open (no ":|" yet) starts the repeat afresh: repeats
- * inside repeats aren't played, so it says so.
+ * Puts each ending marker ("[1.]") on the first note or rest of the bar it starts. One that
+ * isn't at the start of a bar (or a line), or with no music after it, is left out, and said.
+ */
+function placeEndings(events: TabEvent[], issues: ParseIssue[]) {
+  const EPS = 1e-6;
+  const silent = (e: TabEvent) => e.kind !== 'bar' && e.beats <= EPS;
+  for (let k = 0; k < events.length; k++) {
+    const mark = events[k];
+    if (mark.kind !== 'rest' || !mark.ending || mark.beats > EPS) continue;
+    events.splice(k, 1);
+    k--;
+    const span = mark.src ?? { start: 0, end: 1 };
+    // (Only chord symbols on their own may come between the bar line and it.)
+    let j = k;
+    while (j >= 0 && silent(events[j])) j--;
+    if (j >= 0 && events[j].kind !== 'bar') {
+      issues.push({ message: 'An ending ("[1.]") starts a bar: put it right after a bar line (this one is left out)', span, severity: 'warning' });
+      continue;
+    }
+    const first = events.slice(k + 1).find((e) => !silent(e));
+    if (!first || first.kind === 'bar') {
+      issues.push({ message: 'An ending ("[1.]") needs music after it in its bar (this one is left out)', span, severity: 'warning' });
+      continue;
+    }
+    first.ending = mark.ending;
+  }
+}
+
+/**
+ * Repeats that won't play as they look, said: a "|:" while another repeat is still open
+ * (repeats inside repeats aren't played: the first "|:" is forgotten); a 1st ending with no
+ * ":|" to go back from; a 2nd (or later) ending with no 1st before it.
  */
 function checkRepeats(lines: TabLine[], issues: ParseIssue[]) {
   let open = false;
+  // Since the last "|:" (or the start): an ending that plays the first time through, and a
+  // 1st ending still waiting for its ":|".
+  let hadFirst = false;
+  let waiting: Span | null = null;
+  const unanswered = () => {
+    if (waiting) issues.push({ message: 'A 1st ending goes back to the start of its repeat: end it with ":|"', span: waiting, severity: 'warning' });
+    waiting = null;
+  };
   for (const line of lines) {
     for (const ev of line.events) {
-      if (ev.kind !== 'bar') continue;
+      if (ev.kind !== 'bar') {
+        if (!ev.ending) continue;
+        if (ev.ending.includes(1)) {
+          hadFirst = true;
+          waiting ??= ev.src ?? null;
+        } else if (!hadFirst && ev.src) {
+          issues.push({ message: `A ${ordinal(ev.ending[0])} ending with no 1st ending before it: put "[1.]" on the bar played the first time`, span: ev.src, severity: 'warning' });
+        }
+        continue;
+      }
       if (ev.style === 'repeat-start') {
         if (open && ev.src) issues.push({ message: 'A repeat inside a repeat: the first "|:" is forgotten, and only this one repeats', span: ev.src, severity: 'warning' });
+        unanswered();
         open = true;
-      } else if (ev.style === 'repeat-end') open = false;
+        hadFirst = false;
+      } else if (ev.style === 'repeat-end') {
+        open = false;
+        waiting = null;
+      }
     }
   }
+  unanswered();
+}
+
+/** 2 → "2nd". */
+function ordinal(n: number): string {
+  const tail = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
+  return `${n}${tail}`;
 }
 
 /**
@@ -486,6 +570,7 @@ export function parseHtab(text: string): ParseResult {
     }
     const ctx: Ctx = { s: line, base: lineStart, issues };
     const events = parseRange(ctx, 0, line.length, false);
+    placeEndings(events, issues);
     if (ctx.pendingChord) {
       // A trailing chord symbol with nothing after it: attach as a zero-length marker on a rest.
       events.push({ kind: 'rest', beats: 0, chord: ctx.pendingChord });
