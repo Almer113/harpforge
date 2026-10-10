@@ -6,6 +6,8 @@ import * as Tone from 'tone';
 import { soundSpans, type Score } from '../core/score';
 import { inCount, isAccent, type ClickInfo } from './clicks';
 import { createVoice, outputs, type Voice } from './voices';
+import { playBacking, stopBacking } from './backingVoices';
+import type { BackingNote, BackingStyle } from '../core/backing';
 
 export { loadSamples, samplesReady, setMixLevels, setSoundMode, setVoicing, type MixLevels, type MixPart, type SoundMode, type Voicing } from './voices';
 
@@ -98,6 +100,8 @@ export interface PlaybackOptions {
   onLoop?: () => void;
   /** Plays without the melody (its notes still light up): playing along with the microphone. */
   muted?: boolean;
+  /** Backing chords under the song (score beats, as the score's notes). */
+  backing?: { style: BackingStyle; notes: BackingNote[] };
   onEvent?: (index: number, on: boolean) => void;
   onEnd?: () => void;
 }
@@ -241,6 +245,15 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
         Tone.getDraw().schedule(() => opts.onEvent?.(ev.index, false), time + dur - (ev.soundBeats > ev.beats ? 0 : gap));
       }, beatTicks(at));
     }
+    // The backing: from where playback starts (a loop's notes come round with the transport).
+    if (opts.backing) {
+      const { style, notes } = opts.backing;
+      for (const n of notes) {
+        if (n.at < startBeat - 1e-6 || n.at >= until - 1e-6) continue;
+        const len = Math.min(n.dur, until - n.at);
+        t.schedule((time) => playBacking(style, n, time, Tone.Time(beatTicks(len)).toSeconds()), beatTicks(n.at + offset));
+      }
+    }
     const end = until + offset;
     current = { startBeat, loopFrom: startBeat + (opts.countEachLoop ? 0 : offset), end, offset, endId: null, onEnd: opts.onEnd, startsAt: Infinity };
     if (opts.loop && score.totalBeats > 0) setLoop(true);
@@ -286,6 +299,7 @@ export function pausePlayback() {
   for (const v of scheduledVoices) v.stop(Tone.immediate());
   if (scheduledVoices.size) soundingFor(0);
   scheduledVoices.clear();
+  stopBacking();
 }
 
 export function resumePlayback() {
@@ -312,6 +326,7 @@ export function stopPlayback() {
   for (const v of scheduledVoices) v.stop(Tone.immediate());
   if (scheduledVoices.size) soundingFor(0);
   scheduledVoices.clear();
+  stopBacking();
 }
 
 export function setTempo(bpm: number) {

@@ -56,3 +56,21 @@ it('playing along without the tune, the clicks keep time (and go when the tune c
   stop();
   useApp.setState({ along: false });
 });
+
+it('backing chords go to the engine from where playback starts; changed while playing, it starts again there', async () => {
+  s().loadText('---\ntitle: B\n---\n[C] 4 4 4 4 | [G] 5 5 5 5 |\n', null);
+  useApp.setState({ backing: 'oompah', selectedEvent: 4 });
+  await play();
+  const opts = playScore.mock.lastCall?.[1] as { backing?: { style: string; notes: { at: number }[] }; startBeat: number };
+  expect(opts.backing?.style).toBe('oompah');
+  expect(opts.backing?.notes.map((n) => n.at)).toEqual([4, 5, 6, 7]);
+  playScore.mockClear();
+  useApp.setState({ backing: 'pad' });
+  await new Promise((r) => setTimeout(r, 0));
+  expect(playScore).toHaveBeenCalledTimes(1);
+  stop();
+  useApp.setState({ backing: 'off', selectedEvent: null });
+  await play();
+  expect((playScore.mock.lastCall as [unknown, { backing?: unknown }])[1].backing).toBeUndefined();
+  stop();
+});

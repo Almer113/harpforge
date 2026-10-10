@@ -176,3 +176,6 @@ html { scrollbar-gutter: stable; }
 /* The docked harmonica takes less height: the microphone and MIDI cards are as tall as their buttons. */
 .ve-dock .dock-head { padding: 4px 0; }
 .ve-dock .input-card { min-height: 0; padding: 2px 6px; }
+/* Backing chords: off or a style, as a row of choices. */
+.backing-seg { margin: 4px 10px 0; align-self: flex-start; }
+.backing-seg button { padding: 4px 9px; font-size: 12px; }

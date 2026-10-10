@@ -1,0 +1,152 @@
+// Backing chords: the chord symbols of the song, played under it. Pure: which notes, when
+// (in score beats), and how loud; the engine gives them their sound.
+//
+// A chord lasts until the next one ("N.C.": nothing). Three ways to play it:
+// - Pad: held, soft, for as long as it lasts.
+// - Strum: on every beat, the bar's first a little stronger; in 4/4, an up-strum after
+//   beats 2 and 4 too (down, down-up, down, down-up).
+// - Oom-pah: the bass note on the strong beat, the chord on the others (a waltz in 3/4, a
+//   lilt in 6/8); in 4/4 the bass alternates root and fifth.
+// Where the beats fall follows the bars (a pickup's beats are those at the end of a bar).
+
+import { isNoChord, parseChord } from './chords';
+import { barStarts } from './passage';
+import type { Score } from './score';
+
+export type BackingStyle = 'pad' | 'strum' | 'oompah';
+
+export const BACKING_STYLES: { id: BackingStyle; label: string; hint: string }[] = [
+  { id: 'pad', label: 'Pad', hint: 'Soft held chords, under the harmonica' },
+  { id: 'strum', label: 'Strum', hint: 'A guitar-like strum on the beats' },
+  { id: 'oompah', label: 'Oom-pah', hint: 'Bass on the strong beat, chord on the others (a waltz in 3/4)' },
+];
+
+/** A note (or several together) of the backing, in score beats. */
+export interface BackingNote {
+  at: number;
+  dur: number;
+  midis: number[];
+  /** Loudness, 0–1. */
+  vel: number;
+  /** A bass note, or the chord (strummed: its notes a moment apart). */
+  part: 'bass' | 'chord';
+  /** Strummed upwards (the up-strum: high notes first). */
+  up?: boolean;
+}
+
+/** A chord and the beats it lasts (null: no chord, "N.C."). */
+export interface ChordSpan {
+  start: number;
+  end: number;
+  tones: number[] | null;
+  bass: number | null;
+}
+
+const EPS = 1e-6;
+
+/** The song's chords in the order played: each from its symbol to the next. */
+export function chordSpans(score: Score): ChordSpan[] {
+  const out: ChordSpan[] = [];
+  for (const ev of score.events) {
+    if (!ev.chord) continue;
+    const info = isNoChord(ev.chord) ? null : parseChord(ev.chord);
+    // (A symbol that isn't a chord — a direction in brackets — changes nothing.)
+    if (!info && !isNoChord(ev.chord)) continue;
+    const last = out[out.length - 1];
+    if (last) last.end = ev.start;
+    out.push({ start: ev.start, end: score.totalBeats, tones: info ? info.tones.map((t) => ((t % 12) + 12) % 12) : null, bass: info ? (info.bass ?? info.root) : null });
+  }
+  return out.filter((c) => c.end > c.start + EPS);
+}
+
+/** Whether the song has chord symbols to play. */
+export function hasChords(score: Score): boolean {
+  return chordSpans(score).some((c) => c.tones);
+}
+
+/** A chord's notes, close together around the middle of the piano (at most four, the 5th left out first). */
+export function chordVoicing(tones: number[]): number[] {
+  const pcs = [...new Set(tones)];
+  // Four notes at most: an extension's 5th goes, then the root (the bass has it).
+  let keep = pcs;
+  if (keep.length > 4) keep = keep.filter((_pc, i) => i !== 2);
+  if (keep.length > 4) keep = keep.slice(1);
+  keep = keep.slice(0, 4);
+  // Each note in E3–D#4: compact, low enough to sit under a harmonica.
+  return keep.map((pc) => 52 + ((pc - 52) % 12 + 12) % 12).sort((a, b) => a - b);
+}
+
+/** The bass note of a chord: E2–D#3. */
+export function bassNote(pc: number): number {
+  return 40 + ((pc - 40) % 12 + 12) % 12;
+}
+
+/** The beat a meter is felt in, in quarter beats (a dotted quarter in 6/8, a half in 2/2). */
+export function pulseOf(time: string): number {
+  const [top, bottom] = (/^(\d+)\s*\/\s*(\d+)$/.exec(time) ?? []).slice(1).map(Number);
+  if (bottom === 8 && top % 3 === 0 && top >= 6) return 1.5;
+  if (bottom === 2) return 2;
+  return 1;
+}
+
+/**
+ * The backing's notes from `from` to `to` (score beats) in `style`. A chord already sounding
+ * at `from` is heard there (a pad at once; strums and the oom-pah from the next beat).
+ */
+export function backingNotes(score: Score, time: string, style: BackingStyle, from = 0, to = score.totalBeats): BackingNote[] {
+  const spans = chordSpans(score).filter((c) => c.tones && c.end > from + EPS && c.start < to - EPS);
+  if (!spans.length) return [];
+  const out: BackingNote[] = [];
+  const at = (beat: number) => spans.find((c) => c.start <= beat + EPS && beat < c.end - EPS);
+
+  if (style === 'pad') {
+    for (const c of spans) {
+      const start = Math.max(c.start, from);
+      const end = Math.min(c.end, to);
+      if (end > start + EPS) out.push({ at: start, dur: end - start, midis: [bassNote(c.bass!), ...chordVoicing(c.tones!)], vel: 0.32, part: 'chord' });
+    }
+    return out;
+  }
+
+  // The beats: each bar's, from its start (a short first bar — a pickup — counts from its end).
+  const pulse = pulseOf(time);
+  const starts = barStarts(score);
+  // (A full bar: the longest, the last one too.)
+  const ends = [...starts.slice(1), score.totalBeats];
+  const full = Math.max(...starts.map((s, i) => ends[i] - s));
+  const hits: { beat: number; k: number; n: number }[] = [];
+  starts.forEach((s, i) => {
+    const end = i + 1 < starts.length ? starts[i + 1] : score.totalBeats;
+    const len = end - s;
+    // (Beats in a full bar; a pickup's are the last of them.)
+    const n = Math.max(1, Math.round(Math.max(len, full) / pulse));
+    const lead = i === 0 && len < full - EPS ? full - len : 0;
+    for (let k = 0; k < n; k++) {
+      const beat = s - lead + k * pulse;
+      if (beat >= s - EPS && beat < end - EPS) hits.push({ beat, k, n });
+    }
+  });
+  const inRange = hits.filter((h) => h.beat >= from - EPS && h.beat < to - EPS);
+  inRange.forEach((h, j) => {
+    const c = at(h.beat);
+    if (!c) return;
+    const next = inRange[j + 1]?.beat ?? Math.min(to, c.end);
+    const room = Math.min(next, c.end, to) - h.beat;
+    if (room <= EPS) return;
+    const chord = chordVoicing(c.tones!);
+    if (style === 'strum') {
+      // In 4/4, an up-strum after beats 2 and 4, when the chord's still there.
+      const up = h.n === 4 && pulse === 1 && (h.k === 1 || h.k === 3) && room > 0.5 + EPS;
+      out.push({ at: h.beat, dur: (up ? 0.5 : room) * 0.9, midis: chord, vel: h.k === 0 ? 0.62 : 0.48, part: 'chord' });
+      if (up) out.push({ at: h.beat + 0.5, dur: (room - 0.5) * 0.9, midis: chord.slice(-3), vel: 0.34, part: 'chord', up: true });
+      return;
+    }
+    // Oom-pah: the bass on the bar's first beat (and its third, on the fifth, in 4/4).
+    const bassBeat = h.k === 0 || (h.n === 4 && h.k === 2);
+    if (bassBeat) {
+      const pc = h.k === 0 ? c.bass! : (c.tones!.find((t) => (t - c.tones![0] + 12) % 12 === 7) ?? c.bass!);
+      out.push({ at: h.beat, dur: room * 0.8, midis: [bassNote(pc)], vel: 0.6, part: 'bass' });
+    } else out.push({ at: h.beat, dur: Math.min(room, pulse) * 0.45, midis: chord, vel: 0.4, part: 'chord' });
+  });
+  return out;
+}

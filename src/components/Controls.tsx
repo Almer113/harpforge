@@ -9,6 +9,7 @@ import { guessTonic, harpForPosition, octaveOptions, positionFor, positionName }
 import { mod12, transposeKey } from '../core/pitch';
 import { describePassage } from '../core/passage';
 import { ordinal, passageHasEndings } from '../core/endings';
+import { BACKING_STYLES, hasChords } from '../core/backing';
 import { atStart, backToStart, currentPassage, endPassageLoop, extendPassage, holdTrainer, playFrom, startLabel, startTrainer, stop, stopTrainer, toggleLoop, togglePlay, trainerLabel } from '../state/playback';
 import { exitPerform, performResize, togglePerform } from '../state/perform';
 import { DEFAULT_MIX, setPartOff, TRAINER_CHOICES, useApp, useParsed, type AppState, type Mix, type MixPart, type TrainerSettings } from '../state/store';
@@ -204,6 +205,7 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
           Synth
         </label>
         <span className="mi-hint pb-hint">A generated reed sound</span>
+        <BackingChoice />
         <MixControls />
         {withSpeed && (
           <label className="pb-row pb-speed">
@@ -239,8 +241,30 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
   );
 }
 
+/** Backing chords: off, or how the song's chord symbols are played. */
+function BackingChoice() {
+  const backing = useApp((s) => s.backing);
+  const { score } = useParsed();
+  const chords = useMemo(() => hasChords(score), [score]);
+  const hint = backing === 'off' ? 'The song’s chord symbols, played under it' : (BACKING_STYLES.find((b) => b.id === backing)?.hint ?? '');
+  return (
+    <>
+      <span className="pb-head">Backing</span>
+      <div className="seg backing-seg" role="radiogroup" aria-label="Backing chords">
+        {[{ id: 'off' as const, label: 'Off', hint: 'No backing' }, ...BACKING_STYLES].map((b) => (
+          <button key={b.id} role="radio" aria-checked={backing === b.id} className={backing === b.id ? 'on' : ''} onClick={() => useApp.setState({ backing: b.id })} title={b.hint}>
+            {b.label}
+          </button>
+        ))}
+      </div>
+      <span className="mi-hint pb-hint">{chords ? hint : 'This song has no chord symbols ([G], [Am7]…) to play'}</span>
+    </>
+  );
+}
+
 const MIX_ROWS: { part: MixPart; label: string; hint: string }[] = [
   { part: 'tune', label: 'Tune', hint: 'The song’s melody (off: the music moves on silently — Silent in performance mode, or playing along to be heard by the microphone)' },
+  { part: 'backing', label: 'Backing', hint: 'The chords under the song (choose how they’re played above)' },
   { part: 'clicks', label: 'Clicks', hint: 'The metronome and the count-in' },
   { part: 'you', label: 'You', hint: 'What you play: the keys, the mouse, a MIDI keyboard, and notes you click to hear' },
 ];

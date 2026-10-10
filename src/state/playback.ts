@@ -7,6 +7,7 @@ import { barAt, barPassage, barStarts, describePassage, eventPassage, joinPassag
 import { findItem, fromDoc, realBeat } from '../core/edit/model';
 import type { PassResult } from '../core/playAlong';
 import { playbackIndexOf, playbackScore, writtenScore, type PlaybackScore } from '../core/repeats';
+import { backingNotes } from '../core/backing';
 import { getParsed, useApp, type AppState, type MixPart } from './store';
 
 /**
@@ -43,7 +44,7 @@ function onEvent(index: number, on: boolean, pass?: number, verse?: number) {
 let playing: PlaybackScore | null = null;
 let playingAt = -1;
 // What the sound was started with: changed since (even while paused), it starts again.
-let startedWith: { played: PlaybackScore | null; along: boolean } = { played: null, along: false };
+let startedWith: { played: PlaybackScore | null; along: boolean; backing: AppState['backing'] } = { played: null, along: false, backing: 'off' };
 
 /**
  * Where the visual editor plays from, as you see it there: several notes selected, just
@@ -126,9 +127,9 @@ export function startLabel(s: AppState): string {
 
 /** Whether the tune would be left out, and what would be played, if playback started now. */
 function wanted(s: AppState): typeof startedWith {
-  return { played: playedScore(s), along: alongOn(s) };
+  return { played: playedScore(s), along: alongOn(s), backing: s.backing };
 }
-const sameStart = (a: typeof startedWith, b: typeof startedWith) => a.played === b.played && a.along === b.along;
+const sameStart = (a: typeof startedWith, b: typeof startedWith) => a.played === b.played && a.along === b.along && a.backing === b.backing;
 
 /**
  * Starts playback again from where it is: the same note, the same time through a repeat.
@@ -213,7 +214,9 @@ export async function play(opts: { count?: boolean; from?: number; pass?: number
   if (alongOn(s)) along?.startChecking(range ?? { start: startBeat, end: pb.score.totalBeats }, s.loop, eachLoop, pb);
   playing = pb;
   playingAt = selAt ?? 0;
-  startedWith = { played: pb, along: alongOn(s) };
+  startedWith = { played: pb, along: alongOn(s), backing: s.backing };
+  // Backing chords: from where playback starts (or the looped passage), in the order played.
+  const backing = s.backing === 'off' ? undefined : { style: s.backing, notes: backingNotes(pb.score, p.doc.meta.time, s.backing, range?.start ?? startBeat, range?.end ?? pb.score.totalBeats) };
   startedKey = startKey(s);
   engine.playScore(pb.score, {
     tempo,
@@ -226,6 +229,7 @@ export async function play(opts: { count?: boolean; from?: number; pass?: number
     beatsPerBar: bpb,
     onLoop: loopPassed,
     muted,
+    backing,
     metronomeBeatsPerBar: s.metronome || alongMuted ? bpb : undefined,
     onEvent: (i, on) => {
       if (on) playingAt = i;
@@ -395,7 +399,7 @@ useApp.subscribe((s, prev) => {
   // when it changes what's played.
   if (s.play === 'playing') {
     if (alongOn(s) !== alongOn(prev)) restartHere(true);
-    else if ((s.playRepeats !== prev.playRepeats || s.playAllVerses !== prev.playAllVerses) && !sameStart(wanted(s), startedWith)) restartHere(false);
+    else if ((s.playRepeats !== prev.playRepeats || s.playAllVerses !== prev.playAllVerses || s.backing !== prev.backing) && !sameStart(wanted(s), startedWith)) restartHere(false);
   }
 });
 
