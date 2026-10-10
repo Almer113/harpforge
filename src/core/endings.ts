@@ -65,3 +65,33 @@ export function ordinal(n: number): string {
 export function endingLabel(nums: number[]): string {
   return nums.map((n) => `${n}.`).join(' ');
 }
+
+/** What the editor knows of a bar, for its ending's bracket. */
+interface BarLike {
+  ending?: number[];
+  startBar?: string;
+  endBar: string;
+  lineBreak: boolean;
+}
+
+/**
+ * Each bar's place under an ending's bracket (the visual editor's measures): its numbers,
+ * whether the bracket starts or stops there, and whether it closes with a hook (":|").
+ */
+export function measureEndings(bars: BarLike[]): ({ nums: number[]; start: boolean; end: boolean; closed: boolean } | null)[] {
+  const out: ({ nums: number[]; start: boolean; end: boolean; closed: boolean } | null)[] = bars.map(() => null);
+  for (let i = 0; i < bars.length; i++) {
+    const nums = bars[i].ending;
+    if (!nums?.length) continue;
+    let j = i;
+    for (; j + 1 < bars.length; j++) {
+      const b = bars[j];
+      const next = bars[j + 1];
+      if (b.endBar === 'repeat-end' || b.endBar === 'double' || b.endBar === 'final') break;
+      if (next.startBar === 'repeat-start' || next.ending?.length || next.lineBreak) break;
+    }
+    for (let k = i; k <= j; k++) out[k] = { nums, start: k === i, end: k === j, closed: k === j && bars[j].endBar === 'repeat-end' };
+    i = j;
+  }
+  return out;
+}

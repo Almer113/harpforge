@@ -1,6 +1,7 @@
 // Inspector for the visual editor: edits the selected note(s) and the current measure.
 
 import { setLyric } from '../../core/edit/lyrics';
+import { ordinal } from '../../core/endings';
 import { lyricOf } from '../../core/verses';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
@@ -465,9 +466,21 @@ const END_BARS: { id: BarStyle | 'none'; label: string }[] = [
   { id: 'final', label: '|] end' },
 ];
 
+/** The endings offered (the times through a bar is played); one written otherwise is offered too. */
+const ENDINGS: { id: string; label: string }[] = [
+  { id: '', label: 'none (every time)' },
+  { id: '1', label: '1st ending' },
+  { id: '2', label: '2nd ending' },
+  { id: '3', label: '3rd ending' },
+  { id: '1,2', label: '1st and 2nd' },
+  { id: '1,2,3', label: '1st, 2nd and 3rd' },
+];
+
 function MeasurePanel({ song, m }: { song: Song; m: number }) {
   const meas = song.measures[m];
   if (!meas) return null;
+  const ending = meas.ending?.join(',') ?? '';
+  const endings = ENDINGS.some((e) => e.id === ending) ? ENDINGS : [...ENDINGS, { id: ending, label: `${meas.ending!.map(ordinal).join(', ')}` }];
   const length = meas.items.reduce((a, it) => Math.max(a, it.start + it.dur), 0);
   return (
     <section className="insp-card">
@@ -508,13 +521,39 @@ function MeasurePanel({ song, m }: { song: Song; m: number }) {
         </label>
       </div>
       <label className="field">
+        <span>Ending</span>
+        <select
+          value={ending}
+          onChange={(e) => apply(updateMeasure(song, m, { ending: e.target.value ? e.target.value.split(',').map(Number) : undefined }))}
+          title="A 1st/2nd ending: this bar (and the ones after it, up to its :| or the next ending) is played only those times through the repeat"
+        >
+          {endings.map((o) => (
+            <option key={o.id} value={o.id}>{o.label}</option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
         <span>Bar line at the end</span>
-        <select value={meas.endBar} onChange={(e) => apply(updateMeasure(song, m, { endBar: e.target.value as BarStyle | 'none' }))}>
+        <select value={meas.endBar} onChange={(e) => apply(updateMeasure(song, m, { endBar: e.target.value as BarStyle | 'none', ...(e.target.value !== 'repeat-end' ? { endTimes: undefined } : {}) }))}>
           {END_BARS.map((b) => (
             <option key={b.id} value={b.id}>{b.label}</option>
           ))}
         </select>
       </label>
+      {meas.endBar === 'repeat-end' && (
+        <label className="field">
+          <span>Times through</span>
+          <select
+            value={meas.endTimes ?? 2}
+            onChange={(e) => apply(updateMeasure(song, m, { endTimes: Number(e.target.value) > 2 ? Number(e.target.value) : undefined }))}
+            title="How many times the repeat is played in all (with endings, their numbers say it too)"
+          >
+            {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+              <option key={n} value={n}>{n === 2 ? 'twice' : `${n} times (:|x${n})`}</option>
+            ))}
+          </select>
+        </label>
+      )}
       <div className="row wrap">
         <button className="btn small ghost" onClick={() => apply(insertMeasure(song, m), { measure: m, caret: { m, start: 0 } })}>Insert before</button>
         <button className="btn small ghost" onClick={() => apply(insertMeasure(song, m + 1), { measure: m + 1, caret: { m: m + 1, start: 0 } })}>Insert after</button>

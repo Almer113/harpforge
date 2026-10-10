@@ -460,7 +460,8 @@ function placeEndings(events: TabEvent[], issues: ParseIssue[]) {
 /**
  * Repeats that won't play as they look, said: a "|:" while another repeat is still open
  * (repeats inside repeats aren't played: the first "|:" is forgotten); a 1st ending with no
- * ":|" to go back from; a 2nd (or later) ending with no 1st before it.
+ * ":|" to go back from; a 2nd (or later) ending with no 1st before it; two endings for the
+ * same time through.
  */
 function checkRepeats(lines: TabLine[], issues: ParseIssue[]) {
   let open = false;
@@ -468,14 +469,31 @@ function checkRepeats(lines: TabLine[], issues: ParseIssue[]) {
   // 1st ending still waiting for its ":|".
   let hadFirst = false;
   let waiting: Span | null = null;
+  // The times through this repeat's endings are for so far; they're done with once a bar with
+  // no ending comes after its ":|" (a repeat with no "|:" of its own starts afresh).
+  const taken = new Set<number>();
+  let pastEnd = false;
+  let barStart = true;
   const unanswered = () => {
     if (waiting) issues.push({ message: 'A 1st ending goes back to the start of its repeat: end it with ":|"', span: waiting, severity: 'warning' });
     waiting = null;
   };
   for (const line of lines) {
+    barStart = true;
     for (const ev of line.events) {
       if (ev.kind !== 'bar') {
+        if (ev.beats <= 1e-6) continue;
+        const first = barStart;
+        barStart = false;
+        if (first && !ev.ending && pastEnd) {
+          taken.clear();
+          hadFirst = false;
+          pastEnd = false;
+        }
         if (!ev.ending) continue;
+        const twice = ev.ending.filter((n) => taken.has(n));
+        if (twice.length && ev.src) issues.push({ message: `Two endings for the ${twice.map(ordinal).join(' and ')} time through: only the first is played`, span: ev.src, severity: 'warning' });
+        for (const n of ev.ending) taken.add(n);
         if (ev.ending.includes(1)) {
           hadFirst = true;
           waiting ??= ev.src ?? null;
@@ -484,14 +502,18 @@ function checkRepeats(lines: TabLine[], issues: ParseIssue[]) {
         }
         continue;
       }
+      barStart = true;
       if (ev.style === 'repeat-start') {
         if (open && ev.src) issues.push({ message: 'A repeat inside a repeat: the first "|:" is forgotten, and only this one repeats', span: ev.src, severity: 'warning' });
         unanswered();
         open = true;
         hadFirst = false;
+        taken.clear();
+        pastEnd = false;
       } else if (ev.style === 'repeat-end') {
         open = false;
         waiting = null;
+        pastEnd = true;
       }
     }
   }

@@ -67,6 +67,7 @@ import { openShortcuts } from '../Shortcuts';
 import { LYRIC_KEYS, LyricInput, LyricsButton, openRestBlock, RestChordInput, startLyrics, stopLyrics, VerseSwitch } from './LyricEntry';
 import { FillLyricsDialog } from './FillLyrics';
 import { clearLyrics, restSlot, shiftLyrics, songVerseCount } from '../../core/edit/lyrics';
+import { endingLabel, measureEndings, ordinal } from '../../core/endings';
 import { lyricOf } from '../../core/verses';
 
 // ---- Helpers shared with the inspector ------------------------------------------------
@@ -898,6 +899,8 @@ function Score({ song, flats, showSecond, asNotes }: { song: Song; flats: Spelli
 
   // Each measure's content as a string: a measure is only drawn again when its own changes.
   const sigs = useMemo(() => song.measures.map((m) => JSON.stringify(m)), [song]);
+  // Each measure's place under an ending's bracket ("1.|start|end|closed"; "" for none).
+  const endings = useMemo(() => measureEndings(song.measures).map((e) => (e ? [endingLabel(e.nums), e.start ? 'start' : '', e.end ? 'end' : '', e.closed ? 'closed' : ''].join('|') : '')), [song]);
   const starts = useMemo(() => measureStarts(song), [song]);
 
   useEffect(() => {
@@ -1165,6 +1168,7 @@ function Score({ song, flats, showSecond, asNotes }: { song: Song; flats: Spelli
             key={mi}
             meas={meas}
             sig={sigs[mi]}
+            ending={endings[mi]}
             mi={mi}
             cap={song.cap}
             zoom={zoom}
@@ -1208,6 +1212,8 @@ interface MeasureProps {
   meas: Measure;
   /** The measure's content as a string (compared instead of `meas`, which is new after every edit). */
   sig: string;
+  /** Its place under an ending's bracket ("1.|start|end|closed"), or "". */
+  ending: string;
   mi: number;
   cap: number;
   zoom: number;
@@ -1292,7 +1298,7 @@ const MeasureView = memo(function MeasureView(p: MeasureProps) {
   return (
     <>
       {meas.lineBreak && mi > 0 && (!fit || meas.section !== undefined) ? <div className="ve-break" /> : null}
-      <div className={`ve-measure ${p.current ? 'current' : ''} ${over ? 'overfull' : ''}`}>
+      <div className={`ve-measure ${p.current ? 'current' : ''} ${over ? 'overfull' : ''} ${p.ending ? `in-ending ${p.ending.split('|').slice(1).filter(Boolean).map((f) => `ending-${f}`).join(' ')}` : ''}`}>
         <div className="ve-mhead">
           <button className="ve-mnum" title="Select this measure (Shift: up to here)" onClick={(e) => handlers.numClick(e, mi)}>
             {mi + 1}
@@ -1302,7 +1308,16 @@ const MeasureView = memo(function MeasureView(p: MeasureProps) {
             <span className="ve-linemark" title="Starts a new line in the tab">↵</span>
           )}
           {meas.startBar === 'repeat-start' && <span className="ve-barflag">𝄆</span>}
-          {meas.endBar === 'repeat-end' && <span className="ve-barflag end">𝄇</span>}
+          {p.ending.includes('|start') && (
+            <span className="ve-ending" title={`An ending: played the ${meas.ending?.map(ordinal).join(' and ')} time through`}>
+              {p.ending.split('|')[0]}
+            </span>
+          )}
+          {meas.endBar === 'repeat-end' && (
+            <span className="ve-barflag end" title={meas.endTimes ? `Repeat back: ${meas.endTimes} times through in all` : 'Repeat back'}>
+              𝄇{meas.endTimes ? `×${meas.endTimes}` : ''}
+            </span>
+          )}
           {over && <span className="ve-warn" title="This measure holds more beats than the time signature allows">too long</span>}
         </div>
         <div

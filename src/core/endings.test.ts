@@ -2,8 +2,8 @@
 // (":|x3") — written, read, kept by the editor, and played in order.
 
 import { describe, expect, it } from 'vitest';
-import { endingLabel, endingSpans } from './endings';
-import { fromDoc, toDoc } from './edit/model';
+import { endingLabel, endingSpans, measureEndings } from './endings';
+import { fromDoc, toDoc, updateMeasure } from './edit/model';
 import { writeAbc } from './formats/abc';
 import { parseHtab } from './htab/parser';
 import { serializeHtab } from './htab/serializer';
@@ -128,5 +128,26 @@ describe('shown on the sheet', () => {
     // An ending at the start of a line: "[1".
     const own = parse('|: 4 4 |\n[1.] 5 5 :|\n[2.] 6 6 |').doc;
     expect(writeAbc(own, harmonicaFromMeta(own.meta)).text).toMatch(/^\[1 e2 e2 :\|2?$/m);
+  });
+});
+
+describe('in the editor', () => {
+  it('each measure’s place under a bracket', () => {
+    const song = fromDoc(parse('|: 4 | [1.] 5 | 6 :| [2.] 7 | 8 ||\n9 |').doc);
+    const marks = measureEndings(song.measures).map((e) => (e ? `${endingLabel(e.nums)}${e.start ? '<' : ''}${e.end ? '>' : ''}${e.closed ? ']' : ''}` : '-'));
+    expect(marks).toEqual(['-', '1.<', '1.>]', '2.<', '2.>', '-']);
+  });
+
+  it('choosing an ending and a repeat count is written into the tab', () => {
+    const song = fromDoc(parse('|: 4 | 5 :| 6 |').doc);
+    const withEnding = updateMeasure(updateMeasure(song, 1, { ending: [1] }), 2, { ending: [2] });
+    const thrice = updateMeasure(withEnding, 1, { endTimes: 3 });
+    expect(tabLines(serializeHtab(toDoc(thrice)))).toEqual(['|: 4 | [1.] 5 :|x3 [2.] 6 |']);
+  });
+
+  it('warns about two endings for the same time through, but not across repeats', () => {
+    expect(parse('|: 4 | [1.2.] 5 :| [2.] 6 |').issues.map((i) => i.message).join(' ')).toMatch(/Two endings for the 2nd time/);
+    // (The second repeat has no "|:": its endings are its own.)
+    expect(parse('|: 4 | [1.] 5 :| [2.] 6 | 7 | [1.] 8 :| [2.] 9 |').issues).toEqual([]);
   });
 });

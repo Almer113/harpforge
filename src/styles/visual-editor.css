@@ -52,6 +52,11 @@
 .ve-section { color: var(--brass); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
 .ve-barflag { color: var(--muted); font-size: 15px; }
 .ve-barflag.end { margin-left: auto; }
+/* 1st/2nd endings: a bracket along the measure heads, "1." at its start, a hook where it goes back. */
+.ve-measure.in-ending > .ve-mhead { border-top: 1.5px solid var(--muted); margin-left: -4px; padding-left: 4px; margin-right: -6px; padding-right: 6px; }
+.ve-measure.ending-start > .ve-mhead { border-left: 1.5px solid var(--muted); }
+.ve-measure.ending-end.ending-closed > .ve-mhead { border-right: 1.5px solid var(--muted); }
+.ve-ending { color: var(--text); font-weight: 700; }
 .ve-warn { color: var(--danger); font-weight: 700; margin-left: auto; }
 .ve-measure.overfull .ve-lane { box-shadow: inset 0 0 0 1px rgba(239, 106, 90, 0.6); }
 .ve-lane {
