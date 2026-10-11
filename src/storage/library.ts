@@ -232,6 +232,8 @@ async function seedOnce(): Promise<Map<string, string>> {
       // A demo brought up to date: an unchanged copy of its old version is updated in place
       // (one you've changed is yours, and stays as it is beside the new one).
       const old = tabs.find((t) => d.replaces?.includes(t.text));
+      // (Had before, and not there as it was: deleted, or changed — yours, so it isn't added again.)
+      if (!old && d.first !== undefined && seen >= d.first) continue;
       await saveTab(d.text, old?.id);
       if (old) {
         // (Not a change of yours: it keeps its place in "Recently changed".)

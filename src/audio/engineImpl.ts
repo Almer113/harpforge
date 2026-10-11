@@ -6,7 +6,7 @@ import * as Tone from 'tone';
 import { soundSpans, type Score } from '../core/score';
 import { inCount, isAccent, type ClickInfo } from './clicks';
 import { createVoice, outputs, type Voice } from './voices';
-import { playBacking, stopBacking } from './backingVoices';
+import { backingSession, stopBacking } from './backingVoices';
 
 export { setOwnDrone } from './backingVoices';
 import type { BackingNote, BackingStyle } from '../core/backing';
@@ -132,7 +132,7 @@ const accented = (beat: number) => isAccent(beat, clickInfo, metronomeBpb);
 // `loopFrom`: where each pass of a loop starts on the transport (before its count, if it has one).
 // `startsAt`: the audio time playback really starts (until then the transport still reports
 // where it was before).
-let current: { startBeat: number; loopFrom: number; end: number; offset: number; endId: number | null; onEnd?: () => void; startsAt: number } | null = null;
+let current: { startBeat: number; loopFrom: number; end: number; offset: number; endId: number | null; onEnd?: () => void; startsAt: number; backing?: PlaybackOptions['backing'] } | null = null;
 let endTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**
@@ -209,19 +209,23 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
   // (A range that's no longer inside the song, after an edit, plays the song instead.)
   const range = opts.range && score && Math.min(opts.range.end, score.totalBeats) > opts.range.start + 1e-6 ? opts.range : undefined;
   tuneOff = !!opts.muted;
-  const startBeat = range ? range.start : (opts.startBeat ?? 0);
+  // Where the music is scheduled from (a loop comes back there), and where it starts: part way
+  // into a looped passage when it starts again in place (not with a count, which each pass has).
+  const from0 = range ? range.start : (opts.startBeat ?? 0);
+  const inside = !!range && countIn === 0 && opts.startBeat !== undefined && opts.startBeat > range.start + 1e-6 && opts.startBeat < range.end - 1e-6;
+  const startBeat = inside ? opts.startBeat! : from0;
 
   if (score) {
     const until = range ? Math.min(range.end, score.totalBeats) : score.totalBeats;
     // Where each note's sound starts and ends (a tied piece belongs to the note it continues).
     const heads = soundSpans(score);
     for (const ev of score.events) {
-      if (ev.rest || ev.start + ev.beats <= startBeat + 1e-6 || ev.start >= until - 1e-6) continue;
-      const from = Math.max(ev.start, startBeat);
+      if (ev.rest || ev.start + ev.beats <= from0 + 1e-6 || ev.start >= until - 1e-6) continue;
+      const from = Math.max(ev.start, from0);
       const head = heads[ev.index];
       // A note sounds from its own start, or from where playback starts when it's held into it.
-      const attack = !ev.tied ? ev.start >= startBeat - 1e-6 : false;
-      const heldIn = !attack && head.start < startBeat - 1e-6 && ev.start <= startBeat + 1e-6;
+      const attack = !ev.tied ? ev.start >= from0 - 1e-6 : false;
+      const heldIn = !attack && head.start < from0 - 1e-6 && ev.start <= from0 + 1e-6;
       const sounds = attack || heldIn;
       const at = from + offset;
       t.schedule((time) => {
@@ -247,17 +251,20 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
         Tone.getDraw().schedule(() => opts.onEvent?.(ev.index, false), time + dur - (ev.soundBeats > ev.beats ? 0 : gap));
       }, beatTicks(at));
     }
-    // The backing: from where playback starts (a loop's notes come round with the transport).
-    if (opts.backing) {
+    // The backing: from where playback starts (a loop's notes come round with the transport);
+    // the drone is held all the way (see startBacking, once the start time is known).
+    if (opts.backing && opts.backing.style !== 'drone') {
       const { style, notes } = opts.backing;
+      backingSession().ready(style);
       for (const n of notes) {
-        if (n.at < startBeat - 1e-6 || n.at >= until - 1e-6) continue;
+        if (n.at < from0 - 1e-6 || n.at >= until - 1e-6) continue;
         const len = Math.min(n.dur, until - n.at);
-        t.schedule((time) => playBacking(style, n, time, Tone.Time(beatTicks(len)).toSeconds()), beatTicks(n.at + offset));
+        // (The session playing then: after a pause or a jump, a new one.)
+        t.schedule((time) => backingSession().play(style, n, time, Tone.Time(beatTicks(len)).toSeconds()), beatTicks(n.at + offset));
       }
     }
     const end = until + offset;
-    current = { startBeat, loopFrom: startBeat + (opts.countEachLoop ? 0 : offset), end, offset, endId: null, onEnd: opts.onEnd, startsAt: Infinity };
+    current = { startBeat, loopFrom: from0 + (opts.countEachLoop ? 0 : offset), end, offset, endId: null, onEnd: opts.onEnd, startsAt: Infinity, backing: opts.backing };
     if (opts.loop && score.totalBeats > 0) setLoop(true);
     else scheduleEnd();
   }
@@ -286,6 +293,8 @@ export function playScore(score: Score | null, opts: PlaybackOptions) {
   t.ticks = Math.round(startBeat * ticksPerBeat());
   const startsAt = Tone.now() + 0.05;
   if (current) current.startsAt = startsAt;
+  // (The drone comes in with the count: something to tune to before the music starts.)
+  if (current?.backing?.style === 'drone') holdDrone(current.backing.notes, startsAt);
   t.start(startsAt);
 }
 
@@ -304,7 +313,28 @@ export function pausePlayback() {
   stopBacking();
 }
 
+/** The drone backing, held from `time` until playback stops or pauses. */
+function holdDrone(notes: BackingNote[], time: number) {
+  const n = notes[0];
+  if (n) backingSession().hold(n.midis, time, n.vel);
+}
+
+/**
+ * Back from a pause: what the backing was holding sounds again from here (the drone, a pad's
+ * chord) — the rest comes as scheduled.
+ */
+function resumeBacking(time: number) {
+  const backing = current?.backing;
+  if (!current || !backing) return;
+  if (backing.style === 'drone') return holdDrone(backing.notes, time);
+  const pos = transportBeats() - current.offset;
+  for (const n of backing.notes) {
+    if (n.at < pos - 1e-6 && n.at + n.dur > pos + 0.25) backingSession().play(backing.style, n, time, Tone.Time(beatTicks(n.at + n.dur - pos)).toSeconds());
+  }
+}
+
 export function resumePlayback() {
+  resumeBacking(Tone.immediate() + 0.02);
   transport().start('+0.02');
   if (endOnResume) atTime(Tone.immediate() + 0.02, endOnResume);
   endOnResume = null;

@@ -26,7 +26,7 @@ beforeEach(() => {
 
 it('the engine hears each part’s level, and nothing from a part that’s off (its level kept)', () => {
   useApp.setState({ mix: { ...DEFAULT_MIX, master: 0.5, levels: { ...DEFAULT_MIX.levels, clicks: 0.6 } } });
-  expect(setMix).toHaveBeenLastCalledWith({ master: 0.5, parts: { tune: 1, backing: 0.7, clicks: 0.6, you: 1 } });
+  expect(setMix).toHaveBeenLastCalledWith({ master: 0.5, parts: { tune: 1, backing: 0.7, drone: 0.7, clicks: 0.6, you: 1 } });
   setPartOff('clicks', true);
   expect(setMix.mock.lastCall?.[0].parts.clicks).toBe(0);
   expect(s().mix.levels.clicks).toBe(0.6);

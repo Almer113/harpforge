@@ -56,7 +56,7 @@ export function setSoundMode(m: SoundMode) {
 // ---- Shared output chain --------------------------------------------------------
 
 /** The parts of the mix: the song's melody, its backing, the clicks, and what you play. */
-export type MixPart = 'tune' | 'backing' | 'clicks' | 'you';
+export type MixPart = 'tune' | 'backing' | 'drone' | 'clicks' | 'you';
 /** The harmonica's parts (they share its sound: reed resonances and room). */
 type HarpPart = 'tune' | 'you';
 
@@ -68,9 +68,10 @@ let chain: {
   /** The level of every part, the master volume last. */
   levels: Record<MixPart, Tone.Gain[]>;
   master: Tone.Gain;
-  /** Where the clicks and the backing go (after their levels). */
+  /** Where the clicks, the backing and the drone on its own go (after their levels). */
   clicksIn: Tone.Gain;
   backingIn: Tone.Gain;
+  droneIn: Tone.Gain;
 } | null = null;
 
 export function outputs() {
@@ -90,14 +91,16 @@ export function outputs() {
   // Clicks are dry; the backing has the room's reverb too.
   const clicksIn = new Tone.Gain(1).connect(master);
   const backingIn = new Tone.Gain(1).connect(mix);
+  const droneIn = new Tone.Gain(1).connect(mix);
   chain = {
     synthIn,
     sampleIn,
     parts,
-    levels: { tune: [parts.tune.synth, parts.tune.sample], you: [parts.you.synth, parts.you.sample], clicks: [clicksIn], backing: [backingIn] },
+    levels: { tune: [parts.tune.synth, parts.tune.sample], you: [parts.you.synth, parts.you.sample], clicks: [clicksIn], backing: [backingIn], drone: [droneIn] },
     master,
     clicksIn,
     backingIn,
+    droneIn,
   };
   if (pendingMix) setMixLevels(pendingMix);
   return chain;

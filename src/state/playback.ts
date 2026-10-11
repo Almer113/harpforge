@@ -7,7 +7,7 @@ import { barAt, barPassage, barStarts, describePassage, eventPassage, joinPassag
 import { findItem, fromDoc, realBeat } from '../core/edit/model';
 import type { PassResult } from '../core/playAlong';
 import { playbackIndexOf, playbackScore, writtenScore, type PlaybackScore } from '../core/repeats';
-import { backingNotes, type BackingStyle } from '../core/backing';
+import { backingNotes, hasChords, type BackingStyle } from '../core/backing';
 import { droneNotes } from './drone';
 import { getParsed, useApp, type AppState, type MixPart } from './store';
 
@@ -48,7 +48,11 @@ let playingAt = -1;
 let startedWith: { played: PlaybackScore | null; along: boolean; backing: string } = { played: null, along: false, backing: 'off' };
 
 /** The backing playback plays with: its style, and the drone's notes when it's the drone on its own's to hold. */
-const backingKey = (s: AppState) => (s.backing === 'drone' ? (s.droneOn ? 'drone:own' : `drone:${droneNotes(s).join(',')}`) : s.backing);
+const backingKey = (s: AppState) => {
+  if (s.backing === 'drone') return s.droneOn ? 'drone:own' : `drone:${droneNotes(s).join(',')}`;
+  // (A song with no chords plays none, whatever the style: nothing to start again for.)
+  return s.backing !== 'off' && hasChords(getParsed(s.text).score) ? s.backing : 'off';
+};
 
 /**
  * Where the visual editor plays from, as you see it there: several notes selected, just
@@ -143,7 +147,8 @@ function restartHere(record: boolean) {
   const s = useApp.getState();
   const beat = engine.scoreBeatNow();
   const pb = playing ?? writtenScore(getParsed(s.text).score);
-  const at = beat === null ? undefined : [...pb.score.events].reverse().find((ev) => ev.start <= beat + 1e-6);
+  // (Paused, the engine has no place: the note it was at.)
+  const at = beat === null ? (playing && playingAt >= 0 ? pb.score.events[playingAt] : undefined) : [...pb.score.events].reverse().find((ev) => ev.start <= beat + 1e-6);
   stop({ record });
   const from = at ? pb.orig[at.index] : undefined;
   if (from !== undefined && editorStart(s) === null) useApp.setState({ selectedEvent: from });
@@ -418,7 +423,7 @@ export function tuneMuted(s: Pick<AppState, 'mix'>): boolean {
 function applyMix() {
   const { mix } = useApp.getState();
   const level = (p: MixPart) => (mix.off[p] ? 0 : mix.levels[p]);
-  engine.setMix({ master: mix.master, parts: { tune: level('tune'), backing: level('backing'), clicks: level('clicks'), you: level('you') } });
+  engine.setMix({ master: mix.master, parts: { tune: level('tune'), backing: level('backing'), drone: level('drone'), clicks: level('clicks'), you: level('you') } });
 }
 applyMix();
 

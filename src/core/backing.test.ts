@@ -35,7 +35,7 @@ describe('the chords', () => {
   });
 
   it('the beat a meter is felt in', () => {
-    expect([pulseOf('4/4'), pulseOf('3/4'), pulseOf('6/8'), pulseOf('2/2'), pulseOf('7/8')]).toEqual([1, 1, 1.5, 2, 1]);
+    expect([pulseOf('4/4'), pulseOf('3/4'), pulseOf('6/8'), pulseOf('2/2'), pulseOf('7/8'), pulseOf('3/8')]).toEqual([1, 1, 1.5, 2, 0.5, 1.5]);
   });
 });
 
@@ -77,5 +77,38 @@ describe('the styles', () => {
       [4, 4],
     ]);
     expect(backingNotes(s, '4/4', 'strum', 2.5)[0].at).toBe(3);
+  });
+});
+
+describe('the review’s cases', () => {
+  it('one bar longer than the rest: the beats go on counting (the others keep theirs)', () => {
+    expect(rhythm('[C] 4 4 4 4 | [G] 5 5 5 5 | [C] 4~~~~~ |', 'oompah')).toBe('0B 1c 2B 3c 4B 5c 6B 7c 8B 9c 10B 11c 12B 13c');
+  });
+
+  it('a song with no bar lines is cut into bars by its time signature', () => {
+    expect(rhythm('[C] 4 4 4 4 4 4 4 4', 'oompah')).toBe('0B 1c 2B 3c 4B 5c 6B 7c');
+  });
+
+  it('a chord just before a bar line comes in on the bar', () => {
+    expect(chordSpans(score('[C] 4 4 4 4 [G] | 5 5 5 5 |')).map((c) => [c.start, c.end])).toEqual([
+      [0, 4],
+      [4, 8],
+    ]);
+  });
+
+  it('oom-pah: a chord coming in on beat 3 has its root there, not a fifth', () => {
+    const notes = backingNotes(score('[C] 4 4 [G] 5 5 |'), '4/4', 'oompah');
+    expect(notes[2].midis).toEqual([bassNote(7)]);
+  });
+
+  it('a pickup played again after a repeat’s last bar finishes that bar (no second bass)', () => {
+    const s = score('[C] 4 | 4 4 4 | 4 4', '3/4');
+    // (The last bar's two beats and the pickup's one make a bar: as if it came round again.)
+    expect(backingNotes(s, '3/4', 'oompah').map((n) => `${n.at}${n.part === 'bass' ? 'B' : 'c'}`).join(' ')).toBe('0c 1B 2c 3c 4B 5c');
+  });
+
+  it('3/8 is felt in one; 7/8 in eighths', () => {
+    expect(rhythm('[C] {4 4 4}~~/2 | {4 4 4}~~/2 |', 'oompah', '3/8')).toBe('0B 1.5B');
+    expect(rhythm('[C] {4 4 4 4 4 4 4}~~~~~~/2 |', 'oompah', '7/8')).toBe('0B 0.5c 1c 1.5c 2c 2.5c 3c');
   });
 });

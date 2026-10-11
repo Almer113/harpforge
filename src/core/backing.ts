@@ -94,9 +94,16 @@ export function bassNote(pc: number): number {
 /** The beat a meter is felt in, in quarter beats (a dotted quarter in 6/8, a half in 2/2). */
 export function pulseOf(time: string): number {
   const [top, bottom] = (/^(\d+)\s*\/\s*(\d+)$/.exec(time) ?? []).slice(1).map(Number);
-  if (bottom === 8 && top % 3 === 0 && top >= 6) return 1.5;
+  // (3/8, 6/8, 9/8, 12/8: in dotted quarters; 5/8, 7/8: in eighths.)
+  if (bottom === 8) return top % 3 === 0 ? 1.5 : 0.5;
   if (bottom === 2) return 2;
   return 1;
+}
+
+/** A bar's length in quarter beats, from the time signature (4 when it can't be read). */
+function barBeats(time: string): number {
+  const [top, bottom] = (/^(\d+)\s*\/\s*(\d+)$/.exec(time) ?? []).slice(1).map(Number);
+  return top > 0 && bottom > 0 ? (top * 4) / bottom : 4;
 }
 
 /**
@@ -120,23 +127,29 @@ export function backingNotes(score: Score, time: string, style: BackingStyle, fr
     return out;
   }
 
-  // The beats: each bar's, from its start (a short first bar — a pickup — counts from its end).
+  // The beats, on the time signature's bars: each bar's from its start. A short first bar (a
+  // pickup) counts from its end; a short bar after another short bar finishes it (a pickup played
+  // again after a repeat's last bar); a longer bar (or a song with no bar lines) goes on counting.
   const pulse = pulseOf(time);
+  const full = barBeats(time);
+  const n = Math.max(1, Math.round(full / pulse));
   const starts = barStarts(score);
-  // (A full bar: the longest, the last one too.)
-  const ends = [...starts.slice(1), score.totalBeats];
-  const full = Math.max(...starts.map((s, i) => ends[i] - s));
   const hits: { beat: number; k: number; n: number }[] = [];
+  let prevShort = 0;
   starts.forEach((s, i) => {
     const end = i + 1 < starts.length ? starts[i + 1] : score.totalBeats;
     const len = end - s;
-    // (Beats in a full bar; a pickup's are the last of them.)
-    const n = Math.max(1, Math.round(Math.max(len, full) / pulse));
-    const lead = i === 0 && len < full - EPS ? full - len : 0;
-    for (let k = 0; k < n; k++) {
+    const short = len < full - EPS;
+    let first = 0;
+    let lead = 0;
+    if (short && i === 0) lead = full - len;
+    else if (short && prevShort && prevShort + len <= full + EPS) first = Math.round(prevShort / pulse);
+    for (let k = 0; ; k++) {
       const beat = s - lead + k * pulse;
-      if (beat >= s - EPS && beat < end - EPS) hits.push({ beat, k, n });
+      if (beat >= end - EPS) break;
+      if (beat >= s - EPS) hits.push({ beat, k: (first + k) % n, n });
     }
+    prevShort = short && !(i === 0) && !first ? len : 0;
   });
   const inRange = hits.filter((h) => h.beat >= from - EPS && h.beat < to - EPS);
   inRange.forEach((h, j) => {
@@ -153,10 +166,12 @@ export function backingNotes(score: Score, time: string, style: BackingStyle, fr
       if (up) out.push({ at: h.beat + 0.5, dur: (room - 0.5) * 0.9, midis: chord.slice(-3), vel: 0.34, part: 'chord', up: true });
       return;
     }
-    // Oom-pah: the bass on the bar's first beat (and its third, on the fifth, in 4/4).
+    // Oom-pah: the bass on the bar's first beat (and its third, on the fifth, in 4/4 — the root
+    // when the chord's just come in there).
     const bassBeat = h.k === 0 || (h.n === 4 && h.k === 2);
     if (bassBeat) {
-      const pc = h.k === 0 ? c.bass! : (c.tones!.find((t) => (t - c.tones![0] + 12) % 12 === 7) ?? c.bass!);
+      const fresh = h.k === 0 || Math.abs(c.start - h.beat) < EPS;
+      const pc = fresh ? c.bass! : (c.tones!.find((t) => (t - c.tones![0] + 12) % 12 === 7) ?? c.bass!);
       out.push({ at: h.beat, dur: room * 0.8, midis: [bassNote(pc)], vel: 0.6, part: 'bass' });
     } else out.push({ at: h.beat, dur: Math.min(room, pulse) * 0.45, midis: chord, vel: 0.4, part: 'chord' });
   });

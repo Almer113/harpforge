@@ -176,15 +176,18 @@ w: Car-ry me down to the sea.
 w: to the sea.
 `;
 
-/** Demo songs with the library version that introduced them. */
-export const DEMOS: { text: string; since: number; replaces?: string[] }[] = [
+/**
+ * Demo songs with the library version that introduced them (`first`) and the one that brought
+ * their text up to date (`since`); `replaces`: their older texts.
+ */
+export const DEMOS: { text: string; since: number; first?: number; replaces?: string[] }[] = [
   { text: TWINKLE, since: 1 },
   { text: SHUFFLE, since: 1 },
   { text: ODE_TO_JOY, since: 1 },
   { text: FRERE_JACQUES, since: 2 },
   // (Version 4 brought endings and a repeat played three times; 5, the backing and the drone to
   // try. An unchanged copy of an older one is updated.)
-  { text: RIVER_SONG, since: 5, replaces: [RIVER_SONG_V3, RIVER_SONG_V4] },
+  { text: RIVER_SONG, since: 5, first: 3, replaces: [RIVER_SONG_V3, RIVER_SONG_V4] },
 ];
 export const DEMO_VERSION = 5;
 

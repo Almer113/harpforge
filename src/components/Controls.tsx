@@ -322,7 +322,8 @@ export function BackingChoice() {
 const MIX_ROWS: { part: MixPart; label: string; hint: string }[] = [
   { part: 'tune', label: 'Tune', hint: 'The song’s melody (off: the music moves on silently — Silent in performance mode, or playing along to be heard by the microphone)' },
   { part: 'backing', label: 'Backing', hint: 'The chords under the song (choose how they’re played above)' },
-  { part: 'clicks', label: 'Clicks', hint: 'The metronome and the count-in' },
+  { part: 'drone', label: 'Drone', hint: 'The drone on its own (the D key; as the backing, it’s the Backing’s level)' },
+  { part: 'clicks', label: 'Clicks', hint: 'The metronome and the count-in (off: no count either)' },
   { part: 'you', label: 'You', hint: 'What you play: the keys, the mouse, a MIDI keyboard, and notes you click to hear' },
 ];
 
@@ -345,7 +346,7 @@ function MixControls() {
             className={`mix-on ${mix.off[part] ? '' : 'on'}`}
             onClick={() => setPartOff(part, !mix.off[part])}
             aria-pressed={!mix.off[part]}
-            aria-label={`${label} ${mix.off[part] ? 'off' : 'on'}`}
+            aria-label={label}
             title={`${label}: ${mix.off[part] ? 'off (click to turn on)' : 'on (click to turn off)'}`}
           >
             {label}

@@ -140,9 +140,9 @@ export interface MidiState {
   miss?: string;
 }
 
-/** The parts of the mix: the song's melody, its backing, the metronome and count, and what you play. */
-export type MixPart = 'tune' | 'backing' | 'clicks' | 'you';
-export const MIX_PARTS: MixPart[] = ['tune', 'backing', 'clicks', 'you'];
+/** The parts of the mix: the song's melody, its backing, the drone on its own, the metronome and count, and what you play. */
+export type MixPart = 'tune' | 'backing' | 'drone' | 'clicks' | 'you';
+export const MIX_PARTS: MixPart[] = ['tune', 'backing', 'drone', 'clicks', 'you'];
 
 export interface Mix {
   /** The master volume (0–1). */
@@ -155,8 +155,8 @@ export interface Mix {
 
 export const DEFAULT_MIX: Mix = {
   master: 1,
-  levels: { tune: 1, backing: 0.7, clicks: 1, you: 1 },
-  off: { tune: false, backing: false, clicks: false, you: false },
+  levels: { tune: 1, backing: 0.7, drone: 0.7, clicks: 1, you: 1 },
+  off: { tune: false, backing: false, drone: false, clicks: false, you: false },
 };
 
 /** A remembered mix, checked (anything that isn't a level or a switch goes back to the default). */

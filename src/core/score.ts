@@ -55,14 +55,22 @@ export function buildScore(doc: TabDoc, harp: Harmonica): { score: Score; issues
   const bars: number[] = [];
   const issues: ParseIssue[] = [];
   let t = 0;
+  // A chord symbol on nothing ("[G] |": at the end of a bar) starts on what comes next.
+  let pendingChord: string | undefined;
   doc.lines.forEach((line, li) => {
     line.events.forEach((e, ei) => {
       if (e.kind === 'bar') {
         bars.push(t);
         return;
       }
+      if (e.beats <= 0) {
+        if (e.chord) pendingChord = e.chord;
+        return;
+      }
+      const chord = e.chord ?? pendingChord;
+      pendingChord = undefined;
       if (e.kind === 'rest') {
-        if (e.beats > 0) events.push({ index: events.length, line: li, eventIndex: ei, start: t, beats: e.beats, sounds: [], midis: [], rest: true, chord: e.chord, tied: false, soundBeats: e.beats });
+        events.push({ index: events.length, line: li, eventIndex: ei, start: t, beats: e.beats, sounds: [], midis: [], rest: true, chord, tied: false, soundBeats: e.beats });
         t += e.beats;
         return;
       }
@@ -75,7 +83,7 @@ export function buildScore(doc: TabDoc, harp: Harmonica): { score: Score; issues
         }
       });
       const tied = !!e.tied;
-      events.push({ index: events.length, line: li, eventIndex: ei, start: t, beats: e.beats, sounds: e.sounds, midis, rest: false, chord: e.chord, lyric: e.lyric, verses: e.verses, tied, soundBeats: e.beats });
+      events.push({ index: events.length, line: li, eventIndex: ei, start: t, beats: e.beats, sounds: e.sounds, midis, rest: false, chord, lyric: e.lyric, verses: e.verses, tied, soundBeats: e.beats });
       // A tie lengthens the sounding part of the note that started the chain.
       if (tied) {
         for (let k = events.length - 2; k >= 0; k--) {

@@ -190,14 +190,26 @@ export function passEnded(reason: 'loop' | 'end' = 'loop'): PassResult | null {
   return lastResult;
 }
 
-// The microphone turned on while playing along (or play along turned on with it on): the tune
-// and the backing go off, so the microphone hears only you.
+// The microphone turned on while playing along (or play along turned on with it on): the tune,
+// the backing and the drone go off, so the microphone hears only you. When it stops listening
+// (or play along ends), the tune and the backing come back (unless you've turned them on or off
+// yourself meanwhile).
+let silencedForMic: ('tune' | 'backing')[] = [];
 useApp.subscribe((s, prev) => {
-  const micOn = s.mic.status === 'on';
-  if (!s.along || !micOn || (s.mix.off.tune && s.mix.off.backing)) return;
-  if (prev.mic.status !== 'on' || !prev.along) {
-    useApp.setState({ mix: { ...s.mix, off: { ...s.mix.off, tune: true, backing: true } } });
-    s.notify('The tune and the backing are off while the microphone listens, so it hears only you. (With headphones, you can turn them back on in the ♫ menu.)');
+  const listening = s.along && s.mic.status === 'on';
+  const was = prev.along && prev.mic.status === 'on';
+  if (listening && !was) {
+    silencedForMic = (['tune', 'backing'] as const).filter((p) => !s.mix.off[p]);
+    if (!silencedForMic.length && !s.droneOn) return;
+    useApp.setState({ mix: { ...s.mix, off: { ...s.mix.off, tune: true, backing: true } }, droneOn: false });
+    s.notify('The tune, the backing and the drone are off while the microphone listens, so it hears only you. (With headphones, you can turn them back on in the ♫ menu.)');
+  } else if (!listening && was && silencedForMic.length) {
+    const back = silencedForMic.filter((p) => s.mix.off[p]);
+    silencedForMic = [];
+    if (back.length) useApp.setState({ mix: { ...s.mix, off: { ...s.mix.off, ...Object.fromEntries(back.map((p) => [p, false])) } } });
+  } else if (listening) {
+    // (Turned back on while listening — headphones: not to be undone later.)
+    silencedForMic = silencedForMic.filter((p) => s.mix.off[p]);
   }
 });
 
