@@ -178,4 +178,7 @@ html { scrollbar-gutter: stable; }
 .ve-dock .input-card { min-height: 0; padding: 2px 6px; }
 /* Backing chords: off or a style, as a row of choices. */
 .backing-seg { margin: 4px 10px 0; align-self: flex-start; }
-.backing-seg button { padding: 4px 9px; font-size: 12px; }
+.backing-seg { flex-wrap: wrap; }
+.backing-seg button { padding: 4px 7px; font-size: 12px; white-space: nowrap; }
+/* The drone: start/stop and its note, side by side. */
+.drone-row select { flex: 1; min-width: 0; }

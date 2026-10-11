@@ -113,6 +113,18 @@ export function setMix(levels: MixLevels) {
   impl?.setMixLevels(levels);
 }
 
+/** The drone on its own: these notes held from now (null: it fades). Starts the engine if need be. */
+let drone: number[] | null = null;
+export function setDrone(midis: number[] | null) {
+  drone = midis;
+  if (impl) return impl.setOwnDrone(midis);
+  if (!midis) return;
+  // (What's wanted once the engine is there: it may have been switched off meanwhile.)
+  load()
+    .then((m) => m.setOwnDrone(drone))
+    .catch(ignore);
+}
+
 /** Leaves the tune out from now (or brings it back), while playing too. */
 export function setTuneOff(off: boolean) {
   impl?.setTuneOff(off);

@@ -1,4 +1,4 @@
-import { BACKING_STYLES, type BackingStyle } from '../core/backing';
+import { BACKING_STYLES, type BackingStyle, type DroneRoot } from '../core/backing';
 import { DEFAULT_PLAIN_TEXT, type PlainTextOptions } from '../core/formats/plaintext';
 import { FAMILIES, keysFor, type Family, type HarmonicaSpec } from '../core/instruments';
 import { create } from 'zustand';
@@ -251,6 +251,11 @@ export interface AppState {
   mix: Mix;
   /** Backing chords from the song's chord symbols, and how they're played ('off': none). Remembered. */
   backing: 'off' | BackingStyle;
+  /** The drone sounding on its own (see drone.ts). */
+  droneOn: boolean;
+  /** The drone's root (the song's key, the harmonica's, or a pitch class) and whether its fifth sounds. Remembered. */
+  droneRoot: DroneRoot;
+  droneFifth: boolean;
   /** Play |: … :| sections twice. Remembered. */
   playRepeats: boolean;
   /** While playing: 2 when the note playing is a repeat's second time. */
@@ -410,6 +415,8 @@ function loadPrefs(): {
   performMove?: 'scroll' | 'pages';
   mix?: Mix;
   backing?: 'off' | BackingStyle;
+  droneRoot?: DroneRoot;
+  droneFifth?: boolean;
   playRepeats?: boolean;
   playAllVerses?: boolean;
 } {
@@ -442,6 +449,8 @@ function loadPrefs(): {
     performSize: PERFORM_SIZES.find((x) => x === p.performSize),
     performMove: p.performMove === 'pages' || p.performMove === 'scroll' ? p.performMove : undefined,
     mix: mixFrom(p.mix),
+    droneRoot: p.droneRoot === 'song' || p.droneRoot === 'harp' ? p.droneRoot : typeof p.droneRoot === 'number' && Number.isInteger(p.droneRoot) && p.droneRoot >= 0 && p.droneRoot < 12 ? p.droneRoot : undefined,
+    droneFifth: bool(p.droneFifth),
     backing: p.backing === 'off' || BACKING_STYLES.some((b) => b.id === p.backing) ? (p.backing as 'off' | BackingStyle) : undefined,
     playRepeats: bool(p.playRepeats),
     playAllVerses: bool(p.playAllVerses),
@@ -509,6 +518,9 @@ export const useApp = create<AppState>((set) => ({
   performMove: prefs.performMove ?? 'scroll',
   mix: prefs.mix ?? DEFAULT_MIX,
   backing: prefs.backing ?? 'off',
+  droneOn: false,
+  droneRoot: prefs.droneRoot ?? 'song',
+  droneFifth: prefs.droneFifth ?? true,
   playRepeats: prefs.playRepeats ?? true,
   playPass: 1,
   playAllVerses: prefs.playAllVerses ?? false,
@@ -614,9 +626,9 @@ export const useApp = create<AppState>((set) => ({
 
 // Remember preferences.
 useApp.subscribe((s, prev) => {
-  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.ve.zoom === prev.ve.zoom && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps && s.countIn === prev.countIn && s.countEachLoop === prev.countEachLoop && s.trainer === prev.trainer && s.trainerCleanOnly === prev.trainerCleanOnly && s.micLatency === prev.micLatency && s.performSize === prev.performSize && s.performMove === prev.performMove && s.mix === prev.mix && s.backing === prev.backing && s.playRepeats === prev.playRepeats && s.playAllVerses === prev.playAllVerses) return;
+  if (s.soundMode === prev.soundMode && s.harpSize === prev.harpSize && s.fitWidth === prev.fitWidth && s.dockOpen === prev.dockOpen && s.ve.zoom === prev.ve.zoom && s.showNoteNames === prev.showNoteNames && s.readAs === prev.readAs && s.sheetShow === prev.sheetShow && s.printPrefs === prev.printPrefs && s.textPrefs === prev.textPrefs && s.ownedHarps === prev.ownedHarps && s.countIn === prev.countIn && s.countEachLoop === prev.countEachLoop && s.trainer === prev.trainer && s.trainerCleanOnly === prev.trainerCleanOnly && s.micLatency === prev.micLatency && s.performSize === prev.performSize && s.performMove === prev.performMove && s.mix === prev.mix && s.backing === prev.backing && s.droneRoot === prev.droneRoot && s.droneFifth === prev.droneFifth && s.playRepeats === prev.playRepeats && s.playAllVerses === prev.playAllVerses) return;
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, zoom: s.ve.zoom, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps, countIn: s.countIn, countEachLoop: s.countEachLoop, trainer: s.trainer, trainerCleanOnly: s.trainerCleanOnly, micLatency: s.micLatency ?? undefined, performSize: s.performSize, performMove: s.performMove, mix: s.mix, backing: s.backing, playRepeats: s.playRepeats, playAllVerses: s.playAllVerses }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ soundMode: s.soundMode, harpSize: s.harpSize, fitWidth: s.fitWidth, dockOpen: s.dockOpen, zoom: s.ve.zoom, showNoteNames: s.showNoteNames, readAs: s.readAs, sheetShow: s.sheetShow, printPrefs: s.printPrefs, textPrefs: s.textPrefs, ownedHarps: s.ownedHarps, countIn: s.countIn, countEachLoop: s.countEachLoop, trainer: s.trainer, trainerCleanOnly: s.trainerCleanOnly, micLatency: s.micLatency ?? undefined, performSize: s.performSize, performMove: s.performMove, mix: s.mix, backing: s.backing, droneRoot: s.droneRoot, droneFifth: s.droneFifth, playRepeats: s.playRepeats, playAllVerses: s.playAllVerses }));
   } catch {
     /* storage unavailable */
   }

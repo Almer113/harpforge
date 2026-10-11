@@ -7,6 +7,8 @@ import { soundSpans, type Score } from '../core/score';
 import { inCount, isAccent, type ClickInfo } from './clicks';
 import { createVoice, outputs, type Voice } from './voices';
 import { playBacking, stopBacking } from './backingVoices';
+
+export { setOwnDrone } from './backingVoices';
 import type { BackingNote, BackingStyle } from '../core/backing';
 
 export { loadSamples, samplesReady, setMixLevels, setSoundMode, setVoicing, type MixLevels, type MixPart, type SoundMode, type Voicing } from './voices';

@@ -13,13 +13,23 @@ import { isNoChord, parseChord } from './chords';
 import { barStarts } from './passage';
 import type { Score } from './score';
 
-export type BackingStyle = 'pad' | 'strum' | 'oompah';
+export type BackingStyle = 'pad' | 'strum' | 'oompah' | 'drone';
 
 export const BACKING_STYLES: { id: BackingStyle; label: string; hint: string }[] = [
   { id: 'pad', label: 'Pad', hint: 'Soft held chords, under the harmonica' },
   { id: 'strum', label: 'Strum', hint: 'A guitar-like strum on the beats' },
   { id: 'oompah', label: 'Oom-pah', hint: 'Bass on the strong beat, chord on the others (a waltz in 3/4)' },
+  { id: 'drone', label: 'Drone', hint: 'A held note of the song’s key (and its fifth), for songs without chords too' },
 ];
+
+/** What the drone holds: the song's key note, the harmonica's, or a note (pitch class). */
+export type DroneRoot = 'song' | 'harp' | number;
+
+/** The drone's notes: its root low (G2–F#3), the fifth over it if wanted, and the root an octave up. */
+export function droneMidis(pc: number, fifth: boolean): number[] {
+  const root = 43 + ((pc - 43) % 12 + 12) % 12;
+  return fifth ? [root, root + 7, root + 12] : [root, root + 12];
+}
 
 /** A note (or several together) of the backing, in score beats. */
 export interface BackingNote {
@@ -93,7 +103,9 @@ export function pulseOf(time: string): number {
  * The backing's notes from `from` to `to` (score beats) in `style`. A chord already sounding
  * at `from` is heard there (a pad at once; strums and the oom-pah from the next beat).
  */
-export function backingNotes(score: Score, time: string, style: BackingStyle, from = 0, to = score.totalBeats): BackingNote[] {
+export function backingNotes(score: Score, time: string, style: BackingStyle, from = 0, to = score.totalBeats, drone: number[] = []): BackingNote[] {
+  // The drone: one held note, all the way (chords or not).
+  if (style === 'drone') return drone.length && to > from + EPS ? [{ at: from, dur: to - from, midis: drone, vel: 0.4, part: 'chord' }] : [];
   const spans = chordSpans(score).filter((c) => c.tones && c.end > from + EPS && c.start < to - EPS);
   if (!spans.length) return [];
   const out: BackingNote[] = [];

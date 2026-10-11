@@ -7,7 +7,8 @@ import { barAt, barPassage, barStarts, describePassage, eventPassage, joinPassag
 import { findItem, fromDoc, realBeat } from '../core/edit/model';
 import type { PassResult } from '../core/playAlong';
 import { playbackIndexOf, playbackScore, writtenScore, type PlaybackScore } from '../core/repeats';
-import { backingNotes } from '../core/backing';
+import { backingNotes, type BackingStyle } from '../core/backing';
+import { droneNotes } from './drone';
 import { getParsed, useApp, type AppState, type MixPart } from './store';
 
 /**
@@ -44,7 +45,10 @@ function onEvent(index: number, on: boolean, pass?: number, verse?: number) {
 let playing: PlaybackScore | null = null;
 let playingAt = -1;
 // What the sound was started with: changed since (even while paused), it starts again.
-let startedWith: { played: PlaybackScore | null; along: boolean; backing: AppState['backing'] } = { played: null, along: false, backing: 'off' };
+let startedWith: { played: PlaybackScore | null; along: boolean; backing: string } = { played: null, along: false, backing: 'off' };
+
+/** The backing playback plays with: its style, and the drone's notes when it's the drone on its own's to hold. */
+const backingKey = (s: AppState) => (s.backing === 'drone' ? (s.droneOn ? 'drone:own' : `drone:${droneNotes(s).join(',')}`) : s.backing);
 
 /**
  * Where the visual editor plays from, as you see it there: several notes selected, just
@@ -127,7 +131,7 @@ export function startLabel(s: AppState): string {
 
 /** Whether the tune would be left out, and what would be played, if playback started now. */
 function wanted(s: AppState): typeof startedWith {
-  return { played: playedScore(s), along: alongOn(s), backing: s.backing };
+  return { played: playedScore(s), along: alongOn(s), backing: backingKey(s) };
 }
 const sameStart = (a: typeof startedWith, b: typeof startedWith) => a.played === b.played && a.along === b.along && a.backing === b.backing;
 
@@ -214,9 +218,11 @@ export async function play(opts: { count?: boolean; from?: number; pass?: number
   if (alongOn(s)) along?.startChecking(range ?? { start: startBeat, end: pb.score.totalBeats }, s.loop, eachLoop, pb);
   playing = pb;
   playingAt = selAt ?? 0;
-  startedWith = { played: pb, along: alongOn(s), backing: s.backing };
+  startedWith = { played: pb, along: alongOn(s), backing: backingKey(s) };
   // Backing chords: from where playback starts (or the looped passage), in the order played.
-  const backing = s.backing === 'off' ? undefined : { style: s.backing, notes: backingNotes(pb.score, p.doc.meta.time, s.backing, range?.start ?? startBeat, range?.end ?? pb.score.totalBeats) };
+  // (The drone as the backing, unless it's already sounding on its own.)
+  const backingOn = s.backing !== 'off' && !(s.backing === 'drone' && s.droneOn);
+  const backing = backingOn ? { style: s.backing as BackingStyle, notes: backingNotes(pb.score, p.doc.meta.time, s.backing as BackingStyle, range?.start ?? startBeat, range?.end ?? pb.score.totalBeats, droneNotes(s)) } : undefined;
   startedKey = startKey(s);
   engine.playScore(pb.score, {
     tempo,
@@ -399,7 +405,7 @@ useApp.subscribe((s, prev) => {
   // when it changes what's played.
   if (s.play === 'playing') {
     if (alongOn(s) !== alongOn(prev)) restartHere(true);
-    else if ((s.playRepeats !== prev.playRepeats || s.playAllVerses !== prev.playAllVerses || s.backing !== prev.backing) && !sameStart(wanted(s), startedWith)) restartHere(false);
+    else if ((s.playRepeats !== prev.playRepeats || s.playAllVerses !== prev.playAllVerses || s.backing !== prev.backing || s.droneOn !== prev.droneOn || s.droneRoot !== prev.droneRoot || s.droneFifth !== prev.droneFifth) && !sameStart(wanted(s), startedWith)) restartHere(false);
   }
 });
 

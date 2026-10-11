@@ -6,10 +6,11 @@ import { keysTaken } from '../live/focus';
 import { stopRecording } from '../live/recorder';
 import { isKeyChange, keyDistance, setHarmonica, shiftOctave } from '../state/actions';
 import { guessTonic, harpForPosition, octaveOptions, positionFor, positionName } from '../core/convert';
-import { mod12, transposeKey } from '../core/pitch';
+import { keySpelling, mod12, pitchClassName, transposeKey } from '../core/pitch';
 import { describePassage } from '../core/passage';
 import { ordinal, passageHasEndings } from '../core/endings';
 import { BACKING_STYLES, hasChords } from '../core/backing';
+import { droneName, toggleDrone } from '../state/drone';
 import { atStart, backToStart, currentPassage, endPassageLoop, extendPassage, holdTrainer, playFrom, startLabel, startTrainer, stop, stopTrainer, toggleLoop, togglePlay, trainerLabel } from '../state/playback';
 import { exitPerform, performResize, togglePerform } from '../state/perform';
 import { DEFAULT_MIX, setPartOff, TRAINER_CHOICES, useApp, useParsed, type AppState, type Mix, type MixPart, type TrainerSettings } from '../state/store';
@@ -161,6 +162,8 @@ const Icon = {
   toStart: <svg viewBox="0 0 24 24" width="16" height="16"><rect x="5" y="5" width="3" height="14" rx="1" fill="currentColor" /><path d="M19 5v14L9 12z" fill="currentColor" /></svg>,
   loop: <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l3 3-3 3" /><path d="M4 11V9a4 4 0 0 1 4-4h12" /><path d="M7 22l-3-3 3-3" /><path d="M20 13v2a4 4 0 0 1-4 4H4" /></svg>,
   metro: <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M9 3h6l4 18H5z" /><path d="M12 15l5-9" strokeLinecap="round" /></svg>,
+  // A held tone: a long, gently waving line.
+  drone: <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 12c2.2-3 4.3-3 6 0s3.8 3 6 0 4.3-3 6 0" /><path d="M3 18h18" opacity="0.5" /></svg>,
   gauge: <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 18a9 9 0 1 1 15 0" /><path d="M12 14l4-5" /><circle cx="12" cy="14" r="1.2" fill="currentColor" /></svg>,
   hold: <svg viewBox="0 0 24 24" width="12" height="12"><path d="M6 4h4v16H6zM14 4h4v16h-4z" fill="currentColor" /></svg>,
   resume: <svg viewBox="0 0 24 24" width="12" height="12"><path d="M7 4.5v15l13-7.5z" fill="currentColor" /></svg>,
@@ -206,6 +209,7 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
         </label>
         <span className="mi-hint pb-hint">A generated reed sound</span>
         <BackingChoice />
+        <DroneSettings />
         <MixControls />
         {withSpeed && (
           <label className="pb-row pb-speed">
@@ -241,6 +245,59 @@ function SoundMenu({ withSpeed = false }: { withSpeed?: boolean }) {
   );
 }
 
+/** The drone on its own, on or off (what it holds is said, and set in the ♫ menu). */
+function DroneButton() {
+  const on = useApp((s) => s.droneOn);
+  const name = useApp((s) => droneName(s));
+  return (
+    <button
+      className={`t-btn toggle ${on ? 'on' : ''}`}
+      onClick={() => toggleDrone()}
+      title={on ? `Drone: holding ${name} (click to stop)` : `Drone: hold ${name} — to tune bends against, or to play over (the note: in the ♫ menu)`}
+      aria-label="Drone"
+      aria-pressed={on}
+    >
+      {Icon.drone}
+    </button>
+  );
+}
+
+/** The drone's note: the song's key, the harmonica's, or one picked; with its fifth or not. */
+function DroneSettings() {
+  const on = useApp((s) => s.droneOn);
+  const root = useApp((s) => s.droneRoot);
+  const fifth = useApp((s) => s.droneFifth);
+  const name = useApp((s) => droneName(s));
+  const { doc, harp } = useParsed();
+  const flats = keySpelling(doc.meta.key ?? harp.spec.key);
+  return (
+    <>
+      <span className="pb-head">Drone</span>
+      <div className="pb-row drone-row">
+        <button className={`mix-on ${on ? 'on' : ''}`} onClick={() => toggleDrone()} aria-pressed={on} title={on ? 'Stop the drone' : 'Start the drone: it keeps sounding until you stop it'}>
+          {on ? `Holding ${name}` : 'Start'}
+        </button>
+        <select
+          value={String(root)}
+          aria-label="The drone’s note"
+          onChange={(e) => useApp.setState({ droneRoot: e.target.value === 'song' || e.target.value === 'harp' ? e.target.value : Number(e.target.value) })}
+        >
+          <option value="song">The song’s key</option>
+          <option value="harp">The harmonica’s key</option>
+          {Array.from({ length: 12 }, (_, pc) => (
+            <option key={pc} value={pc}>{pitchClassName(pc, flats)}</option>
+          ))}
+        </select>
+      </div>
+      <label className="check">
+        <input type="checkbox" checked={fifth} onChange={(e) => useApp.setState({ droneFifth: e.target.checked })} />
+        With the fifth
+      </label>
+      <span className="mi-hint pb-hint">A held note to tune bends against, or to play over. With the microphone, use headphones (it would hear the drone too).</span>
+    </>
+  );
+}
+
 /** Backing chords: off, or how the song's chord symbols are played. */
 function BackingChoice() {
   const backing = useApp((s) => s.backing);
@@ -257,7 +314,7 @@ function BackingChoice() {
           </button>
         ))}
       </div>
-      <span className="mi-hint pb-hint">{chords ? hint : 'This song has no chord symbols ([G], [Am7]…) to play'}</span>
+      <span className="mi-hint pb-hint">{chords || backing === 'drone' ? hint : 'This song has no chord symbols ([G], [Am7]…) to play: the Drone plays without them'}</span>
     </>
   );
 }
@@ -369,6 +426,7 @@ export function PlayStop({ perform = false }: { perform?: boolean }) {
       >
         {Icon.metro}
       </button>
+      <DroneButton />
       <TrainerButton />
       {loopRange && (
         <span className="loop-chip">
