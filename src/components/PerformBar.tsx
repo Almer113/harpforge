@@ -3,7 +3,7 @@
 // badge keeps the bar number), and comes back when the mouse moves.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PlayStop, SpeedControl, usePlayingPass, useTransportKeys } from './Controls';
+import { BackingChoice, PlayStop, SpeedControl, usePlayingPass, useTransportKeys } from './Controls';
 import { pageTurnKey, startPerformanceView, turnPage } from './follow';
 import { Popover } from './Popover';
 import { keysTaken } from '../live/focus';
@@ -97,8 +97,8 @@ export function PerformBar() {
           onClick={() => setPartOff('tune', !silent)}
           title={
             silent
-              ? 'Silent: the music moves at tempo without the tune (click for the tune; the backing and the metronome still play)'
-              : 'Silent: the music moves at tempo without the tune, for playing it yourself (the backing and the metronome still play)'
+              ? 'Tune off (M): the music moves at tempo without the tune (click for the tune; the backing and the metronome still play)'
+              : 'Tune off (M): the music moves at tempo without the tune, for playing it yourself over the backing (the metronome too, if on)'
           }
           aria-label="Silent"
           aria-pressed={silent}
@@ -138,6 +138,8 @@ export function PerformBar() {
             </button>
           </div>
           <span className="mi-hint">Page Down / Up or the arrow keys turn pages (as do page-turner pedals).</span>
+          {/* Performing over the backing: Silent (M) leaves the tune out, the backing plays on. */}
+          <BackingChoice />
         </Popover>
         <div className="seg pf-size" role="group" aria-label="Music size">
           {sizeButton(-1, 'A−', 'Smaller (Ctrl+−)')}

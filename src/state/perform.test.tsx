@@ -190,3 +190,48 @@ it('a screen lock that arrives after leaving is let go', async () => {
   expect(release).toHaveBeenCalled();
   Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: undefined });
 });
+
+it('M turns the tune off and on, D the drone; in performance mode the menu has the backing', async () => {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => root.render(<PlayPage />));
+  const key = (code: string) => act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { code, key: code.slice(3).toLowerCase() })));
+  await key('KeyM');
+  expect(s().mix.off.tune).toBe(true);
+  await key('KeyM');
+  expect(s().mix.off.tune).toBe(false);
+  await key('KeyD');
+  expect(s().droneOn).toBe(true);
+  await key('KeyD');
+  expect(s().droneOn).toBe(false);
+  // Performing: the Drone button in the bar, and the backing in the view menu.
+  await act(async () => enterPerform());
+  expect(host.querySelector('.perform-bar [aria-label="Drone"]')).not.toBeNull();
+  await act(async () => (host.querySelector('.pf-view-wrap button') as HTMLButtonElement).click());
+  expect(host.querySelector('.pf-view-menu .backing-seg')).not.toBeNull();
+  await act(async () => root.unmount());
+  host.remove();
+});
+
+it('in the editor, Shift+M and Shift+D (M is the triplet there)', async () => {
+  useApp.setState({ page: 'editor' });
+  const { useTransportKeys } = await import('../components/Controls');
+  function Keys() {
+    useTransportKeys();
+    return null;
+  }
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => root.render(<Keys />));
+  await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM', key: 'm' })));
+  expect(s().mix.off.tune).toBe(false);
+  await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM', key: 'M', shiftKey: true })));
+  expect(s().mix.off.tune).toBe(true);
+  await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyD', key: 'D', shiftKey: true })));
+  expect(s().droneOn).toBe(true);
+  await act(async () => useApp.setState({ droneOn: false, mix: DEFAULT_MIX, page: 'play' }));
+  await act(async () => root.unmount());
+  host.remove();
+});

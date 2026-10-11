@@ -299,7 +299,7 @@ function DroneSettings() {
 }
 
 /** Backing chords: off, or how the song's chord symbols are played. */
-function BackingChoice() {
+export function BackingChoice() {
   const backing = useApp((s) => s.backing);
   const { score } = useParsed();
   const chords = useMemo(() => hasChords(score), [score]);
@@ -662,10 +662,23 @@ export function useTransportKeys() {
         performResize(e.code === 'Digit0' || e.code === 'Numpad0' ? 0 : e.code === 'Minus' || e.code === 'NumpadSubtract' ? -1 : 1);
         return;
       }
-      // L loops (Shift+L in the editor, where L ties notes).
-      if (e.code === 'KeyL' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && e.shiftKey === (st.page === 'editor')) {
+      // L loops, M turns the tune off and on, D the drone (with Shift in the editor, where
+      // L, M and D are its own).
+      const transportKey = !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && e.shiftKey === (st.page === 'editor');
+      if (e.code === 'KeyL' && transportKey) {
         e.preventDefault();
         toggleLoop();
+        return;
+      }
+      if (e.code === 'KeyM' && transportKey) {
+        e.preventDefault();
+        setPartOff('tune', !st.mix.off.tune);
+        st.notify(st.mix.off.tune ? 'Tune on' : 'Tune off: the music goes on without it');
+        return;
+      }
+      if (e.code === 'KeyD' && transportKey) {
+        e.preventDefault();
+        toggleDrone();
         return;
       }
       if (e.code === 'Enter' && !e.repeat && !el.closest('button')) {

@@ -354,6 +354,8 @@ export function VisualEditor() {
           return;
         case 'm':
         case 'M':
+          // (Shift+M turns the tune off and on: see the transport.)
+          if (e.shiftKey) return;
           e.preventDefault();
           setDuration(v.dur, false, !v.triplet);
           return;

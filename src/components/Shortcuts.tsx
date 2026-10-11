@@ -16,6 +16,8 @@ const COLUMNS: Group[][] = [
         ['Enter', 'Play / pause'],
         ['Esc', 'Stop, or stop recording; when stopped, a step a press: deselect (editor), end the loop, the trainer, let go of the passage, then back to the start'],
         ['L', 'Loop the chosen passage, or the whole song (Shift+L in the editor)'],
+        ['M', 'Tune off / on: the music goes on without the melody — Silent (Shift+M in the editor)'],
+        ['D', 'Drone on / off: a held note of the song’s key (Shift+D in the editor)'],
         ['F', 'Performance mode: the music fills the screen (Play); F or Esc leaves'],
         ['Ctrl+= / Ctrl+−', 'Performance mode: bigger / smaller music (Ctrl+0: the usual size)'],
         ['Page Down / Up, arrows', 'Performance mode: next / previous page (page-turner pedals send these; there the arrows don’t move the harmonica’s keys)'],
