@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExportMenu } from '../components/ExportMenu';
 import { Menu } from '../components/Menu';
 import { SimpleTabPreview } from '../components/SimpleTabView';
@@ -11,7 +11,7 @@ import { openHistory } from '../state/history';
 import { stop } from '../state/playback';
 import { useApp } from '../state/store';
 import { deleteForever, duplicateTab, emptyTheTrash, moveToTrash, restoreBackup, restoreFromTrash } from '../state/trash';
-import { exportLibrary, libraryStats, listTabs, listTrash, persistStorage, readBackup, recoverableTabs, recoverTabs, seedDemos, TRASH_DAYS, type SavedTab } from '../storage/library';
+import { exportLibrary, getTab, libraryStats, listTabs, listTrash, persistStorage, readBackup, recoverableTabs, recoverTabs, seedDemos, TRASH_DAYS, type SavedTab } from '../storage/library';
 
 export function LibraryPage() {
   const [tabs, setTabs] = useState<SavedTab[] | null>(null);
@@ -41,17 +41,27 @@ export function LibraryPage() {
   const [stats, setStats] = useState<Stats | null>(null);
 
   // After the first-run demos are in (seedDemos runs once), and again whenever something is saved.
+  // (Only the latest read is shown: a quick delete and undo can't end on the older list.)
+  const reads = useRef(0);
   const refresh = useCallback(() => {
+    const n = ++reads.current;
+    const latest = () => n === reads.current;
     seedDemos()
       .catch(() => undefined)
       .then(listTabs)
-      .then(async (list) => {
+      .then((list) => {
+        if (!latest()) return;
         setTabs(list);
-        setTrash(await listTrash());
-        setStats(await libraryStats());
         setLoadError(null);
+        // (The trash and the size are extras: if they can't be read, the library still shows.)
+        listTrash()
+          .then((t) => latest() && setTrash(t))
+          .catch(() => undefined);
+        libraryStats()
+          .then((st) => latest() && setStats(st))
+          .catch(() => undefined);
       })
-      .catch((e: Error) => setLoadError(e?.message || 'storage unavailable'));
+      .catch((e: Error) => latest() && setLoadError(e?.message || 'storage unavailable'));
   }, []);
   useEffect(refresh, [refresh, docId, savedText, libraryRev]);
   // (The trash emptied: back to the library.)
@@ -82,7 +92,7 @@ export function LibraryPage() {
     refresh();
   };
 
-  const open = (t: SavedTab, page: 'play' | 'editor' = 'play') => {
+  const open = async (t: SavedTab, page: 'play' | 'editor' = 'play') => {
     const s = useApp.getState();
     // The tab that's already open: just go to it (reloading would throw away unsaved edits).
     if (s.docId === t.id) {
@@ -91,8 +101,10 @@ export function LibraryPage() {
     }
     if (!confirmDiscard()) return;
     stop();
-    s.loadText(t.text, t.id, true);
-    s.setPage(page);
+    // (As it is in the library now: the list may be a moment behind a save.)
+    const now = (await getTab(t.id).catch(() => undefined)) ?? t;
+    useApp.getState().loadText(now.text, now.id, true);
+    useApp.getState().setPage(page);
   };
 
   const startNew = () => {
@@ -145,10 +157,10 @@ export function LibraryPage() {
     <section className="page library-page">
       <header className="page-head row">
         <div>
-          <h1>Library</h1>
-          <p className="muted">Your saved tabs. Click one to play it.</p>
+          <h1>{showTrash ? 'Trash' : 'Library'}</h1>
+          <p className="muted">{showTrash ? `Deleted tabs wait here for ${TRASH_DAYS} days, then go for good.` : 'Your saved tabs. Click one to play it.'}</p>
         </div>
-        <div className="tb-group" style={showTrash ? { visibility: 'hidden' } : undefined}>
+        <div className="tb-group" hidden={showTrash}>
           <input className="search" type="search" aria-label="Search your tabs" placeholder="Search titles, artists, lyrics…" value={query} onChange={(e) => setQuery(e.target.value)} />
           <select value={family} onChange={(e) => setFamily(e.target.value)} title="Show one kind of harmonica" aria-label="Kind of harmonica">
             <option value="all">All harmonicas</option>
@@ -173,7 +185,12 @@ export function LibraryPage() {
         </div>
       )}
       {showTrash ? (
-        <TrashView tabs={trash} docId={docId} onBack={() => setShowTrash(false)} />
+        <TrashView tabs={trash} docId={docId} onBack={() => {
+            setShowTrash(false);
+            // (Back to the button that opened it.)
+            requestAnimationFrame(() => document.querySelector<HTMLElement>('.lib-trash-btn')?.focus());
+          }}
+        />
       ) : tabs === null ? (
         !loadError && <p className="muted">Loading…</p>
       ) : tabs.length === 0 ? (
@@ -211,7 +228,7 @@ export function LibraryPage() {
                   <div className="lib-title">
                     <h3>
                       {/* Covers the whole card (see .lib-open::after), so a click anywhere plays it. */}
-                      <button className="lib-open" onClick={() => open(t)} title="Play this tab">
+                      <button className="lib-open" onClick={() => void open(t)} title="Play this tab">
                         {t.title}
                       </button>
                     </h3>
@@ -225,7 +242,7 @@ export function LibraryPage() {
                 </div>
                 <div className="lib-actions">
                   <span className="muted small lib-date">{relativeDate(t.updatedAt)}</span>
-                  <button className="btn small" onClick={() => open(t, 'editor')}>Edit</button>
+                  <button className="btn small" onClick={() => void open(t, 'editor')}>Edit</button>
                   <ExportMenu text={t.text} small />
                   <Menu
                     label="⋯"
@@ -249,17 +266,19 @@ export function LibraryPage() {
           <button className="btn small ghost" onClick={() => void backup()} disabled={!tabs?.length} title="Download every tab as .htab files in one .zip">
             Back up library
           </button>
-          <Menu
-            label="▾"
-            title="More ways to back up"
-            items={[{ label: 'Back up with history and trash', hint: 'Every saved version, and the trash too (a bigger file)', onClick: () => void backup(true) }]}
-          />
+          {(!!tabs?.length || trash.length > 0) && (
+            <Menu
+              label="▾"
+              title="More ways to back up"
+              items={[{ label: 'Back up with history and trash', hint: 'Every saved version, and the trash too (a bigger file)', onClick: () => void backup(true) }]}
+            />
+          )}
         </div>
         <button className="btn small ghost" onClick={restore} title="Add the tabs from a backup .zip">
           Restore backup…
         </button>
         {trash.length > 0 && !showTrash && (
-          <button className="btn small ghost" onClick={() => setShowTrash(true)} title={`Deleted tabs wait here for ${TRASH_DAYS} days`}>
+          <button className="btn small ghost lib-trash-btn" onClick={() => setShowTrash(true)} title={`Deleted tabs wait here for ${TRASH_DAYS} days`}>
             Trash ({trash.length})
           </button>
         )}
@@ -274,9 +293,11 @@ function TrashView({ tabs, docId, onBack }: { tabs: SavedTab[]; docId: string | 
   return (
     <div className="trash">
       <div className="trash-head">
-        <button className="btn small ghost" onClick={onBack}>← Library</button>
-        <h2>Trash</h2>
-        <span className="muted small">Deleted tabs wait here for {TRASH_DAYS} days, then go for good.</span>
+        {/* (The keyboard comes here: the Trash button that opened it is gone.) */}
+        <button className="btn small ghost" onClick={onBack} autoFocus>← Library</button>
+        <span className="muted small">
+          {tabs.length} tab{tabs.length === 1 ? '' : 's'}
+        </span>
         <button className="btn small ghost danger-text" onClick={() => void emptyTheTrash(tabs)}>Empty trash…</button>
       </div>
       <ul className="trash-list">

@@ -166,6 +166,8 @@ async function saveNow(job: { text: string; seq: number; docId: string | null; a
       id = await saveTab(job.text, id0);
     }
     if (!job.asCopy) savedIds.set(job.seq, id);
+    // (The library page, and the History dialog, read it again.)
+    useApp.setState((st) => ({ libraryRev: st.libraryRev + 1 }));
     if (stillOpen()) {
       s.markSaved(id, job.text);
       s.notify(job.asCopy ? 'Saved a copy to your library ✓' : 'Saved to your library ✓');

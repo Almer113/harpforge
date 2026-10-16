@@ -74,3 +74,21 @@ it('Undo after restoring a backup takes its tabs away again', async () => {
   await undo();
   expect((await listTabs()).some((t) => t.title === 'From backup')).toBe(false);
 });
+
+it('the open tab deleted for good elsewhere (or by the trash’s month running out) becomes a new unsaved tab', async () => {
+  const { deleteTab } = await import('../storage/library');
+  const { checkOpenTab } = await import('./trash');
+  const id = await saveTab(tab('Elsewhere'));
+  s().loadText(tab('Elsewhere'), id, true);
+  await deleteTab(id);
+  await checkOpenTab();
+  expect(s().docId).toBeNull();
+  expect(s().savedText).toBeNull();
+});
+
+it('a tab just missing (a library the browser cleared) keeps its id, to be recovered', async () => {
+  const { checkOpenTab } = await import('./trash');
+  s().loadText(tab('Cleared'), 'cleared-id', true);
+  await checkOpenTab();
+  expect(s().docId).toBe('cleared-id');
+});

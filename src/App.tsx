@@ -12,9 +12,10 @@ import { EXPORTS } from './core/formats/catalog';
 import { exportAs, importFile, importFromFile, newTab, openPasteImport, saveCurrent } from './state/actions';
 import { startRouter } from './state/router';
 import { openHistory } from './state/history';
+import { checkOpenTab } from './state/trash';
 import { copyShareLink } from './state/share';
 import { isDirty, useApp, useParsed, type Page } from './state/store';
-import { isTrashed, seedDemos } from './storage/library';
+import { seedDemos } from './storage/library';
 import { isTyping } from './live/focus';
 import { openSharedFromUrl } from './state/share';
 
@@ -121,13 +122,15 @@ export function App() {
   const inTrash = useApp((s) => s.inTrash);
   // In the library and unchanged (as the Save button says "Saved ✓").
   const saved = !!docId && !dirty && !inTrash;
-  // The tab open (from before a reload, say) may be one you've since deleted.
+  // The tab open (from before a reload, say) may be one you've since deleted — here, in
+  // another window, or by the trash's month running out: checked when it opens, when the
+  // library changes, and when you come back to this window.
+  // (The first two: trash.ts.)
   useEffect(() => {
-    if (!docId) return;
-    isTrashed(docId)
-      .then((t) => useApp.getState().docId === docId && useApp.setState({ inTrash: t }))
-      .catch(() => undefined);
-  }, [docId]);
+    const onFocus = () => void checkOpenTab();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
   const { doc } = useParsed();
   // The sticky headers sit just below the top bar, whatever its height.
   const topbar = useRef<HTMLElement>(null);
@@ -212,6 +215,13 @@ export function App() {
         const k = e.key.toLowerCase();
         if (k === 'z' && !e.shiftKey) {
           e.preventDefault();
+          // On the Library page, a library change's Undo (a delete, a copy) comes first.
+          const { page, toast } = useApp.getState();
+          if (page === 'library' && toast?.action?.label === 'Undo') {
+            useApp.setState({ toast: null });
+            toast.action.run();
+            return;
+          }
           useApp.getState().undo();
         } else if (k === 'y' || (k === 'z' && e.shiftKey)) {
           e.preventDefault();

@@ -170,3 +170,4 @@
 .trash-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .trash-info b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-backup .lib-stats { flex-basis: 100%; margin-right: 0; color: var(--faint); }
+.page-head .tb-group[hidden] { display: none; }

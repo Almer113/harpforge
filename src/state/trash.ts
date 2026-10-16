@@ -1,7 +1,7 @@
 // Deleting goes to the trash, with Undo right there in the message; so do duplicating and
 // restoring a backup. Only emptying the trash (or a tab's month there running out) is for good.
 
-import { copyText, deleteTab, emptyTrash, importLibrary, saveTab, trashTab, undoImport, untrashTab, type SavedTab } from '../storage/library';
+import { copyText, deleteTab, emptyTrash, importLibrary, isTrashed, saveTab, tabStatus, trashTab, undoImport, untrashTab, type SavedTab } from '../storage/library';
 import { useApp } from './store';
 
 const fail = (what: string, e: unknown) => useApp.getState().notify(`Couldn’t ${what}: ${(e as Error)?.message || 'storage unavailable'}`);
@@ -20,11 +20,11 @@ export async function moveToTrash(t: SavedTab): Promise<void> {
   }
   if (useApp.getState().docId === t.id) useApp.setState({ inTrash: true });
   libraryChanged();
-  useApp.getState().notify(`Moved “${t.title}” to the trash`, { label: 'Undo', run: () => void restoreFromTrash(t, false) });
+  useApp.getState().notify(`Moved “${t.title}” to the trash`, { label: 'Undo', run: () => void restoreFromTrash(t) });
 }
 
 /** Takes a tab out of the trash. */
-export async function restoreFromTrash(t: SavedTab, say = true): Promise<void> {
+export async function restoreFromTrash(t: SavedTab): Promise<void> {
   try {
     await untrashTab(t.id);
   } catch (e) {
@@ -32,8 +32,32 @@ export async function restoreFromTrash(t: SavedTab, say = true): Promise<void> {
   }
   if (useApp.getState().docId === t.id) useApp.setState({ inTrash: false });
   libraryChanged();
-  if (say) useApp.getState().notify(`Put “${t.title}” back in your library ✓`);
+  useApp.getState().notify(`Put “${t.title}” back in your library ✓`);
 }
+
+/**
+ * Brings the open tab's marks up to date with the library (another window may have deleted
+ * it, put it back, or the trash's month may have run out): "In trash", or, if it's gone for
+ * good, a new unsaved tab. (Not when it's just missing: a library the browser cleared can be
+ * recovered, under the open tab's id.)
+ */
+export async function checkOpenTab(): Promise<void> {
+  const id = useApp.getState().docId;
+  if (!id) return;
+  const status = await tabStatus(id).catch(() => null);
+  if (useApp.getState().docId !== id || !status) return;
+  if (status === 'deleted') forget(id);
+  else if (status !== 'missing') useApp.setState({ inTrash: status === 'trash' });
+}
+
+// Checked when another tab opens, and when the library changes.
+let checked = '';
+useApp.subscribe((s) => {
+  const key = `${s.docId}:${s.libraryRev}`;
+  if (key === checked) return;
+  checked = key;
+  void checkOpenTab();
+});
 
 /** The open tab (if it's this one) is no longer in the library: it's a new, unsaved tab. */
 function forget(id: string) {
@@ -44,6 +68,11 @@ function forget(id: string) {
 export async function deleteForever(t: SavedTab): Promise<void> {
   if (!window.confirm(`Delete “${t.title}” for good, with its history? This can’t be undone.`)) return;
   try {
+    // (Put back meanwhile, in another window: it's not in the trash to delete.)
+    if (!(await isTrashed(t.id))) {
+      libraryChanged();
+      return useApp.getState().notify(`“${t.title}” isn’t in the trash any more.`);
+    }
     await deleteTab(t.id);
   } catch (e) {
     return fail('delete', e);
@@ -76,7 +105,7 @@ export async function duplicateTab(t: SavedTab): Promise<void> {
   useApp.getState().notify(`Made a copy of “${t.title}”`, {
     label: 'Undo',
     run: () =>
-      void deleteTab(id)
+      void deleteTab(id, { remember: false })
         .then(() => {
           forget(id);
           libraryChanged();

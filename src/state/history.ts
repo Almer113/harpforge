@@ -2,7 +2,7 @@
 // save), or keeping it as a tab of its own.
 
 import { setMetaFields } from '../core/htab/meta';
-import { saveTab, type TabVersion } from '../storage/library';
+import { getTab, saveTab, type TabVersion } from '../storage/library';
 import { confirmDiscard } from './actions';
 import { stop } from './playback';
 import { useApp } from './store';
@@ -31,17 +31,23 @@ export function openHistory(tabId: string) {
 
 /**
  * Brings a version back into its tab, as an edit: Ctrl+Z takes it back, and saving makes it
- * the newest version. If another tab is open, the version's tab opens (at its saved text)
- * first. False if you kept the open tab.
+ * the newest version. If another tab is open, the version's tab opens (as it is in the
+ * library) first; from the Library page, it opens to play. False if you kept the open tab.
  */
-export function restoreVersion(v: TabVersion, saved: TabVersion): boolean {
+export async function restoreVersion(v: TabVersion): Promise<boolean> {
   const s = useApp.getState();
   if (s.docId !== v.tabId) {
     if (!confirmDiscard()) return false;
     stop();
-    s.loadText(saved.text, v.tabId, true);
+    const tab = await getTab(v.tabId);
+    if (!tab) {
+      useApp.getState().notify('That tab isn’t in your library any more.');
+      return false;
+    }
+    useApp.getState().loadText(tab.text, tab.id, true);
   } else stop();
   useApp.getState().setText(v.text);
+  if (useApp.getState().page === 'library') useApp.getState().setPage('play');
   const which = v.name ? `“${v.name}”` : `the version from ${whenLabel(v.at).replace(/^(Today|Yesterday)/, (w) => w.toLowerCase())}`;
   useApp.getState().notify(`Brought back ${which}. Save to keep it (Ctrl+Z takes it back).`);
   return true;
@@ -52,6 +58,7 @@ export async function saveVersionAsCopy(v: TabVersion): Promise<void> {
   const title = `${v.title} (${dayLabel(v.at)})`;
   try {
     await saveTab(setMetaFields(v.text, { title }));
+    useApp.setState((st) => ({ libraryRev: st.libraryRev + 1 }));
     useApp.getState().notify(`Saved “${title}” to your library ✓`);
   } catch (e) {
     useApp.getState().notify(`Couldn’t save the copy: ${(e as Error).message}`);

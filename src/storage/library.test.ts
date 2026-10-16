@@ -218,3 +218,100 @@ describe('backups with history and the trash', () => {
     expect(s.bytes).toBeGreaterThan(0);
   });
 });
+
+describe('the review’s cases', () => {
+  const full = async () => lib.readBackup(await lib.exportLibrary({ full: true }));
+  const json = (o: unknown) => strToU8(JSON.stringify(o));
+
+  it('a backup restored after its tab changed: the old copy comes back with its history', async () => {
+    const id = await lib.saveTab(tab('Changed since', '4 |'));
+    await lib.saveTab(tab('Changed since', '5 |'), id);
+    const zip = await full();
+    await lib.saveTab(tab('Changed since', '6 |'), id);
+    await lib.importLibrary(zip);
+    const copy = (await lib.listTabs()).find((t) => t.text === tab('Changed since', '5 |'))!;
+    expect(copy.id).not.toBe(id);
+    expect((await lib.listVersions(copy.id)).map((v) => v.text)).toEqual([tab('Changed since', '5 |'), tab('Changed since', '4 |')]);
+    // (The original keeps its own.)
+    expect(await lib.listVersions(id)).toHaveLength(3);
+  });
+
+  it('a backup’s trash comes back with a month to go (not purged at once)', async () => {
+    const r = await lib.importLibrary({
+      'Trash/Old bin.htab': strToU8(tab('Old bin')),
+      'library.json': json({ tabs: [{ file: 'Trash/Old bin.htab', id: 'oldbin', createdAt: 1, updatedAt: 2, deletedAt: Date.now() - 40 * DAY }] }),
+    });
+    expect(r.toTrash).toBe(1);
+    expect((await lib.listTrash()).map((t) => t.id)).toContain('oldbin');
+  });
+
+  it('a backup’s odd entries: one without an id is still restored; bad history is made sound', async () => {
+    const r = await lib.importLibrary({
+      'Odd.htab': strToU8(tab('Odd', '7 |')),
+      'library.json': json({ tabs: [{ file: 'Odd.htab', createdAt: 'x' }, { file: 'Other.htab', id: 'h1' }] }),
+      'History2.htab': strToU8(tab('With history', '8 |')),
+      'history.json': json({ versions: [{ id: 'bad1', tabId: 'h2', at: 5, text: tab('With history', '8 |'), name: { x: 1 }, kind: 'weird' }] }),
+    });
+    expect(r.added).toBe(2);
+    const odd = (await lib.listTabs()).find((t) => t.title === 'Odd')!;
+    expect(typeof odd.createdAt).toBe('number');
+    // (history.json's tab isn't in library.json: its versions aren't anyone's.)
+    expect(r.versions).toBe(0);
+  });
+
+  it('a restored version with no usable title or kind, or an object for a name, gets sound ones', async () => {
+    await lib.importLibrary({
+      'S.htab': strToU8(tab('Sound', '4 |')),
+      'library.json': json({ tabs: [{ file: 'S.htab', id: 'sound1', createdAt: 1, updatedAt: 1 }] }),
+      'history.json': json({ versions: [{ id: 'sv1', tabId: 'sound1', at: 1, text: tab('Sound', '4 |'), name: { x: 1 }, kind: 'weird' }] }),
+    });
+    const [v] = await lib.listVersions('sound1');
+    expect([v.title, v.kind, v.name]).toEqual(['Sound', 'import', undefined]);
+  });
+
+  it('a backup with only older history of a tab: its own text is still its newest version', async () => {
+    await lib.importLibrary({
+      'P.htab': strToU8(tab('Partial', '9 |')),
+      'library.json': json({ tabs: [{ file: 'P.htab', id: 'part1', createdAt: 1, updatedAt: 10 }] }),
+      'history.json': json({ versions: [{ id: 'pv1', tabId: 'part1', at: 5, title: 'Partial', kind: 'save', text: tab('Partial', '8 |') }] }),
+    });
+    const v = await lib.listVersions('part1');
+    expect(v.map((x) => x.text)).toEqual([tab('Partial', '9 |'), tab('Partial', '8 |')]);
+  });
+
+  it('a backup’s tab that’s in the library and also in the trash: the trashed copy stays there', async () => {
+    const active = await lib.saveTab(tab('Twice'));
+    const binned = await lib.saveTab(tab('Twice'));
+    await lib.trashTab(binned);
+    const r = await lib.importLibrary({ 't.htab': strToU8(tab('Twice')) });
+    expect(r.skipped).toBe(1);
+    expect(await lib.isTrashed(binned)).toBe(true);
+    expect(await lib.isTrashed(active)).toBe(false);
+  });
+
+  it('where a tab is: library, trash, deleted for good, or just missing', async () => {
+    const id = await lib.saveTab(tab('Where'));
+    expect(await lib.tabStatus(id)).toBe('library');
+    await lib.trashTab(id);
+    expect(await lib.tabStatus(id)).toBe('trash');
+    await lib.deleteTab(id);
+    expect(await lib.tabStatus(id)).toBe('deleted');
+    expect(await lib.tabStatus('never-here')).toBe('missing');
+    // An undo's delete isn't remembered as yours.
+    const undone = await lib.saveTab(tab('Undone'));
+    await lib.deleteTab(undone, { remember: false });
+    expect(await lib.tabStatus(undone)).toBe('missing');
+  });
+
+  it('a demo update leaves a demo you put in the trash there', async () => {
+    const { RIVER_SONG } = await import('../demo/songs');
+    // (An old tour, as version 5 had it, in the trash; then the update to version 6.)
+    const v5 = RIVER_SONG.replace(/# Save a change[^\n]*\n# back;[^\n]*\n/, '');
+    const id = await lib.saveTab(v5);
+    await lib.trashTab(id);
+    localStorage.setItem('harpforge:seeded', '5');
+    await lib.seedDemos();
+    expect(await lib.isTrashed(id)).toBe(true);
+    expect((await lib.listTabs()).some((t) => t.text === RIVER_SONG)).toBe(false);
+  });
+});

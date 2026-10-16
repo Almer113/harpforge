@@ -43,7 +43,7 @@ afterEach(async () => {
 });
 
 it('lists the versions newest first, the newest marked as the last saved (the tab has unsaved edits)', () => {
-  expect(items().map((b) => b.querySelector('.hi-sub')?.textContent)).toEqual(['Last saved · 1 line added, 1 removed', 'First saved']);
+  expect(items().map((b) => b.querySelector('.hi-sub')?.textContent)).toEqual(['Last saved · 1 line added, 1 removed', 'Oldest kept']);
 });
 
 it('compares a version with the one before it, and with the tab now (its unsaved edits too)', async () => {
@@ -74,4 +74,35 @@ it('names a version (kept for good)', async () => {
   await settle();
   expect(items()[0].querySelector('.hi-main')?.textContent).toBe('before the bridge');
   expect((await listVersions(id))[0].name).toBe('before the bridge');
+});
+
+it('a save while it’s open shows up at once (the newest “Current”, the one looked at kept)', async () => {
+  await act(async () => (items()[1] as HTMLButtonElement).click());
+  const { saveCurrent } = await import('../state/actions');
+  await act(async () => saveCurrent());
+  await settle();
+  expect(items().map((b) => b.querySelector('.hi-sub')?.textContent?.split(' · ')[0])).toEqual(['Current', '1 line added, 1 removed', 'Oldest kept']);
+  expect(items()[2].classList.contains('on')).toBe(true);
+});
+
+it('brought back from the Library page: the tab opens to play', async () => {
+  s().loadText(tab('other'), null);
+  window.confirm = () => true;
+  useApp.setState({ page: 'library', historyFor: id });
+  await settle();
+  await act(async () => (items()[1] as HTMLButtonElement).click());
+  await act(async () => button('Bring this version back').click());
+  await settle();
+  expect(s().docId).toBe(id);
+  expect(s().text).toBe(tab('4 5 |'));
+  expect(s().savedText).toBe(tab('4 5 6 |'));
+  expect(s().page).toBe('play');
+});
+
+it('the name field closed: the keyboard is back on its button', async () => {
+  await act(async () => button('Name…').click());
+  const input = host.querySelector<HTMLInputElement>('.history-name input')!;
+  await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+  await settle();
+  expect(document.activeElement?.textContent).toBe('Name…');
 });

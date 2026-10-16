@@ -1,10 +1,11 @@
 // A tab's history: its saved versions, newest first. Each can be looked at, compared (with
 // the one before it, or with the tab as it is now), brought back, kept as a copy, or named.
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { parseHtab } from '../core/htab/parser';
 import { describeChange, diffLines, type DiffLine } from '../core/lineDiff';
 import { restoreVersion, saveVersionAsCopy, whenLabel } from '../state/history';
+import { libraryChanged } from '../state/trash';
 import { useApp } from '../state/store';
 import { listVersions, nameVersion, type TabVersion, type VersionKind } from '../storage/library';
 import { Dialog } from './Dialog';
@@ -28,39 +29,55 @@ type View = 'preview' | 'changes' | 'now';
 function HistoryBody({ tabId, close }: { tabId: string; close: () => void }) {
   const [versions, setVersions] = useState<TabVersion[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [picked, setPicked] = useState(0);
+  // The version looked at (by id: a save while this is open adds one at the top). None: the newest.
+  const [pickedId, setPickedId] = useState<string | null>(null);
   const [view, setView] = useState<View>('preview');
   const [naming, setNaming] = useState<string | null>(null);
+  const nameButton = useRef<HTMLButtonElement>(null);
   // The tab as it is now: the editor's text if it's the open tab (unsaved edits too), else as saved.
   const openText = useApp((s) => (s.docId === tabId ? s.text : null));
-
-  const load = () =>
-    listVersions(tabId)
-      .then((v) => setVersions(v))
-      .catch((e: Error) => setError(e?.message || 'storage unavailable'));
+  // Read again when the library changes (Ctrl+S while this is open, a name kept).
   useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let live = true;
+    const read = () =>
+      listVersions(tabId)
+        .then((v) => live && setVersions(v))
+        .catch((e: Error) => live && setError(e?.message || 'storage unavailable'));
+    void read();
+    const off = useApp.subscribe((s, prev) => {
+      if (s.libraryRev !== prev.libraryRev) void read();
+    });
+    return () => {
+      live = false;
+      off();
+    };
   }, [tabId]);
+  // What each save changed, worked out once per list (not on every keystroke in the name).
+  const changes = useMemo(() => (versions ?? []).map((x, i, all) => (i === all.length - 1 ? null : describeChange(all[i + 1].text, x.text))), [versions]);
 
   if (error) return <Body close={close} title="History"><p className="muted">Couldn’t read the history ({error}).</p></Body>;
   if (!versions) return <Body close={close} title="History"><p className="muted">Loading…</p></Body>;
-  if (!versions.length) return <Body close={close} title="History"><p className="muted">No saved versions yet. Each time you save, the tab as it was is kept here.</p></Body>;
+  if (!versions.length) return <Body close={close} title="History"><p className="muted">No saved versions yet. Each time you save, the tab as saved is kept here.</p></Body>;
 
-  const v = versions[Math.min(picked, versions.length - 1)];
+  const v = versions.find((x) => x.id === pickedId) ?? versions[0];
   const latest = versions[0];
   const now = openText ?? latest.text;
   const before = versions[versions.indexOf(v) + 1];
   const unsaved = openText !== null && openText !== latest.text;
 
-  const rename = async (name: string) => {
+  /** The name field closed: the keyboard back on its button. */
+  const endNaming = () => {
     setNaming(null);
+    requestAnimationFrame(() => nameButton.current?.focus());
+  };
+  const rename = async (name: string) => {
+    endNaming();
     try {
       await nameVersion(v.id, name);
     } catch (e) {
       useApp.getState().notify(`Couldn’t name it: ${(e as Error).message}`);
     }
-    void load();
+    libraryChanged();
   };
 
   return (
@@ -69,13 +86,19 @@ function HistoryBody({ tabId, close }: { tabId: string; close: () => void }) {
         <ol className="history-list" aria-label="Saved versions, newest first">
           {versions.map((x, i) => (
             <li key={x.id}>
-              <button className={`history-item ${x === v ? 'on' : ''}`} aria-current={x === v} onClick={() => {
-                  setPicked(i);
+              <button
+                className={`history-item ${x === v ? 'on' : ''}`}
+                aria-current={x === v}
+                // (The keyboard starts on the version shown.)
+                autoFocus={x === v}
+                onClick={() => {
+                  setPickedId(x.id);
                   setNaming(null);
-                }}>
+                }}
+              >
                 <span className="hi-main">{x.name ?? whenLabel(x.at)}</span>
                 <span className="hi-sub muted small">
-                  {[x.name ? whenLabel(x.at) : '', i === 0 ? (unsaved ? 'Last saved' : 'Saved now') : '', KIND[x.kind], i === versions.length - 1 ? 'First saved' : describeChange(versions[i + 1].text, x.text)]
+                  {[x.name ? whenLabel(x.at) : '', i === 0 ? (unsaved ? 'Last saved' : 'Current') : '', KIND[x.kind], changes[i] ?? 'Oldest kept']
                     .filter(Boolean)
                     .join(' · ')}
                 </span>
@@ -87,7 +110,7 @@ function HistoryBody({ tabId, close }: { tabId: string; close: () => void }) {
           <div className="history-bar">
             <div className="seg" role="group" aria-label="Show">
               <button className={view === 'preview' ? 'on' : ''} aria-pressed={view === 'preview'} onClick={() => setView('preview')}>Preview</button>
-              <button className={view === 'changes' ? 'on' : ''} aria-pressed={view === 'changes'} onClick={() => setView('changes')} disabled={!before} title={before ? 'What this save changed' : 'The first version: nothing before it'}>
+              <button className={view === 'changes' ? 'on' : ''} aria-pressed={view === 'changes'} onClick={() => setView('changes')} disabled={!before} title={before ? 'Changes since the version before it' : 'The oldest version kept: nothing before it'}>
                 What changed
               </button>
               <button className={view === 'now' ? 'on' : ''} aria-pressed={view === 'now'} onClick={() => setView('now')} title="How the tab is now differs from this version">
@@ -95,7 +118,7 @@ function HistoryBody({ tabId, close }: { tabId: string; close: () => void }) {
               </button>
             </div>
             {naming === null ? (
-              <button className="btn small ghost" onClick={() => setNaming(v.name ?? '')} title="Name this version: named ones are kept for good">
+              <button ref={nameButton} className="btn small ghost" onClick={() => setNaming(v.name ?? '')} title="Name this version: named ones are kept for good">
                 {v.name ? 'Rename…' : 'Name…'}
               </button>
             ) : (
@@ -117,7 +140,7 @@ function HistoryBody({ tabId, close }: { tabId: string; close: () => void }) {
                     // (Escape leaves the name, not the dialog.)
                     if (e.key === 'Escape') {
                       e.preventDefault();
-                      setNaming(null);
+                      endNaming();
                     }
                   }}
                 />
@@ -127,7 +150,7 @@ function HistoryBody({ tabId, close }: { tabId: string; close: () => void }) {
           </div>
           <div className="history-view">
             {view === 'preview' && <Preview text={v.text} />}
-            {view === 'changes' && (before ? <Changes lines={diffLines(before.text, v.text)} /> : <p className="muted">The first version: nothing before it.</p>)}
+            {view === 'changes' && (before ? <Changes lines={diffLines(before.text, v.text)} /> : <p className="muted">The oldest version kept: nothing before it.</p>)}
             {view === 'now' && <Changes lines={diffLines(v.text, now)} same="This version is the same as the tab now." />}
           </div>
           <div className="modal-actions">
@@ -139,7 +162,7 @@ function HistoryBody({ tabId, close }: { tabId: string; close: () => void }) {
               disabled={v.text === now}
               title={v.text === now ? 'The tab is already like this' : 'Bring this version back into the tab (Ctrl+Z takes it back; save to keep it)'}
               onClick={() => {
-                if (restoreVersion(v, latest)) close();
+                void restoreVersion(v).then((done) => done && close());
               }}
             >
               Bring this version back
@@ -156,7 +179,7 @@ function Body({ title, close, children }: { title: string; close: () => void; ch
     <>
       <div className="modal-head">
         <h2>{title}</h2>
-        <span className="muted small">Each save is kept: all from today, then one a day for a month, then one a week. Named versions are kept for good.</span>
+        <span className="muted small">Each save is kept: all from the last day, then one a day for a month, then one a week. Named versions are kept for good.</span>
         <button className="modal-x" onClick={close} aria-label="Close">×</button>
       </div>
       {children}

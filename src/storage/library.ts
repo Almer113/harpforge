@@ -100,6 +100,21 @@ export async function isTrashed(id: string): Promise<boolean> {
   return !!(await db.tabs.get(id))?.deletedAt;
 }
 
+/**
+ * Where a tab is: in the library, in the trash, deleted for good (here, or by the trash
+ * running out), or simply not there (a library the browser cleared: recoverable).
+ */
+export async function tabStatus(id: string): Promise<'library' | 'trash' | 'deleted' | 'missing'> {
+  const t = await db.tabs.get(id);
+  if (t) return t.deletedAt ? 'trash' : 'library';
+  return deletedIds().has(id) ? 'deleted' : 'missing';
+}
+
+/** One tab as it is in the library now (undefined if it isn't there). */
+export async function getTab(id: string): Promise<SavedTab | undefined> {
+  return db.tabs.get(id);
+}
+
 /** Everything in the trash, gone for good. */
 export async function emptyTrash(): Promise<void> {
   for (const t of await listTrash()) await deleteTab(t.id);
@@ -142,8 +157,12 @@ export async function saveTab(text: string, id?: string | null, opts: SaveOption
 
 /** A tab's text now as a new version, and its old ones thinned. */
 async function addVersion(tab: SavedTab, kind: VersionKind) {
-  await db.versions.add(versionOf(tab, kind));
-  const drop = versionsToDrop(await db.versions.where('tabId').equals(tab.id).toArray());
+  const before = await db.versions.where('tabId').equals(tab.id).toArray();
+  // (After the one before, even two saves in the same millisecond: newest first stays newest.)
+  const at = Math.max(tab.updatedAt, ...before.map((v) => v.at + 1));
+  const added = { ...versionOf(tab, kind), at };
+  await db.versions.add(added);
+  const drop = versionsToDrop([...before, added]);
   if (drop.length) await db.versions.bulkDelete(drop);
 }
 
@@ -159,12 +178,14 @@ export async function nameVersion(id: string, name: string): Promise<void> {
 }
 
 /** Deletes a tab and its history for good. */
-export async function deleteTab(id: string): Promise<void> {
+export async function deleteTab(id: string, opts: { remember?: boolean } = {}): Promise<void> {
   await db.transaction('rw', db.tabs, db.versions, async () => {
     await db.tabs.delete(id);
     await db.versions.where('tabId').equals(id).delete();
   });
-  // Remembered, so recovering from working copies doesn't bring it back.
+  // Remembered, so recovering from working copies doesn't bring it back. (Not when an undo
+  // takes out a tab it had just added: that's as if it never was.)
+  if (opts.remember === false) return;
   try {
     const gone = deletedIds();
     gone.add(id);
@@ -316,18 +337,22 @@ export interface Restored {
 export async function importLibrary(files: Record<string, Uint8Array>): Promise<Restored> {
   const byFile = new Map<string, BackupInfo>();
   try {
-    if (files['library.json']) for (const t of JSON.parse(strFromU8(files['library.json'])).tabs ?? []) byFile.set(t.file, t);
+    if (files['library.json']) {
+      for (const t of JSON.parse(strFromU8(files['library.json'])).tabs ?? []) {
+        const info = cleanInfo(t);
+        if (info) byFile.set(info.file, info);
+      }
+    }
   } catch {
     /* a plain zip of tabs */
   }
   // A full backup's history: each tab's saved versions (by the tab's id in the backup).
   let history: TabVersion[] = [];
   try {
-    if (files['history.json']) history = (JSON.parse(strFromU8(files['history.json'])).versions ?? []).filter(isVersion);
+    if (files['history.json']) history = ((JSON.parse(strFromU8(files['history.json'])).versions ?? []) as unknown[]).map(cleanVersion).filter((v) => v !== null);
   } catch {
     /* no history, or not readable: the tabs still come back */
   }
-  const hasHistory = new Set(history.map((v) => v.tabId));
   const names = Object.keys(files).filter((n) => /\.htab$/i.test(n));
   let added = 0;
   let skipped = 0;
@@ -338,6 +363,7 @@ export async function importLibrary(files: Record<string, Uint8Array>): Promise<
   const untrashed: Restored['untrashed'] = [];
   /** The backup's tab ids → the library's (the tab added, or the one already there with its text). */
   const mapped = new Map<string, string>();
+  const fresh = new Map<string, SavedTab>();
   await db.transaction('rw', db.tabs, db.versions, async () => {
     const existing = await db.tabs.toArray();
     const texts = new Set(existing.map((t) => t.text));
@@ -345,53 +371,90 @@ export async function importLibrary(files: Record<string, Uint8Array>): Promise<
     for (const name of names) {
       const text = strFromU8(files[name]);
       const info = byFile.get(name);
-      const intoTrash = info?.deletedAt ?? (/^Trash\//i.test(name) ? Date.now() : undefined);
+      // (In the backup's trash: into the trash, its month starting now.)
+      const intoTrash = info?.deletedAt !== undefined || /^Trash\//i.test(name);
       if (texts.has(text)) {
-        // In the trash here (and not in the backup's): the backup brings it back.
-        const trashed = intoTrash ? undefined : existing.find((t) => t.text === text && t.deletedAt && !untrashed.some((u) => u.id === t.id));
+        const active = existing.find((t) => t.text === text && !t.deletedAt);
+        // Only in the trash here (and not in the backup's): the backup brings it back.
+        const trashed =
+          intoTrash || active ? undefined : existing.find((t) => t.text === text && t.deletedAt && !untrashed.some((u) => u.id === t.id));
         if (trashed) {
           await db.tabs.update(trashed.id, { deletedAt: undefined });
           untrashed.push({ id: trashed.id, deletedAt: trashed.deletedAt! });
           added++;
         } else skipped++;
-        const same = trashed ?? existing.find((t) => t.text === text);
+        const same = trashed ?? active ?? existing.find((t) => t.text === text);
         if (info && same) mapped.set(info.id, same.id);
         continue;
       }
       const now = Date.now();
       const id = info && !ids.has(info.id) ? info.id : newId();
-      const tab: SavedTab = { id, ...describe(text), text, createdAt: info?.createdAt ?? now, updatedAt: info?.updatedAt ?? now, ...(intoTrash ? { deletedAt: intoTrash } : {}) };
+      const tab: SavedTab = { id, ...describe(text), text, createdAt: info?.createdAt ?? now, updatedAt: info?.updatedAt ?? now, ...(intoTrash ? { deletedAt: now } : {}) };
       await db.tabs.add(tab);
-      // (Its own history, if the backup has it, starts it; else the backup's text does.)
-      if (!info || !hasHistory.has(info.id)) await db.versions.add(versionOf(tab, 'import'));
       if (info) mapped.set(info.id, id);
+      fresh.set(id, tab);
       texts.add(text);
       ids.add(id);
       addedIds.push(id);
       added++;
       if (intoTrash) toTrash++;
     }
-    const fresh = new Set(addedIds);
+    const have = new Map<string, TabVersion[]>();
+    const versionsOf = async (tabId: string) => {
+      if (!have.has(tabId)) have.set(tabId, await db.versions.where('tabId').equals(tabId).toArray());
+      return have.get(tabId)!;
+    };
     for (const v of history) {
       const tabId = mapped.get(v.tabId);
+      if (!tabId) continue;
+      const own = await versionsOf(tabId);
       // (A version already here — the same backup restored twice — isn't added again.)
-      if (!tabId || (await db.versions.get(v.id))) continue;
-      await db.versions.add({ ...v, tabId });
+      if (own.some((x) => x.id === v.id || (x.at === v.at && x.text === v.text))) continue;
+      // (Its id taken by another tab's version — the tab it came from is still here, changed
+      // since: this copy gets an id of its own.)
+      const version: TabVersion = { ...v, tabId, id: (await db.versions.get(v.id)) ? newId() : v.id };
+      await db.versions.add(version);
+      own.push(version);
       versions++;
-      if (!fresh.has(tabId)) addedVersionIds.push(v.id);
+      if (!fresh.has(tabId)) addedVersionIds.push(version.id);
+    }
+    // Each new tab's newest version is its text (a backup without its history, or with only
+    // part of it: the backup's text starts it, or ends it).
+    for (const tab of fresh.values()) {
+      const own = await versionsOf(tab.id);
+      const newest = own.reduce<TabVersion | undefined>((a, b) => (!a || b.at > a.at ? b : a), undefined);
+      if (newest?.text === tab.text) continue;
+      await db.versions.add({ ...versionOf(tab, 'import'), at: Math.max(tab.updatedAt, (newest?.at ?? 0) + 1) });
     }
   });
   return { added, skipped, toTrash, versions, addedIds, addedVersionIds, untrashed };
 }
 
-function isVersion(v: unknown): v is TabVersion {
-  const x = v as TabVersion;
-  return !!x && typeof x.id === 'string' && typeof x.tabId === 'string' && typeof x.text === 'string' && typeof x.at === 'number';
+/** A backup's index entry, if it's usable (a file and an id; dates as numbers). */
+function cleanInfo(v: unknown): BackupInfo | null {
+  const x = v as Partial<BackupInfo> | null;
+  if (!x || typeof x.file !== 'string' || typeof x.id !== 'string' || !x.id) return null;
+  const num = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? n : undefined);
+  const now = Date.now();
+  const deletedAt = num(x.deletedAt);
+  return { file: x.file, id: x.id, createdAt: num(x.createdAt) ?? now, updatedAt: num(x.updatedAt) ?? now, ...(deletedAt !== undefined ? { deletedAt } : {}) };
+}
+
+const KINDS: VersionKind[] = ['save', 'demo', 'import', 'recover'];
+
+/** A backup's saved version, if it's usable; its title, kind and name made sound. */
+function cleanVersion(v: unknown): TabVersion | null {
+  const x = v as Partial<TabVersion> | null;
+  if (!x || typeof x.id !== 'string' || typeof x.tabId !== 'string' || typeof x.text !== 'string' || typeof x.at !== 'number' || !Number.isFinite(x.at)) return null;
+  const title = typeof x.title === 'string' && x.title.trim() ? x.title : describe(x.text).title;
+  const kind = KINDS.includes(x.kind as VersionKind) ? (x.kind as VersionKind) : 'import';
+  const name = typeof x.name === 'string' && x.name.trim() ? x.name.trim().slice(0, 80) : undefined;
+  return { id: x.id, tabId: x.tabId, at: x.at, text: x.text, title, kind, ...(name ? { name } : {}) };
 }
 
 /** Undoes a restored backup: the tabs and versions it added go, the ones it took out of the trash go back. */
 export async function undoImport(r: Restored): Promise<void> {
-  for (const id of r.addedIds) await deleteTab(id);
+  for (const id of r.addedIds) await deleteTab(id, { remember: false });
   if (r.addedVersionIds.length) await db.versions.bulkDelete(r.addedVersionIds);
   for (const u of r.untrashed) await trashTab(u.id, u.deletedAt);
 }
@@ -400,8 +463,10 @@ const SEEDED_KEY = 'harpforge:seeded';
 
 let seeding: Promise<Map<string, string>> | null = null;
 
-/** Adds demo songs on first launch, and any demos added since the last visit (once, even if called twice). */
-/** Adds the demos new since last time; resolves to the tabs brought up to date (id → new text). */
+/**
+ * Adds demo songs on first launch, and any demos added since the last visit (once, even if
+ * called twice); resolves to the tabs brought up to date (id → new text).
+ */
 export function seedDemos(): Promise<Map<string, string>> {
   // A failure (storage blocked) is forgotten, so a later call can try again.
   seeding ??= seedOnce().catch((e) => {
@@ -428,7 +493,9 @@ async function seedOnce(): Promise<Map<string, string>> {
       if (have.has(d.text)) continue;
       // A demo brought up to date: an unchanged copy of its old version is updated in place
       // (one you've changed is yours, and stays as it is beside the new one).
-      const old = tabs.find((t) => d.replaces?.includes(t.text));
+      // (Not one in the trash: updating it would take it out. It still counts as had, below.)
+      const old = tabs.find((t) => !t.deletedAt && d.replaces?.includes(t.text));
+      if (!old && tabs.some((t) => t.deletedAt && d.replaces?.includes(t.text))) continue;
       // (Had before, and not there as it was: deleted, or changed — yours, so it isn't added again.)
       if (!old && d.first !== undefined && seen >= d.first) continue;
       await saveTab(d.text, old?.id, { kind: 'demo' });
