@@ -14,6 +14,12 @@ export class LibraryUnavailable extends Error {
 
 const enc = encodeURIComponent;
 
+let signedOutHandler: (() => void) | null = null;
+/** Told when the server says the account isn't signed in here any more (its session ended). */
+export function onSignedOut(fn: (() => void) | null) {
+  signedOutHandler = fn;
+}
+
 /** Where the server is (this page's own, unless a test says otherwise), and any extra headers. */
 export interface RemoteOptions {
   base?: string;
@@ -33,7 +39,10 @@ async function callWith<T>(opts: RemoteOptions, method: string, path: string, bo
     throw new LibraryUnavailable('can’t reach the HarpForge server — is it running?');
   }
   const data = (await res.json().catch(() => null)) as (T & { error?: string; saved?: SavedTab }) | null;
-  if (res.status === 401) throw new LibraryUnavailable('you’re signed out — sign in again', true);
+  if (res.status === 401) {
+    signedOutHandler?.();
+    throw new LibraryUnavailable('you’re signed out — sign in again', true);
+  }
   if (res.status === 409 && data?.saved) throw new BackendClash(data.saved);
   if (res.status === 404 && method === 'GET') return undefined as T;
   if (!res.ok || data === null) throw new Error(data?.error ?? `the server answered ${res.status}`);

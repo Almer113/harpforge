@@ -37,6 +37,11 @@ export function libraryWaitsFor(p: Promise<unknown>) {
   ready = p.catch(() => undefined);
 }
 
+/** This browser's library (a guest's), whichever is in use. */
+export function browserLibrary(): LibraryBackend {
+  return (browser ??= browserBackend());
+}
+
 /** Whose library is in use: this browser's (a guest) or an account's. */
 export async function libraryKind(): Promise<LibraryBackend['kind']> {
   return (await lib()).kind;
@@ -295,8 +300,10 @@ interface BackupInfo {
  * Every saved tab as .htab files in one zip, plus their ids and dates. A full backup also
  * has the trash (in a "Trash" folder) and every tab's history (history.json).
  */
-export async function exportLibrary(opts: { full?: boolean } = {}): Promise<Uint8Array> {
-  const tabs = opts.full ? [...(await listTabs()), ...(await listTrash())] : await listTabs();
+export async function exportLibrary(opts: { full?: boolean; from?: LibraryBackend } = {}): Promise<Uint8Array> {
+  const b = opts.from ?? (await lib());
+  const all = await b.tabs.all();
+  const tabs = all.filter((t) => opts.full || !t.deletedAt).sort((x, y) => (x.deletedAt ?? 0) - (y.deletedAt ?? 0) || y.updatedAt - x.updatedAt);
   const files: Record<string, Uint8Array> = {};
   const index: BackupInfo[] = [];
   const used = new Set<string>();
@@ -310,7 +317,7 @@ export async function exportLibrary(opts: { full?: boolean } = {}): Promise<Uint
   }
   if (opts.full) {
     const ids = new Set(tabs.map((t) => t.id));
-    const versions = (await (await lib()).versions.all()).filter((v) => ids.has(v.tabId)).sort((a, b) => a.at - b.at);
+    const versions = (await b.versions.all()).filter((v) => ids.has(v.tabId)).sort((x, y) => x.at - y.at);
     files['history.json'] = strToU8(JSON.stringify({ versions }));
   }
   files['library.json'] = strToU8(JSON.stringify({ app: 'HarpForge', version: opts.full ? 2 : 1, exportedAt: new Date().toISOString(), tabs: index }, null, 2));
@@ -355,7 +362,7 @@ export interface Restored {
   untrashed: { id: string; deletedAt: number }[];
 }
 
-export async function importLibrary(files: Record<string, Uint8Array>): Promise<Restored> {
+export async function importLibrary(files: Record<string, Uint8Array>, opts: { into?: LibraryBackend } = {}): Promise<Restored> {
   const byFile = new Map<string, BackupInfo>();
   try {
     if (files['library.json']) {
@@ -385,7 +392,7 @@ export async function importLibrary(files: Record<string, Uint8Array>): Promise<
   /** The backup's tab ids → the library's (the tab added, or the one already there with its text). */
   const mapped = new Map<string, string>();
   const fresh = new Map<string, SavedTab>();
-  const b = await lib();
+  const b = opts.into ?? (await lib());
   await b.transaction(async () => {
     const existing = await b.tabs.all();
     const texts = new Set(existing.map((t) => t.text));
@@ -487,6 +494,12 @@ export async function undoImport(r: Restored): Promise<void> {
   for (const id of r.addedIds) await deleteTab(id, { remember: false });
   if (r.addedVersionIds.length) await (await lib()).versions.delete(r.addedVersionIds);
   for (const u of r.untrashed) await trashTab(u.id, u.deletedAt);
+}
+
+/** A library's songs that are yours: not the demos as they came (in the trash or not). */
+export async function ownSongs(b: LibraryBackend): Promise<number> {
+  const demos = new Set(DEMOS.flatMap((d) => [d.text, ...(d.replaces ?? [])]));
+  return (await b.tabs.all()).filter((t) => !demos.has(t.text)).length;
 }
 
 /** Which demos the library has had (kept with it: in this browser, or in the account). */

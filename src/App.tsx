@@ -3,6 +3,7 @@ import { Toast } from './components/Controls';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ExportMenu } from './components/ExportMenu';
 import { Menu } from './components/Menu';
+import { AccountGate, AccountMenu, BringSongsOffer } from './components/Account';
 import { HistoryDialog } from './components/HistoryDialog';
 import { PlainTextDialog } from './components/PlainTextDialog';
 import { openShortcuts, Shortcuts } from './components/Shortcuts';
@@ -262,6 +263,7 @@ export function App() {
           <span className="doc-title">{doc.meta.title || 'Untitled'}</span>
         </div>
         <TabActions />
+        <AccountMenu />
       </nav>
       <main>
         <ErrorBoundary resetKey={page}>
@@ -294,6 +296,8 @@ export function App() {
       )}
       <PlainTextDialog />
       <HistoryDialog />
+      <AccountGate />
+      <BringSongsOffer />
       <Shortcuts />
       <Toast />
     </div>

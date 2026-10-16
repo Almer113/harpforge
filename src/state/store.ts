@@ -309,7 +309,11 @@ export interface AppState {
   /** The library tab whose History dialog is open. */
   historyFor: string | null;
   /** Who's signed in here: the library is theirs (on the server), or this browser's (a guest). */
-  account: { status: 'checking' | 'guest' | 'signed-in' | 'offline'; name?: string };
+  account: { status: 'checking' | 'guest' | 'signed-in' | 'signed-out' | 'offline'; name?: string };
+  /** The start screen (sign in, create an account, or go on as a guest), and which form it shows. */
+  accountGate: 'signin' | 'signup' | null;
+  /** Bringing this browser's songs into the account just signed in to: how many there are. */
+  bringOffer: { name: string; songs: number } | null;
   /** The open tab is in the library's trash (saving it brings it back). */
   inTrash: boolean;
   /** Counts changes to the library made outside the library page (an undo), so it reads it again. */
@@ -563,6 +567,8 @@ export const useApp = create<AppState>((set) => ({
   printPrefs: { view: 'tab', size: 'normal', title: true, details: true, chart: false, ...prefs.printPrefs },
   historyFor: null,
   account: { status: 'checking' },
+  accountGate: null,
+  bringOffer: null,
   inTrash: false,
   libraryRev: 0,
   plainTextOpen: false,

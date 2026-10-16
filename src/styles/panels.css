@@ -171,3 +171,23 @@
 .trash-info b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-backup .lib-stats { flex-basis: 100%; margin-right: 0; color: var(--faint); }
 .page-head .tb-group[hidden] { display: none; }
+
+/* ---------- Accounts ---------- */
+.account-modal { width: min(440px, 100%); }
+.account-head h2 { font-size: 20px; margin: 0 0 6px; }
+.account-head p { margin: 0 0 6px; }
+.account-seg { align-self: flex-start; }
+.account-form { display: flex; flex-direction: column; gap: 10px; }
+.account-form input:not([type='checkbox']) { width: 100%; }
+.account-form .btn.primary { align-self: stretch; justify-content: center; }
+.account-form p { margin: 0; }
+.account-error { color: var(--danger); margin: 0; font-size: 13.5px; }
+.account-or { display: flex; align-items: center; gap: 10px; color: var(--faint); font-size: 12px; }
+.account-or::before, .account-or::after { content: ''; flex: 1; border-top: 1px solid var(--border); }
+.account-guest { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+.account-guest .btn { justify-content: center; }
+.account-chip { display: inline-flex; align-items: center; gap: 7px; max-width: 160px; }
+.account-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-avatar { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--brass); color: var(--bg); font-weight: 800; font-size: 12px; flex: none; }
+.account-avatar.guest { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border-2); }
+@media (max-width: 760px) { .account-name { display: none; } }
