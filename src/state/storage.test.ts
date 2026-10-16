@@ -6,17 +6,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../audio/engine', async () => (await import('../test/fakeEngine')).fakeEngine());
 
 // A library that answers when the test says so.
-const pending: { text: string; id: string | null | undefined; resolve: (id: string) => void }[] = [];
+type Pending = { text: string; id: string | null | undefined; expect?: string | null; resolve: (id: string) => void; reject: (e: Error) => void };
+const pending: Pending[] = [];
 let nextId = 0;
 vi.mock('../storage/library', () => ({
-  saveTab: (text: string, id?: string | null) => new Promise<string>((resolve) => pending.push({ text, id, resolve })),
+  saveTab: (text: string, id?: string | null, opts?: { expect?: string | null }) =>
+    new Promise<string>((resolve, reject) => pending.push({ text, id, expect: opts?.expect, resolve, reject })),
   persistStorage: async () => undefined,
   seedDemos: async () => undefined,
+  SaveClash: class extends Error {
+    constructor(public saved: unknown) {
+      super('clash');
+    }
+  },
 }));
 
 import { pruneWorking, readWorking, savedCopies, writeWorking } from './working';
 import { decodeTab, encodeTab, MAX_SHARED_BYTES, SharedTooLarge } from './share';
 import { saveCurrent } from './actions';
+import { SaveClash, type SavedTab } from '../storage/library';
 import { useApp } from './store';
 
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -70,6 +78,36 @@ describe('saving', () => {
     await settle();
     expect(pending[0].id).toBe(firstId);
     await finishSave();
+  });
+
+  it('saved from another window since: asks first; kept here unsaved if you say no, saved over it if yes', async () => {
+    const saved = '---\ntitle: A\n---\n4 |\n';
+    useApp.getState().loadText(saved, 'k1', true);
+    useApp.getState().setText('---\ntitle: A\n---\n5 |\n');
+    const clash = () => {
+      const p = pending.shift()!;
+      expect(p.expect).toBe(saved);
+      p.reject(new SaveClash({ title: 'A' } as SavedTab));
+    };
+    const confirm = vi.fn(() => false);
+    window.confirm = confirm;
+    void saveCurrent();
+    await settle();
+    clash();
+    await settle();
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(useApp.getState().toast?.message).toContain('Not saved');
+    expect(useApp.getState().savedText).toBe(saved);
+    expect(pending).toHaveLength(0);
+    confirm.mockReturnValue(true);
+    void saveCurrent();
+    await settle();
+    clash();
+    await settle();
+    // Asked again, then saved without the check.
+    expect(pending[0].expect).toBeUndefined();
+    await finishSave();
+    expect(useApp.getState().savedText).toBe('---\ntitle: A\n---\n5 |\n');
   });
 });
 

@@ -8,6 +8,7 @@ import { harmonicaName } from '../core/instruments';
 import { specFromMeta } from '../core/score';
 import { DEMOS, DEMO_VERSION } from '../demo/songs';
 import { savedCopies } from '../state/working';
+import { versionsToDrop } from './history';
 
 export interface SavedTab {
   id: string;
@@ -18,12 +19,39 @@ export interface SavedTab {
   updatedAt: number;
 }
 
+/** What made a version: a save of yours, a demo brought up to date, a backup restored, a recovery. */
+export type VersionKind = 'save' | 'demo' | 'import' | 'recover';
+
+/** A tab as it was saved once (the newest is the tab as it is now). */
+export interface TabVersion {
+  id: string;
+  tabId: string;
+  at: number;
+  text: string;
+  title: string;
+  kind: VersionKind;
+  /** Named by you ("before the new chorus"): never thinned out. */
+  name?: string;
+}
+
 class LibraryDB extends Dexie {
   tabs!: Table<SavedTab, string>;
+  versions!: Table<TabVersion, string>;
   constructor() {
     super('harpforge');
     this.version(1).stores({ tabs: 'id, updatedAt, title' });
+    // Version history: each tab's text as it is now starts its history.
+    this.version(2)
+      .stores({ tabs: 'id, updatedAt, title', versions: 'id, tabId, at' })
+      .upgrade(async (tx) => {
+        const tabs = (await tx.table('tabs').toArray()) as SavedTab[];
+        await tx.table('versions').bulkAdd(tabs.map((t) => versionOf(t, 'save')));
+      });
   }
+}
+
+function versionOf(t: SavedTab, kind: VersionKind): TabVersion {
+  return { id: newId(), tabId: t.id, at: t.updatedAt, text: t.text, title: t.title, kind };
 }
 
 const db = new LibraryDB();
@@ -41,22 +69,63 @@ export async function listTabs(): Promise<SavedTab[]> {
   return db.tabs.orderBy('updatedAt').reverse().toArray();
 }
 
-/** Saves text; updates the existing entry when `id` is given and still exists. */
-export async function saveTab(text: string, id?: string | null): Promise<string> {
-  const now = Date.now();
-  const info = describe(text);
-  const existing = id ? await db.tabs.get(id) : undefined;
-  if (existing) {
-    await db.tabs.put({ ...existing, ...info, text, updatedAt: now });
-    return existing.id;
+/** The tab was saved elsewhere (another window, a demo update) since this window last had it. */
+export class SaveClash extends Error {
+  constructor(public saved: SavedTab) {
+    super('changed since it was opened');
   }
-  const tab: SavedTab = { id: newId(), ...info, text, createdAt: now, updatedAt: now };
-  await db.tabs.add(tab);
-  return tab.id;
+}
+
+export interface SaveOptions {
+  /** What made it (its version's kind). */
+  kind?: VersionKind;
+  /** The text this window last saved or opened: another text in the library is a SaveClash. */
+  expect?: string | null;
+}
+
+/** Saves text; updates the existing entry when `id` is given and still exists. Each new text is a version. */
+export async function saveTab(text: string, id?: string | null, opts: SaveOptions = {}): Promise<string> {
+  return db.transaction('rw', db.tabs, db.versions, async () => {
+    const now = Date.now();
+    const info = describe(text);
+    const existing = id ? await db.tabs.get(id) : undefined;
+    if (existing) {
+      if (opts.expect != null && existing.text !== opts.expect && existing.text !== text) throw new SaveClash(existing);
+      const tab = { ...existing, ...info, text, updatedAt: now };
+      await db.tabs.put(tab);
+      if (existing.text !== text) await addVersion(tab, opts.kind ?? 'save');
+      return existing.id;
+    }
+    const tab: SavedTab = { id: newId(), ...info, text, createdAt: now, updatedAt: now };
+    await db.tabs.add(tab);
+    await addVersion(tab, opts.kind ?? 'save');
+    return tab.id;
+  });
+}
+
+/** A tab's text now as a new version, and its old ones thinned. */
+async function addVersion(tab: SavedTab, kind: VersionKind) {
+  await db.versions.add(versionOf(tab, kind));
+  const drop = versionsToDrop(await db.versions.where('tabId').equals(tab.id).toArray());
+  if (drop.length) await db.versions.bulkDelete(drop);
+}
+
+/** A tab's versions, newest first (the first is the tab as saved now). */
+export async function listVersions(tabId: string): Promise<TabVersion[]> {
+  const all = await db.versions.where('tabId').equals(tabId).toArray();
+  return all.sort((a, b) => b.at - a.at);
+}
+
+/** Names a version ('' unnames it). A named version is kept for good. */
+export async function nameVersion(id: string, name: string): Promise<void> {
+  await db.versions.update(id, { name: name.trim() || undefined });
 }
 
 export async function deleteTab(id: string): Promise<void> {
-  await db.tabs.delete(id);
+  await db.transaction('rw', db.tabs, db.versions, async () => {
+    await db.tabs.delete(id);
+    await db.versions.where('tabId').equals(id).delete();
+  });
   // Remembered, so recovering from working copies doesn't bring it back.
   try {
     const gone = deletedIds();
@@ -100,8 +169,12 @@ export async function recoverableTabs(): Promise<{ docId: string; text: string; 
 /** Puts those tabs back under their own ids (so an open one saves to the same entry), and the demos. */
 export async function recoverTabs(): Promise<number> {
   const found = await recoverableTabs();
-  await db.transaction('rw', db.tabs, async () => {
-    for (const c of found) await db.tabs.put({ id: c.docId, ...describe(c.text), text: c.text, createdAt: c.at, updatedAt: c.at });
+  await db.transaction('rw', db.tabs, db.versions, async () => {
+    for (const c of found) {
+      const tab: SavedTab = { id: c.docId, ...describe(c.text), text: c.text, createdAt: c.at, updatedAt: c.at };
+      await db.tabs.put(tab);
+      await db.versions.add(versionOf(tab, 'recover'));
+    }
   });
   try {
     localStorage.removeItem(SEEDED_KEY);
@@ -177,7 +250,7 @@ export async function importLibrary(files: Record<string, Uint8Array>): Promise<
   const names = Object.keys(files).filter((n) => /\.htab$/i.test(n));
   let added = 0;
   let skipped = 0;
-  await db.transaction('rw', db.tabs, async () => {
+  await db.transaction('rw', db.tabs, db.versions, async () => {
     const existing = await db.tabs.toArray();
     const texts = new Set(existing.map((t) => t.text));
     const ids = new Set(existing.map((t) => t.id));
@@ -190,7 +263,9 @@ export async function importLibrary(files: Record<string, Uint8Array>): Promise<
       const info = byFile.get(name);
       const now = Date.now();
       const id = info && !ids.has(info.id) ? info.id : newId();
-      await db.tabs.add({ id, ...describe(text), text, createdAt: info?.createdAt ?? now, updatedAt: info?.updatedAt ?? now });
+      const tab: SavedTab = { id, ...describe(text), text, createdAt: info?.createdAt ?? now, updatedAt: info?.updatedAt ?? now };
+      await db.tabs.add(tab);
+      await db.versions.add(versionOf(tab, 'import'));
       texts.add(text);
       ids.add(id);
       added++;
@@ -224,7 +299,7 @@ async function seedOnce(): Promise<Map<string, string>> {
     return updated;
   }
   const fresh = DEMOS.filter((d) => d.since > seen);
-  await db.transaction('rw', db.tabs, async () => {
+  await db.transaction('rw', db.tabs, db.versions, async () => {
     const tabs = await db.tabs.toArray();
     const have = new Set(tabs.map((t) => t.text));
     for (const d of [...fresh].reverse()) {
@@ -234,7 +309,7 @@ async function seedOnce(): Promise<Map<string, string>> {
       const old = tabs.find((t) => d.replaces?.includes(t.text));
       // (Had before, and not there as it was: deleted, or changed — yours, so it isn't added again.)
       if (!old && d.first !== undefined && seen >= d.first) continue;
-      await saveTab(d.text, old?.id);
+      await saveTab(d.text, old?.id, { kind: 'demo' });
       if (old) {
         // (Not a change of yours: it keeps its place in "Recently changed".)
         await db.tabs.update(old.id, { updatedAt: old.updatedAt });

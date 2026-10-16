@@ -29,7 +29,7 @@ const formats = () =>
 export function preloadFormats(): void {
   import('../core/formats').catch(() => {});
 }
-import { persistStorage, saveTab } from '../storage/library';
+import { persistStorage, SaveClash, saveTab } from '../storage/library';
 import { stop } from './playback';
 import { finishRecording } from '../live/recorder';
 import { getParsed, isDirty, useApp } from './store';
@@ -151,7 +151,20 @@ async function saveNow(job: { text: string; seq: number; docId: string | null; a
   const stillOpen = () => useApp.getState().loadSeq === job.seq;
   const id0 = job.asCopy ? null : stillOpen() ? useApp.getState().docId : (savedIds.get(job.seq) ?? job.docId);
   try {
-    const id = await saveTab(job.text, id0);
+    // (What this window last saved or opened: if the library has something else now, it was saved elsewhere.)
+    const expect = !job.asCopy && stillOpen() ? useApp.getState().savedText : null;
+    let id: string;
+    try {
+      id = await saveTab(job.text, id0, { expect });
+    } catch (e) {
+      if (!(e instanceof SaveClash)) throw e;
+      const title = e.saved.title;
+      if (!window.confirm(`“${title}” was saved from another window (or updated) since you opened it here. Save yours over it?\n\nThe other one stays in the tab’s history.`)) {
+        s.notify('Not saved. Save a copy to keep both.');
+        return;
+      }
+      id = await saveTab(job.text, id0);
+    }
     if (!job.asCopy) savedIds.set(job.seq, id);
     if (stillOpen()) {
       s.markSaved(id, job.text);
