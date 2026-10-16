@@ -263,9 +263,9 @@ describe('practice and syllables per account', () => {
         return json(200, { value: JSON.stringify({ songA: [{ at: 1 }] }) });
       }),
     );
-    await data.accountData();
+    await data.accountData('Almer');
     data.writeData('harpforge:practice-log', JSON.stringify({ songA: [{ at: 1 }] }));
-    await data.accountData();
+    await data.accountData('Almer');
     release();
     await new Promise((r) => setTimeout(r, 10));
     expect(data.readData('harpforge:practice-log')).toBeNull();
@@ -283,9 +283,87 @@ describe('practice and syllables per account', () => {
         return json(200, url === '/api/library/data' ? { practice: null, syllables: JSON.stringify({ en: { river: 'riv-er' } }) } : { value: '{}' });
       }),
     );
-    await data.accountData();
+    await data.accountData('Almer');
     saveSyllableFix('en', 'ev-er-y');
     expect(JSON.parse(sent[0])).toEqual({ en: { every: 'ev-er-y' } });
+    data.browserData();
+  });
+});
+
+describe('the second review’s cases', () => {
+  /** A pretend server with a real (in-memory) library for the signed-in account. */
+  function serverWithLibrary(delayAccount = 0) {
+    const tabs = new Map<string, unknown>();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method ?? 'GET';
+        if (url === '/api/account') {
+          await new Promise((r) => setTimeout(r, delayAccount));
+          return json(200, { user: signedIn && { name: signedIn } });
+        }
+        if (url === '/api/library/data') return json(200, { practice: null, syllables: null });
+        if (url === '/api/library/tabs' && method === 'GET') return json(200, [...tabs.values()]);
+        const m = /^\/api\/library\/tabs\/([^/?]+)$/.exec(url);
+        if (m && method === 'GET') return tabs.has(m[1]) ? json(200, tabs.get(m[1])) : json(404, { error: 'none' });
+        if (m && method === 'PUT') {
+          tabs.set(m[1], JSON.parse(String(init!.body)).tab);
+          return json(200, { ok: true });
+        }
+        if (url.startsWith('/api/library/versions') && method === 'GET') return json(200, []);
+        if (url.startsWith('/api/library/meta/')) return json(200, method === 'GET' ? { value: '99' } : { ok: true });
+        return json(200, { ok: true });
+      }),
+    );
+    return tabs;
+  }
+
+  it('a save made while it’s still being asked whose library it is: into the account’s, linked (no duplicate on the next)', async () => {
+    signedIn = 'Almer';
+    const tabs = serverWithLibrary(30);
+    const { saveCurrent } = await import('../state/actions');
+    useApp.setState({ libraryOwner: 'browser' });
+    s().loadText('---\ntitle: Early\n---\n4 |\n', null);
+    const started = startAccount();
+    const saved = saveCurrent();
+    await started;
+    await saved;
+    expect(tabs.size).toBe(1);
+    expect(s().docId).toBe([...tabs.keys()][0]);
+    expect(s().libraryOwner).toBe('account:almer');
+    s().setText('---\ntitle: Early\n---\n5 |\n');
+    await saveCurrent();
+    expect(tabs.size).toBe(1);
+  });
+
+  it('a song opened from the library is that library’s (even while the account’s server is away)', () => {
+    useApp.setState({ account: { status: 'offline' }, libraryOwner: 'account:almer' });
+    s().loadText('---\ntitle: B\n---\n4 |\n', 'browser-id', true);
+    expect(s().libraryOwner).toBe('browser');
+  });
+
+  it('practice kept while the session had ended goes to the account on signing back in as the same one', async () => {
+    const data = await import('../storage/userData');
+    const puts: string[] = [];
+    let allowed = true;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === '/api/library/data' && !init?.method) return json(200, { practice: null, syllables: null });
+        if (!allowed) return json(401, { error: 'Not signed in.' });
+        puts.push(JSON.parse(String(init!.body)).value);
+        return json(200, { value: JSON.parse(String(init!.body)).value });
+      }),
+    );
+    await data.accountData('Almer');
+    allowed = false;
+    data.writeData('harpforge:practice-log', JSON.stringify({ s: [{ at: 5 }] }));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(puts).toEqual([]);
+    allowed = true;
+    await data.accountData('Almer', true);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(puts).toEqual([JSON.stringify({ s: [{ at: 5 }] })]);
     data.browserData();
   });
 });

@@ -26,6 +26,7 @@ export function browserBackend(): LibraryBackend {
   const db = new LibraryDB();
   return {
     kind: 'browser',
+    owner: 'browser',
     tabs: {
       get: (id) => db.tabs.get(id),
       all: () => db.tabs.toArray(),

@@ -15,7 +15,7 @@ import { startRouter } from './state/router';
 import { openHistory } from './state/history';
 import { checkOpenTab } from './state/trash';
 import { copyShareLink } from './state/share';
-import { isDirty, useApp, useParsed, type Page } from './state/store';
+import { isDirty, libraryInUse, useApp, useParsed, type Page } from './state/store';
 import { seedDemos } from './storage/library';
 import { isTyping } from './live/focus';
 import { openSharedFromUrl } from './state/share';
@@ -58,6 +58,8 @@ function TabActions() {
   const dirty = useApp(isDirty);
   const docId = useApp((s) => s.docId);
   const inTrash = useApp((s) => s.inTrash);
+  // (The open song is another library's than the one in use — the server unreachable, say: not "saved" here.)
+  const elsewhere = useApp((s) => !!s.docId && s.libraryOwner !== libraryInUse(s));
   return (
     <div className="tab-actions">
       <div className="wide-actions">
@@ -98,7 +100,7 @@ function TabActions() {
       )}
       <div className="save-split">
         <button className="btn small primary" onClick={() => void saveCurrent()} title={inTrash ? 'Save it back into your library (Ctrl+S)' : 'Save to your library (Ctrl+S)'}>
-          {dirty || !docId || inTrash ? 'Save' : 'Saved ✓'}
+          {dirty || !docId || inTrash || elsewhere ? 'Save' : 'Saved ✓'}
         </button>
         <Menu
           label="▾"
@@ -106,7 +108,7 @@ function TabActions() {
           title="More ways to save"
           items={[
             { label: 'Save as a copy', hint: 'A new tab in your library', onClick: () => void saveCurrent(true) },
-            ...(docId ? [{ label: 'History…', hint: 'Earlier saved versions: compare, bring one back', onClick: () => openHistory(docId) }] : []),
+            ...(docId && !elsewhere ? [{ label: 'History…', hint: 'Earlier saved versions: compare, bring one back', onClick: () => openHistory(docId) }] : []),
           ]}
         />
       </div>
@@ -122,7 +124,8 @@ export function App() {
   const docId = useApp((s) => s.docId);
   const inTrash = useApp((s) => s.inTrash);
   // In the library and unchanged (as the Save button says "Saved ✓").
-  const saved = !!docId && !dirty && !inTrash;
+  const elsewhere = useApp((s) => !!s.docId && s.libraryOwner !== libraryInUse(s));
+  const saved = !!docId && !dirty && !inTrash && !elsewhere;
   // The tab open (from before a reload, say) may be one you've since deleted — here, in
   // another window, or by the trash's month running out: checked when it opens, when the
   // library changes, and when you come back to this window.
@@ -195,6 +198,11 @@ export function App() {
     const onHash = () => openSharedFromUrl();
     window.addEventListener('hashchange', onHash);
     const onKey = (e: KeyboardEvent) => {
+      // (Not behind a dialog — the start screen, say: Ctrl+S and Ctrl+P are for the song.)
+      if ((e.ctrlKey || e.metaKey) && /^[ps]$/i.test(e.key) && document.querySelector('.modal-backdrop')) {
+        e.preventDefault();
+        return;
+      }
       // Ctrl+P: the print view (printing the app itself would be dark pages); on it, print.
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
         e.preventDefault();

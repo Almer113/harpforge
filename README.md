@@ -31,12 +31,29 @@ or a restart of the computer. It never takes a port another program uses: if 528
 busy it says so and stops (another port: `HARPFORGE_PORT=5281 npm run deploy`).
 `npm run deploy -- --no-build` starts it with the build already there.
 
-- Its files are in `data/` (left out of git): `server.log`, and (Phase 14) accounts and
-  their libraries.
+- Its files are in `data/` (left out of git, never served as files):
+  - `accounts/<name>.json` — each account (the password only as a scrypt hash),
+    `sessions/` — who's signed in where (30 days, renewed as used);
+  - `users/<name>/` — an account's library: `tabs/<Title>.htab` (plain song files),
+    `trash/`, `history/<id>.json`, `library.json` (the index), `practice.json`,
+    `syllables.json`;
+  - `server.pid`, `server.log` (past 1 MB it becomes `server.log.1`).
 - Other devices: the first time, Windows asks whether Node may use private networks;
   allow it. On other devices (plain `http://`), browsers turn off the microphone and the
-  clipboard API — copying falls back to an older way.
+  clipboard API — copying falls back to an older way. The server answers only to
+  `localhost`, this computer's addresses and its name (`<name>`, `<name>.local`,
+  `<name>.lan`); other names get 421.
 - In development, `npm run dev` serves the same API (`/api/…`) from the same `data/`.
+
+### Accounts and guests
+
+The start screen offers **Sign in**, **Create account** (made on the page — anyone on the
+network may) or **Continue as guest**. A guest's library stays in that browser
+(IndexedDB, as before); an account's is in `data/users/<name>/` on the computer running
+the server, the same from every device. Signing in for the first time in a browser offers
+once to bring that browser's own songs (with their history, trash, practice and syllable
+fixes) into the account. Switching library keeps the open song open, unlinked from the
+old one. No server answering: guest only (the account menu offers **Try again**).
 
 ## What's in v0.1
 
@@ -80,7 +97,8 @@ busy it says so and stops (another port: `HARPFORGE_PORT=5281 npm run deploy`).
 - **Share links** — the whole tab compressed into the link's `#fragment`; nothing goes to a server.
 - **Sound** — real harmonica recordings (Hohner Special 20, VCSL, CC0) with pitch-shifted draw
   notes and bends, or an improved synthesized reed; tremolo/octave harps layer extra reeds.
-- **Library** — tabs saved locally (IndexedDB).
+- **Library** — tabs saved in this browser (IndexedDB) as a guest, or in your account's
+  folder on the HarpForge server; version history, trash with Undo, backups.
 
 See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 

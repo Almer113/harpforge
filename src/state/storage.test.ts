@@ -14,6 +14,7 @@ vi.mock('../storage/library', () => ({
     new Promise<string>((resolve, reject) => pending.push({ text, id, expect: opts?.expect, resolve, reject })),
   persistStorage: async () => undefined,
   seedDemos: async () => undefined,
+  libraryNow: async () => ({ owner: 'browser' }),
   SaveClash: class extends Error {
     constructor(public saved: unknown) {
       super('clash');

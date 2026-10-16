@@ -8,6 +8,7 @@ import { createHash, randomBytes, scrypt, timingSafeEqual, type ScryptOptions } 
 import { link, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { readJson, writeFileAtomic, writeJson } from './files.ts';
+import { isDeviceName } from './library.ts';
 
 export interface Account {
   name: string;
@@ -44,7 +45,6 @@ export class UserError extends Error {
 }
 
 // (Names Windows won't have as a folder.)
-const RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/;
 
 /** A name as shown ("Almer") and its key ("almer"), or why it can't be used. */
 export function checkName(raw: unknown): { name: string; key: string } {
@@ -52,7 +52,7 @@ export function checkName(raw: unknown): { name: string; key: string } {
   if (name.length < 2 || name.length > 32) throw new UserError(400, 'A name is 2 to 32 characters.');
   if (!/^[\p{L}\p{N}][\p{L}\p{N} ._-]*$/u.test(name)) throw new UserError(400, 'A name can have letters, numbers, spaces, dots, dashes and underscores (and starts with a letter or number).');
   const key = name.toLowerCase().replace(/ /g, '-').replace(/\.+$/, '');
-  if (RESERVED.test(key)) throw new UserError(400, 'That name can’t be used. Try another.');
+  if (isDeviceName(key)) throw new UserError(400, 'That name can’t be used. Try another.');
   return { name, key };
 }
 
@@ -68,13 +68,15 @@ let hashing = 0;
 const waiting: (() => void)[] = [];
 
 async function hashPassword(password: string, salt: Buffer): Promise<Buffer> {
+  // (A slot is taken, or handed over by the one finishing: never more than two at once.)
   if (hashing >= 2) await new Promise<void>((r) => waiting.push(r));
-  hashing++;
+  else hashing++;
   try {
     return await new Promise((resolve, reject) => scrypt(password.normalize('NFC'), salt, 64, SCRYPT, (e, key) => (e ? reject(e) : resolve(key))));
   } finally {
-    hashing--;
-    waiting.shift()?.();
+    const next = waiting.shift();
+    if (next) next();
+    else hashing--;
   }
 }
 
@@ -269,6 +271,10 @@ export function createLimits(now = () => Date.now()) {
       done(key);
       fails.delete(key);
     },
+    /** A sign-in that couldn't be checked (the server's own trouble): not counted either way. */
+    cancelled(ip: string) {
+      done(clientKey(ip));
+    },
     checkSignUp(ip: string) {
       prune();
       const key = clientKey(ip);
@@ -276,7 +282,11 @@ export function createLimits(now = () => Date.now()) {
       allSignups = allSignups.filter((t) => now() - t < 3600000);
       if (recent.length >= 20) throw new UserError(429, 'Too many new accounts from here. Try again later.');
       if (allSignups.length >= 60) throw new UserError(429, 'Too many new accounts just now. Try again later.');
-      signups.set(key, [...recent, now()]);
+    },
+    /** An account was made (only those count toward the limits). */
+    signedUp(ip: string) {
+      const key = clientKey(ip);
+      signups.set(key, [...(signups.get(key) ?? []).filter((t) => now() - t < 3600000), now()]);
       allSignups.push(now());
     },
   };

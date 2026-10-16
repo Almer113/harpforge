@@ -9,7 +9,8 @@
 // server), and files are written whole. A tab written "over the text it had" is refused if
 // something else saved it in between (another window, another device).
 
-import { mkdir, readdir, readFile, rename, rm, rmdir, stat } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { mkdir, readdir, readFile, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { SavedTab, TabVersion, VersionKind } from '../src/storage/types.ts';
 import { UserError } from './accounts.ts';
@@ -63,7 +64,13 @@ export function cleanVersion(v: unknown): TabVersion {
   return { id: x.id, tabId: x.tabId, at: x.at, text: x.text, title: x.title.slice(0, 300), kind: x.kind as VersionKind, ...(x.name ? { name: x.name.slice(0, 80) } : {}) };
 }
 
-const RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/i;
+/**
+ * Names Windows keeps for devices — also with anything after a dot ("nul.txt"), spaces
+ * before it, or a superscript digit ("COM¹"): Explorer and backups can't open such a file.
+ */
+export function isDeviceName(name: string): boolean {
+  return /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³]|conin\$|conout\$|clock\$)$/i.test(name.split('.')[0].trimEnd());
+}
 
 /** A title as a file name Windows (and everyone else) accepts. */
 export function fileTitle(title: string): string {
@@ -73,7 +80,7 @@ export function fileTitle(title: string): string {
   let s = Array.from(clean).slice(0, 80).join('');
   s = s.replace(/[. ]+$/, '');
   if (!s) s = 'Untitled';
-  if (RESERVED.test(s)) s = `_${s}`;
+  if (isDeviceName(s)) s = `_${s}`;
   return s;
 }
 
@@ -91,27 +98,43 @@ export async function withLock<T>(dir: string, fn: () => Promise<T>): Promise<T>
   const before = chains.get(dir) ?? Promise.resolve();
   const run = before.then(async () => {
     const lock = path.join(dir, '.lock');
+    // (Whose it is: only its holder lets it go — not one whose lock was taken over meanwhile.)
+    const token = `${process.pid}-${randomBytes(6).toString('hex')}`;
+    const waitingSince = Date.now();
     await mkdir(dir, { recursive: true });
     for (let i = 0; ; i++) {
       try {
         await mkdir(lock);
+        await writeFile(path.join(lock, 'owner'), token);
         break;
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
-        if (i > 1000) throw new Error('the library is busy', { cause: e });
+        // (Waiting while the holder keeps its lock fresh — a big restore can take a while — up
+        // to a minute; then a clear "busy, try again", not a server error.)
+        if (Date.now() - waitingSince > 60000) throw new UserError(503, 'Your library is busy with another change. Try again in a moment.', { retryAfter: 5 });
+        void i;
         const age = Date.now() - ((await stat(lock).catch(() => null))?.mtimeMs ?? Date.now());
         if (age > 15000) {
-          // (Only one taker wins the rename; the other finds it gone, or a fresh one, and waits.)
+          // (Only one taker wins the rename. One that took a fresh lock by mistake — made just
+          // now by another — puts it back.)
           const stale = `${lock}.stale-${process.pid}-${Date.now()}`;
-          if (await rename(lock, stale).then(() => true, () => false)) await rmdir(stale).catch(() => undefined);
+          if (await rename(lock, stale).then(() => true, () => false)) {
+            const movedAge = Date.now() - ((await stat(stale).catch(() => null))?.mtimeMs ?? 0);
+            if (movedAge < 15000) await rename(stale, lock).catch(() => undefined);
+            else await rm(stale, { recursive: true, force: true }).catch(() => undefined);
+          }
         }
         await sleep(10);
       }
     }
+    // (Held for long — a big restore: kept fresh, so no one takes it over meanwhile.)
+    const beat = setInterval(() => void utimes(lock, new Date(), new Date()).catch(() => undefined), 4000);
     try {
       return await fn();
     } finally {
-      await rmdir(lock).catch(() => undefined);
+      clearInterval(beat);
+      const owner = await readFile(path.join(lock, 'owner'), 'utf8').catch(() => null);
+      if (owner === token) await rm(lock, { recursive: true, force: true }).catch(() => undefined);
     }
   });
   chains.set(
@@ -119,6 +142,20 @@ export async function withLock<T>(dir: string, fn: () => Promise<T>): Promise<T>
     run.catch(() => undefined),
   );
   return run;
+}
+
+/** A file's text; null only if it isn't there. (Windows may hold a file a moment: asked again.) */
+async function readText(file: string): Promise<string | null> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await readFile(file, 'utf8');
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') return null;
+      if (attempt >= 6 || (code !== 'EBUSY' && code !== 'EPERM' && code !== 'EACCES')) throw e;
+      await sleep(25 * (attempt + 1));
+    }
+  }
 }
 
 // ---- The library ------------------------------------------------------------------------
@@ -133,9 +170,9 @@ export function userLibrary(dataDir: string, key: string) {
     return { ...EMPTY, ...i, meta: i.meta ?? {}, tabs: Array.isArray(i.tabs) ? i.tabs : [] };
   };
   const writeIndex = (i: Index) => writeJson(indexFile, i);
-  const textOf = (e: IndexEntry) => readFile(path.join(dir, e.file), 'utf8');
+  /** The tab with its text; null only if its file isn't there (any other trouble: an error, not "gone"). */
   const withText = async (e: IndexEntry): Promise<SavedTab | null> => {
-    const text = await textOf(e).catch(() => null);
+    const text = await readText(path.join(dir, e.file));
     if (text === null) return null;
     const { file: _file, ...rest } = e;
     void _file;
@@ -162,7 +199,7 @@ export function userLibrary(dataDir: string, key: string) {
 
   async function allVersions(): Promise<TabVersion[]> {
     const files = await readdir(path.join(dir, 'history')).catch(() => [] as string[]);
-    const lists = await Promise.all(files.filter((f) => f.endsWith('.json')).map((f) => readVersions(f.slice(0, -5))));
+    const lists = await mapLimit(files.filter((f) => f.endsWith('.json')), (f) => readVersions(f.slice(0, -5)));
     return lists.flat();
   }
 
@@ -171,8 +208,9 @@ export function userLibrary(dataDir: string, key: string) {
       // (A song renamed or moved to the trash between reading the index and its file: read again.)
       for (let attempt = 0; ; attempt++) {
         const i = await readIndex();
-        const tabs = await Promise.all(i.tabs.map(withText));
+        const tabs = await mapLimit(i.tabs, withText);
         if (tabs.every(Boolean) || attempt === 2) return tabs.filter((t): t is SavedTab => t !== null);
+        await sleep(30);
       }
     },
 
@@ -182,6 +220,7 @@ export function userLibrary(dataDir: string, key: string) {
         if (!e) return null;
         const tab = await withText(e);
         if (tab || attempt === 2) return tab;
+        await sleep(30);
       }
     },
 
@@ -224,8 +263,16 @@ export function userLibrary(dataDir: string, key: string) {
     versionsOf: readVersions,
     allVersions,
 
-    async getVersion(id: string): Promise<TabVersion | null> {
-      return (await allVersions()).find((v) => v.id === id) ?? null;
+    /** A version (looked for in its tab's history if that's known; else in all of them). */
+    async getVersion(id: string, tabId?: string): Promise<TabVersion | null> {
+      const list = tabId ? await readVersions(tabId) : await allVersions();
+      return list.find((v) => v.id === id) ?? null;
+    },
+
+    /** How many versions there are, and their texts' size — without sending them all. */
+    async versionStats(): Promise<{ versions: number; bytes: number }> {
+      const all = await allVersions();
+      return { versions: all.length, bytes: all.reduce((n, v) => n + Buffer.byteLength(v.text), 0) };
     },
 
     /** Adds versions (or replaces ones with the same id). */
@@ -241,10 +288,11 @@ export function userLibrary(dataDir: string, key: string) {
       });
     },
 
-    deleteVersions(ids: string[]): Promise<void> {
+    /** Deletes versions (in one tab's history if that's known — a save's thinning: no scan of them all). */
+    deleteVersions(ids: string[], tabId?: string): Promise<void> {
       const gone = new Set(ids);
       return withLock(dir, async () => {
-        const files = await readdir(path.join(dir, 'history')).catch(() => [] as string[]);
+        const files = tabId ? [`${tabId}.json`] : await readdir(path.join(dir, 'history')).catch(() => [] as string[]);
         for (const f of files.filter((n) => n.endsWith('.json'))) {
           const tabId = f.slice(0, -5);
           const list = await readVersions(tabId);
@@ -272,6 +320,20 @@ export function userLibrary(dataDir: string, key: string) {
       });
     },
   };
+}
+
+/** `fn` over the items, at most 16 at a time (a big library doesn't open every file at once). */
+async function mapLimit<T, R>(items: T[], fn: (item: T) => Promise<R>, limit = 16): Promise<R[]> {
+  const out: R[] = [];
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
 }
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -42,6 +42,11 @@ export function browserLibrary(): LibraryBackend {
   return (browser ??= browserBackend());
 }
 
+/** The library in use (once it's decided whose): a save started now goes there, whatever happens meanwhile. */
+export function libraryNow(): Promise<LibraryBackend> {
+  return lib();
+}
+
 /** Whose library is in use: this browser's (a guest) or an account's. */
 export async function libraryKind(): Promise<LibraryBackend['kind']> {
   return (await lib()).kind;
@@ -139,13 +144,15 @@ export class SaveClash extends Error {
 export interface SaveOptions {
   /** What made it (its version's kind). */
   kind?: VersionKind;
+  /** Into this library (not whichever is in use by the time it's written). */
+  in?: LibraryBackend;
   /** The text this window last saved or opened: another text in the library is a SaveClash. */
   expect?: string | null;
 }
 
 /** Saves text; updates the existing entry when `id` is given and still exists. Each new text is a version. */
 export async function saveTab(text: string, id?: string | null, opts: SaveOptions = {}): Promise<string> {
-  const b = await lib();
+  const b = opts.in ?? (await lib());
   return b.transaction(() => saveIn(b, text, id, opts));
 }
 
@@ -181,7 +188,7 @@ async function addVersion(b: LibraryBackend, tab: SavedTab, kind: VersionKind) {
   const added = { ...versionOf(tab, kind), at };
   await b.versions.add([added]);
   const drop = versionsToDrop([...before, added]);
-  if (drop.length) await b.versions.delete(drop);
+  if (drop.length) await b.versions.delete(drop, tab.id);
 }
 
 /** A tab's versions, newest first (the first is the tab as saved now). */
@@ -191,9 +198,9 @@ export async function listVersions(tabId: string): Promise<TabVersion[]> {
 }
 
 /** Names a version ('' unnames it). A named version is kept for good. */
-export async function nameVersion(id: string, name: string): Promise<void> {
+export async function nameVersion(id: string, name: string, tabId?: string): Promise<void> {
   const b = await lib();
-  const v = await b.versions.get(id);
+  const v = await b.versions.get(id, tabId);
   if (!v) return;
   const named = name.trim();
   await b.versions.put(named ? { ...v, name: named } : without(v, 'name'));
@@ -332,12 +339,13 @@ export async function libraryOverview(now = Date.now()): Promise<{ tabs: SavedTa
   const old = all.filter((t) => t.deletedAt && now - t.deletedAt > TRASH_DAYS * 86400000);
   for (const t of old) await deleteTab(t.id, { in: b });
   if (old.length) all = all.filter((t) => !old.includes(t));
-  const versions = await b.versions.all();
   const size = (s: string) => strToU8(s).length;
+  // (An account's: counted on the server — not every saved version brought over to count them.)
+  const v = b.versions.stats ? await b.versions.stats() : await b.versions.all().then((list) => ({ versions: list.length, bytes: list.reduce((n, x) => n + size(x.text), 0) }));
   const trash = all.filter((t) => t.deletedAt).sort((x, y) => y.deletedAt! - x.deletedAt!);
   const tabs = all.filter((t) => !t.deletedAt).sort((x, y) => y.updatedAt - x.updatedAt);
-  const bytes = all.reduce((n, t) => n + size(t.text), 0) + versions.reduce((n, v) => n + size(v.text), 0);
-  return { tabs, trash, stats: { tabs: tabs.length, trashed: trash.length, versions: versions.length, bytes } };
+  const bytes = all.reduce((n, t) => n + size(t.text), 0) + v.bytes;
+  return { tabs, trash, stats: { tabs: tabs.length, trashed: trash.length, versions: v.versions, bytes } };
 }
 
 /** How big the library is: its tabs, the trash, the saved versions, and roughly how many bytes. */
@@ -563,7 +571,8 @@ async function seedOnce(): Promise<Map<string, string>> {
       if (!old && tabs.some((t) => t.deletedAt && d.replaces?.includes(t.text))) continue;
       // (Had before, and not there as it was: deleted, or changed — yours, so it isn't added again.)
       if (!old && d.first !== undefined && seen >= d.first) continue;
-      const id = await saveIn(b, d.text, old?.id, { kind: 'demo' });
+      // ("Demo update" only for a demo brought up to date; one just added is simply saved.)
+      const id = await saveIn(b, d.text, old?.id, { kind: old ? 'demo' : 'save' });
       if (old) {
         // (Not a change of yours: it keeps its place in "Recently changed".)
         const now = await b.tabs.get(id);

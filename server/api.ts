@@ -8,7 +8,17 @@
 //   POST /api/account/signout
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createAccounts, createLimits, SESSION_DAYS, UserError, type User } from './accounts.ts';
+import { gzipSync } from 'node:zlib';
+import { checkName, createAccounts, createLimits, SESSION_DAYS, UserError, type User } from './accounts.ts';
+
+/** The key of the account a page says it means (its name, as sent in X-HarpForge-Account). */
+function accountKey(header: string): string | null {
+  try {
+    return checkName(decodeURIComponent(header)).key;
+  } catch {
+    return null;
+  }
+}
 import { cleanTab, cleanVersion, isId, userLibrary } from './library.ts';
 import { DATA_NAMES, userData, type DataName } from './userdata.ts';
 
@@ -21,10 +31,17 @@ export interface ApiOptions {
 const startedAt = Date.now();
 const COOKIE = 'hf_session';
 
-export function sendJson(res: ServerResponse, status: number, body: unknown, headers: Record<string, string | string[]> = {}) {
+export function sendJson(res: ServerResponse, status: number, body: unknown, headers: Record<string, string | string[]> = {}, req?: IncomingMessage) {
   const text = JSON.stringify(body);
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Length': Buffer.byteLength(text), ...headers });
-  res.end(text);
+  const base = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', Vary: 'Accept-Encoding', ...headers };
+  if (req && text.length > 8192 && /\bgzip\b/.test(String(req.headers['accept-encoding'] ?? ''))) {
+    const zipped = gzipSync(text, { level: 4 });
+    res.writeHead(status, { ...base, 'Content-Encoding': 'gzip', 'Content-Length': zipped.length });
+    res.end(req.method === 'HEAD' ? undefined : zipped);
+    return;
+  }
+  res.writeHead(status, { ...base, 'Content-Length': Buffer.byteLength(text) });
+  res.end(req?.method === 'HEAD' ? undefined : text);
 }
 
 /** A request's JSON body (at most `limit` bytes); throws on anything else. */
@@ -69,7 +86,7 @@ function sameOrigin(req: IncomingMessage): boolean {
   const origin = req.headers.origin;
   if (!origin) return true;
   try {
-    return new URL(origin).host === req.headers.host;
+    return new URL(origin).host === (req.headers.host ?? '').toLowerCase();
   } catch {
     return false;
   }
@@ -96,7 +113,7 @@ export function createApi(opts: ApiOptions) {
     const { pathname } = url;
     const method = req.method ?? 'GET';
     // (Its process and addresses only to this computer — deploy and undeploy ask from here.)
-    if (pathname === '/api/health' && method === 'GET') return sendJson(res, 200, isLocal(req) ? { app: 'HarpForge', pid: process.pid, startedAt, ...extra } : { app: 'HarpForge', mode: extra.mode });
+    if (pathname === '/api/health' && (method === 'GET' || method === 'HEAD')) return sendJson(res, 200, isLocal(req) ? { app: 'HarpForge', pid: process.pid, startedAt, ...extra } : { app: 'HarpForge', mode: extra.mode });
     // Stopping, asked by undeploy: from this computer, with the token only the server's own files hold.
     if (pathname === '/api/shutdown' && method === 'POST') {
       if (!opts.shutdown || !isLocal(req) || req.headers['x-harpforge-shutdown'] !== opts.shutdown.token) throw new UserError(403, 'No.');
@@ -115,6 +132,8 @@ export function createApi(opts: ApiOptions) {
         const body = (await readBody<{ name?: unknown; password?: unknown }>(req, 10000)) ?? {};
         limits.checkSignUp(ipOf(req));
         const user = await accounts.signUp(body.name, body.password);
+        // (Only an account made counts toward the limit — not a name taken, or one that can't be used.)
+        limits.signedUp(ipOf(req));
         const token = await accounts.startSession(user);
         return sendJson(res, 201, { user: { name: user.name } }, { 'Set-Cookie': sessionCookie(token) });
       }
@@ -122,7 +141,13 @@ export function createApi(opts: ApiOptions) {
         const body = (await readBody<{ name?: unknown; password?: unknown }>(req, 10000)) ?? {};
         const ip = ipOf(req);
         limits.checkSignIn(ip);
-        const user = await accounts.verify(body.name, body.password);
+        let user: User | null;
+        try {
+          user = await accounts.verify(body.name, body.password);
+        } catch (e) {
+          limits.cancelled(ip);
+          throw e;
+        }
         if (!user) {
           limits.failed(ip);
           throw new UserError(401, 'That name and password don’t match an account.');
@@ -142,8 +167,13 @@ export function createApi(opts: ApiOptions) {
       const headers: Record<string, string> = {};
       const user = await whoIs(req, headers);
       if (!user) throw new UserError(401, 'Not signed in.');
+      // The page says whose library it means: if this browser has since been signed in as
+      // someone else (in another tab — they share the cookie), it's refused, not mixed up.
+      const meant = req.headers['x-harpforge-account'];
+      if (typeof meant === 'string' && meant && accountKey(meant) !== user.key) throw new UserError(401, 'Signed in as someone else here now.');
       const lib = userLibrary(opts.dataDir, user.key);
-      const send = (status: number, body: unknown) => sendJson(res, status, body, headers);
+      // (Big answers — a whole library's history — compressed for the trip to a phone.)
+      const send = (status: number, body: unknown) => sendJson(res, status, body, headers, req);
       let parts: string[];
       try {
         parts = pathname.slice('/api/library/'.length).split('/').map((p) => decodeURIComponent(p));
@@ -157,6 +187,7 @@ export function createApi(opts: ApiOptions) {
       };
 
       if (what === 'tabs' && parts.length === 1 && method === 'GET') return send(200, await lib.allTabs());
+      if (what === 'stats' && parts.length === 1 && method === 'GET') return send(200, await lib.versionStats());
       if (what === 'tabs' && parts.length === 2) {
         const tabId = idOk(id);
         if (method === 'GET') {
@@ -190,15 +221,17 @@ export function createApi(opts: ApiOptions) {
         }
       }
       if (what === 'versions' && id === 'delete' && parts.length === 2 && method === 'POST') {
-        const body = await readBody<{ ids?: unknown }>(req);
+        const body = await readBody<{ ids?: unknown; tab?: unknown }>(req);
         if (!Array.isArray(body?.ids) || !body.ids.every(isId)) throw new UserError(400, 'Not ids.');
-        await lib.deleteVersions(body.ids);
+        if (body.tab !== undefined && !isId(body.tab)) throw new UserError(400, 'Not an id.');
+        await lib.deleteVersions(body.ids, body.tab as string | undefined);
         return send(200, { ok: true });
       }
       if (what === 'versions' && parts.length === 2) {
         const versionId = idOk(id);
         if (method === 'GET') {
-          const v = await lib.getVersion(versionId);
+          const tab = url.searchParams.get('tab');
+          const v = await lib.getVersion(versionId, tab === null ? undefined : idOk(tab));
           return v ? send(200, v) : send(404, { error: 'No such version.' });
         }
         if (method === 'PUT') {
@@ -238,6 +271,8 @@ export function createApi(opts: ApiOptions) {
     } catch (e) {
       if (e instanceof UserError) {
         const headers: Record<string, string> = e.extra.retryAfter ? { 'Retry-After': String(e.extra.retryAfter) } : {};
+        // (A body refused part-way — too large: the rest isn't read, so this connection ends here.)
+        if (e.status === 413) headers.Connection = 'close';
         sendJson(res, e.status, { error: e.message, ...e.extra }, headers);
       } else {
         console.error(e);

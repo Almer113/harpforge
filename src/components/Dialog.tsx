@@ -21,6 +21,9 @@ export function Dialog({ label, className = '', onClose, children }: { label: st
     const onKey = (e: KeyboardEvent) => {
       // Something inside handled it (e.g. Escape in the paste box only leaves the box).
       if (e.defaultPrevented) return;
+      // (Two open — the sign-in screen over another: only the one on top answers.)
+      const open = document.querySelectorAll('.modal-backdrop');
+      if (open.length > 1 && open[open.length - 1] !== el.parentElement) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         closeRef.current();

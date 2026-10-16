@@ -16,6 +16,19 @@ type Syllables = Record<string, Record<string, string>>;
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
+/** A practice session as kept: its fields (and nothing else, nor anything nested). */
+function entry(e: Record<string, unknown> & { at: number }) {
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  return {
+    at: e.at,
+    mode: typeof e.mode === 'string' ? e.mode.slice(0, 20) : 'practice',
+    accuracy: num(e.accuracy),
+    passes: num(e.passes),
+    clean: num(e.clean),
+    holes: Array.isArray(e.holes) ? e.holes.filter((h): h is string => typeof h === 'string').slice(0, 5).map((h) => h.slice(0, 12)) : [],
+  };
+}
+
 /** Practice: each song's sessions, both sides', once each (by time), the last 20; the 200 songs practised latest. */
 export function mergePractice(had: unknown, change: unknown): Practice {
   // (No inherited keys: a song called "constructor" is just a song.)
@@ -24,7 +37,7 @@ export function mergePractice(had: unknown, change: unknown): Practice {
     if (!isObject(side)) continue;
     for (const [song, list] of Object.entries(side)) {
       if (!Array.isArray(list)) continue;
-      const entries = list.filter((e): e is { at: number } => isObject(e) && typeof e.at === 'number');
+      const entries = list.filter((e): e is Record<string, unknown> & { at: number } => isObject(e) && typeof e.at === 'number' && Number.isFinite(e.at)).map(entry);
       const byTime = new Map((out[song] ?? []).map((e) => [e.at, e]));
       for (const e of entries) byTime.set(e.at, e);
       out[song] = [...byTime.values()].sort((a, b) => a.at - b.at).slice(-20);

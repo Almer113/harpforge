@@ -29,6 +29,12 @@ export function signedOutSeen() {
 export interface RemoteOptions {
   base?: string;
   headers?: Record<string, string>;
+  /**
+   * Whose library this is. Sent with every request: if this browser has since been signed in
+   * as someone else (another tab — they share the sign-in), the server refuses rather than
+   * mixing the two up.
+   */
+  account?: string;
 }
 
 async function callWith<T>(opts: RemoteOptions, method: string, path: string, body?: unknown): Promise<T> {
@@ -38,7 +44,11 @@ async function callWith<T>(opts: RemoteOptions, method: string, path: string, bo
       method,
       // (A server that never answers doesn't hang the library: reads give up after 20 s, big writes after 2 min.)
       signal: AbortSignal.timeout(method === 'GET' ? 20000 : 120000),
-      headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...opts.headers },
+      headers: {
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...(opts.account ? { 'X-HarpForge-Account': encodeURIComponent(opts.account) } : {}),
+        ...opts.headers,
+      },
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials: 'same-origin',
     });
@@ -62,6 +72,7 @@ export function accountBackend(opts: RemoteOptions = {}): LibraryBackend {
   const call = <T>(method: string, path: string, body?: unknown) => callWith<T>(opts, method, path, body);
   return {
     kind: 'account',
+    owner: opts.account ? `account:${opts.account.toLowerCase()}` : 'account:',
     tabs: {
       get: (id) => call<SavedTab | undefined>('GET', `/tabs/${enc(id)}`),
       all: () => call<SavedTab[]>('GET', '/tabs'),
@@ -69,12 +80,13 @@ export function accountBackend(opts: RemoteOptions = {}): LibraryBackend {
       delete: async (id) => void (await call('DELETE', `/tabs/${enc(id)}`)),
     },
     versions: {
-      get: (id) => call<TabVersion | undefined>('GET', `/versions/${enc(id)}`),
+      get: (id, tabId) => call<TabVersion | undefined>('GET', `/versions/${enc(id)}${tabId ? `?tab=${enc(tabId)}` : ''}`),
       ofTab: (tabId) => call<TabVersion[]>('GET', `/versions?tab=${enc(tabId)}`),
       all: () => call<TabVersion[]>('GET', '/versions'),
       add: async (vs) => void (vs.length && (await call('POST', '/versions', { versions: vs }))),
       put: async (v) => void (await call('PUT', `/versions/${enc(v.id)}`, { version: v })),
-      delete: async (ids) => void (ids.length && (await call('POST', '/versions/delete', { ids }))),
+      delete: async (ids, tabId) => void (ids.length && (await call('POST', '/versions/delete', { ids, tab: tabId }))),
+      stats: () => call<{ versions: number; bytes: number }>('GET', '/stats'),
       deleteOfTab: async (tabId) => void (await call('DELETE', `/versions?tab=${enc(tabId)}`)),
     },
     meta: {

@@ -55,7 +55,11 @@ function leaving() {
 
 /** The library in use now belongs to `owner`: the open song, if it's from another, is unlinked. */
 function nowIn(owner: string) {
-  if (useApp.getState().libraryOwner !== owner) unlinkOpenSong();
+  if (useApp.getState().libraryOwner !== owner) {
+    // (Another library than before — "Try again" found the server, say: what was the old one's goes.)
+    leaving();
+    unlinkOpenSong();
+  }
   useApp.setState({ libraryOwner: owner });
 }
 
@@ -67,8 +71,8 @@ export function startAccount(): Promise<void> {
   return currentAccount()
     .then(async (a) => {
       if (a.ok && a.user) {
-        setLibraryBackend(accountBackend());
-        await accountData();
+        setLibraryBackend(accountBackend({ account: a.user.name }));
+        await accountData(a.user.name);
         useApp.setState({ account: { status: 'signed-in', name: a.user.name } });
         // (Reopened in another account's library — or a guest's song left open: not this library's.)
         nowIn(ownerOf(a.user.name));
@@ -103,8 +107,9 @@ async function enter(name: string) {
     leaving();
     unlinkOpenSong();
   }
-  setLibraryBackend(accountBackend());
-  await accountData();
+  setLibraryBackend(accountBackend({ account: name }));
+  // (Back in as the same one: what wasn't sent while signed out is kept, and sent now.)
+  await accountData(name, same);
   useApp.setState({ account: { status: 'signed-in', name }, accountGate: null, libraryOwner: ownerOf(name) });
   libraryChanged();
   if (remembered(offeredKey(name))) return;
@@ -150,7 +155,8 @@ export function continueAsGuest() {
  */
 export async function signOutNow(then: 'signin' | null = 'signin') {
   const a = await signOut();
-  if (!a.ok && a.reason === 'offline') {
+  // (Only once the server has ended the session — else a reload would sign straight back in.)
+  if (!a.ok) {
     useApp.getState().notify(`Couldn’t sign out: ${a.message}`);
     return;
   }
@@ -171,6 +177,12 @@ export async function bringSongs() {
   useApp.setState({ bringOffer: null });
   remember(offeredKey(offer.name), 'done');
   try {
+    // (Still there to bring? — another window may have deleted them meanwhile.)
+    const own = await ownSongs(browserLibrary());
+    if (own.songs + own.trashed === 0) {
+      useApp.getState().notify('This browser’s library has no songs of yours to bring over any more.');
+      return;
+    }
     // (The account's own demos first — then only your songs come over, not this browser's copies of them.)
     await seedDemos().catch(() => undefined);
     const zip = await exportLibrary({ full: true, from: browserLibrary(), ownOnly: true });

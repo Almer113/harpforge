@@ -14,12 +14,16 @@ describe('merging', () => {
   it('practice: both devices’ sessions, once each, in order (the last 20 a song)', () => {
     const a = { song1: [{ at: 1 }, { at: 3 }] };
     const b = { song1: [{ at: 2 }, { at: 3 }], song2: [{ at: 5 }] };
-    expect(mergePractice(a, b)).toEqual({ song2: [{ at: 5 }], song1: [{ at: 1 }, { at: 2 }, { at: 3 }] });
+    const ats = (p: Record<string, { at: number }[]>) => Object.fromEntries(Object.entries(p).map(([k, l]) => [k, l.map((e) => e.at)]));
+    expect(ats(mergePractice(a, b))).toEqual({ song2: [5], song1: [1, 2, 3] });
     const many = { s: Array.from({ length: 30 }, (_, i) => ({ at: i })) };
     expect(mergePractice(null, many).s).toHaveLength(20);
     expect(mergePractice(null, many).s[0].at).toBe(10);
     // (Anything else in it is left out.)
-    expect(mergePractice({ x: 'no' }, { y: [{ at: 'no' }, 7, { at: 1 }] })).toEqual({ y: [{ at: 1 }] });
+    expect(ats(mergePractice({ x: 'no' }, { y: [{ at: 'no' }, 7, { at: 1 }] }))).toEqual({ y: [1] });
+    // A session keeps only a session's fields: nothing else, nothing nested.
+    const [kept] = mergePractice(null, { s: [{ at: 1, accuracy: 80, junk: 'x'.repeat(1000), holes: ['-4', { deep: [] }] }] }).s;
+    expect(kept).toEqual({ at: 1, mode: 'practice', accuracy: 80, passes: 0, clean: 0, holes: ['-4'] });
   });
 
   it('syllables: both sides’ words; the change’s form wins', () => {
@@ -64,5 +68,32 @@ describe('over HTTP', () => {
   it('only practice and syllables; signed in only', async () => {
     expect((await put('secrets', {})).status).toBe(404);
     expect((await fetch(`${base}/api/library/data`)).status).toBe(401);
+  });
+});
+
+describe('two tabs, one sign-in', () => {
+  let dir: string;
+  let server: Server;
+  let base: string;
+  beforeAll(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), 'harpforge-who-'));
+    const api = createApi({ dataDir: dir });
+    server = createServer((req, res) => void api(req, res).then((h) => h || res.writeHead(404).end()));
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+  afterAll(async () => {
+    await new Promise((r) => server.close(r));
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('a page meaning one account, the browser signed in as another since: refused (not mixed up)', async () => {
+    const r = await fetch(`${base}/api/account/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Siti Nur', password: 'harmonica' }) });
+    const cookie = /hf_session=[^;]+/.exec(r.headers.get('set-cookie') ?? '')![0];
+    const ask = (account?: string) => fetch(`${base}/api/library/tabs`, { headers: { Cookie: cookie, ...(account ? { 'X-HarpForge-Account': encodeURIComponent(account) } : {}) } });
+    expect((await ask('Siti Nur')).status).toBe(200);
+    expect((await ask('siti nur')).status).toBe(200);
+    expect((await ask('Almer')).status).toBe(401);
+    expect((await ask()).status).toBe(200);
   });
 });

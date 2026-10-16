@@ -29,7 +29,8 @@ const formats = () =>
 export function preloadFormats(): void {
   import('../core/formats').catch(() => {});
 }
-import { persistStorage, SaveClash, saveTab } from '../storage/library';
+import { libraryNow, persistStorage, SaveClash, saveTab } from '../storage/library';
+import type { LibraryBackend } from '../storage/types';
 import { stop } from './playback';
 import { finishRecording } from '../live/recorder';
 import { getParsed, isDirty, libraryInUse, useApp } from './store';
@@ -139,24 +140,27 @@ const savedIds = new Map<number, string>();
 /** Saves the open tab to the library (as a new entry with `asCopy`). */
 export function saveCurrent(asCopy = false): Promise<void> {
   const s = useApp.getState();
-  // What to save is decided now; where it goes is decided when it's its turn.
-  // (And which library it goes to: if that changes before it's done, it's not this song's any more.)
-  const job = { text: s.text, seq: s.loadSeq, docId: s.docId, asCopy, owner: libraryInUse(s) };
-  const run = saveQueue.then(() => saveNow(job));
+  // What to save is decided now; where in the library it goes, when it's its turn. Which
+  // library: the one in use now (once it's known whose — at startup, it's still being asked),
+  // whatever happens meanwhile; if that changes before it's done, it's not this song's any more.
+  const job = { text: s.text, seq: s.loadSeq, docId: s.docId, asCopy };
+  const into = libraryNow();
+  const run = saveQueue.then(async () => saveNow({ ...job, into: await into }));
   saveQueue = run.catch(() => undefined);
   return run;
 }
 
-async function saveNow(job: { text: string; seq: number; docId: string | null; asCopy: boolean; owner: string }) {
+async function saveNow(job: { text: string; seq: number; docId: string | null; asCopy: boolean; into: LibraryBackend }) {
   const s = useApp.getState();
-  const stillOpen = () => useApp.getState().loadSeq === job.seq && libraryInUse(useApp.getState()) === job.owner;
+  const owner = job.into.owner;
+  const stillOpen = () => useApp.getState().loadSeq === job.seq && libraryInUse(useApp.getState()) === owner;
   const id0 = job.asCopy ? null : stillOpen() ? useApp.getState().docId : (savedIds.get(job.seq) ?? job.docId);
   try {
     // (What this window last saved or opened: if the library has something else now, it was saved elsewhere.)
     const expect = !job.asCopy && stillOpen() ? useApp.getState().savedText : null;
     let id: string;
     try {
-      id = await saveTab(job.text, id0, { expect });
+      id = await saveTab(job.text, id0, { expect, in: job.into });
     } catch (e) {
       if (!(e instanceof SaveClash)) throw e;
       const title = e.saved.title;
@@ -164,14 +168,14 @@ async function saveNow(job: { text: string; seq: number; docId: string | null; a
         s.notify('Not saved. Save a copy to keep both.');
         return;
       }
-      id = await saveTab(job.text, id0);
+      id = await saveTab(job.text, id0, { in: job.into });
     }
     if (!job.asCopy) savedIds.set(job.seq, id);
     // (The library page, and the History dialog, read it again.)
     useApp.setState((st) => ({ libraryRev: st.libraryRev + 1 }));
     if (stillOpen()) {
       s.markSaved(id, job.text);
-      useApp.setState({ libraryOwner: job.owner });
+      useApp.setState({ libraryOwner: owner });
       s.notify(job.asCopy ? 'Saved a copy to your library ✓' : 'Saved to your library ✓');
     } else {
       // Another tab was opened while saving: the save is done, but it isn't this tab's.

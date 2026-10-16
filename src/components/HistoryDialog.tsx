@@ -73,7 +73,7 @@ function HistoryBody({ tabId, close }: { tabId: string; close: () => void }) {
   const rename = async (name: string) => {
     endNaming();
     try {
-      await nameVersion(v.id, name);
+      await nameVersion(v.id, name, v.tabId);
     } catch (e) {
       useApp.getState().notify(`Couldn’t name it: ${(e as Error).message}`);
     }

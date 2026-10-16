@@ -31,6 +31,8 @@ export interface TabVersion {
 /** Where a library is kept. */
 export interface LibraryBackend {
   kind: 'browser' | 'account';
+  /** Whose: "browser", or "account:<name>" (as the open song's working copy notes it). */
+  owner: string;
   tabs: {
     get(id: string): Promise<SavedTab | undefined>;
     all(): Promise<SavedTab[]>;
@@ -42,12 +44,16 @@ export interface LibraryBackend {
     delete(id: string): Promise<void>;
   };
   versions: {
-    get(id: string): Promise<TabVersion | undefined>;
+    /** A version (`tabId`, if known: looked for only in that tab's history). */
+    get(id: string, tabId?: string): Promise<TabVersion | undefined>;
     ofTab(tabId: string): Promise<TabVersion[]>;
     all(): Promise<TabVersion[]>;
     add(versions: TabVersion[]): Promise<void>;
     put(version: TabVersion): Promise<void>;
-    delete(ids: string[]): Promise<void>;
+    /** Deletes versions (`tabId`, if they're all one tab's: only its history is looked through). */
+    delete(ids: string[], tabId?: string): Promise<void>;
+    /** How many versions there are and their texts' size, without fetching them all (if the storage can). */
+    stats?(): Promise<{ versions: number; bytes: number }>;
     deleteOfTab(tabId: string): Promise<void>;
   };
   /** Small values the library keeps with itself (which demos it has had). */
