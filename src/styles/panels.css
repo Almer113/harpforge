@@ -130,3 +130,29 @@
 .drop-overlay div { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .drop-overlay b { font-size: 22px; color: var(--brass-2); }
 .drop-overlay span { color: var(--muted); }
+
+/* ---------- History ---------- */
+.history-modal { width: min(1000px, 96vw); }
+.history-modal .modal-head { flex-wrap: wrap; }
+.history-modal .modal-head .muted { flex: 1 1 260px; }
+.history-grid { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 16px; align-items: start; min-height: 0; }
+.history-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 62vh; overflow: auto; }
+.history-item { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: 1px solid transparent; background: transparent; color: var(--text); padding: 7px 10px; border-radius: 8px; cursor: pointer; }
+.history-item:hover { background: var(--panel-2); }
+.history-item.on { background: var(--panel-2); border-color: var(--brass); }
+.hi-main { font-weight: 600; }
+.history-detail { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.history-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; }
+.history-name { display: flex; gap: 6px; }
+.history-name input { width: 220px; }
+.history-view { background: var(--bg-2); border-radius: 10px; padding: 10px 12px; max-height: 52vh; min-height: 120px; overflow: auto; }
+.history-preview .simpletab.preview { white-space: normal; }
+.diff { font-family: var(--mono); font-size: 12.5px; line-height: 1.55; }
+.diff-line { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 6px; border-radius: 3px; }
+.diff-line.add { background: rgba(124, 207, 138, 0.13); }
+.diff-line.del { background: rgba(239, 106, 90, 0.13); color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(239, 106, 90, 0.5); }
+.diff-sign { display: inline-block; width: 1.4em; color: var(--faint); user-select: none; }
+.diff-line.add .diff-sign { color: var(--ok); }
+.diff-line.del .diff-sign { color: var(--danger); }
+.diff-fold { padding: 2px 6px; font-style: italic; }
+@media (max-width: 760px) { .history-grid { grid-template-columns: 1fr; } .history-list { max-height: 30vh; } }

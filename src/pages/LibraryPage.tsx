@@ -7,6 +7,7 @@ import type { TabDoc } from '../core/htab/types';
 import { FAMILIES } from '../core/instruments';
 import { specFromMeta } from '../core/score';
 import { confirmDiscard, downloadData, importFile, newTab, openPasteImport } from '../state/actions';
+import { openHistory } from '../state/history';
 import { stop } from '../state/playback';
 import { useApp } from '../state/store';
 import { copyText, deleteTab, exportLibrary, importLibrary, listTabs, persistStorage, readBackup, recoverableTabs, recoverTabs, saveTab, seedDemos, type SavedTab } from '../storage/library';
@@ -245,6 +246,7 @@ export function LibraryPage() {
                     label="⋯"
                     title="More"
                     items={[
+                      { label: 'History…', onClick: () => openHistory(t.id) },
                       { label: 'Duplicate', onClick: () => void duplicate(t) },
                       { label: <span className="danger-text">Delete…</span>, onClick: () => void remove(t) },
                     ]}

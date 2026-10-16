@@ -306,6 +306,8 @@ export interface AppState {
   showVerse: number;
   /** The harmonicas you own (remembered): import ranks them first. */
   ownedHarps: import('../core/instruments').HarmonicaSpec[];
+  /** The library tab whose History dialog is open. */
+  historyFor: string | null;
   /** Plain-text export: open, and its choices (remembered). */
   plainTextOpen: boolean;
   /** The editor's "Fill lyrics from text" dialog, and the words in it (kept if it's closed by mistake). */
@@ -552,6 +554,7 @@ export const useApp = create<AppState>((set) => ({
   soundMode: prefs.soundMode === 'synth' ? 'synth' : 'samples',
   harpSize: prefs.harpSize ?? 'full',
   printPrefs: { view: 'tab', size: 'normal', title: true, details: true, chart: false, ...prefs.printPrefs },
+  historyFor: null,
   plainTextOpen: false,
   fillLyricsOpen: false,
   fillDraft: '',

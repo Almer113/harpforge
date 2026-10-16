@@ -3,6 +3,7 @@ import { Toast } from './components/Controls';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ExportMenu } from './components/ExportMenu';
 import { Menu } from './components/Menu';
+import { HistoryDialog } from './components/HistoryDialog';
 import { PlainTextDialog } from './components/PlainTextDialog';
 import { openShortcuts, Shortcuts } from './components/Shortcuts';
 import { LibraryPage } from './pages/LibraryPage';
@@ -10,6 +11,7 @@ import { PlayPage } from './pages/PlayPage';
 import { EXPORTS } from './core/formats/catalog';
 import { exportAs, importFile, importFromFile, newTab, openPasteImport, saveCurrent } from './state/actions';
 import { startRouter } from './state/router';
+import { openHistory } from './state/history';
 import { copyShareLink } from './state/share';
 import { isDirty, useApp, useParsed, type Page } from './state/store';
 import { seedDemos } from './storage/library';
@@ -90,7 +92,15 @@ function TabActions() {
         <button className="btn small primary" onClick={() => void saveCurrent()} title="Save to your library (Ctrl+S)">
           {dirty || !docId ? 'Save' : 'Saved ✓'}
         </button>
-        <Menu label="▾" className="btn small primary" title="More ways to save" items={[{ label: 'Save as a copy', hint: 'A new tab in your library', onClick: () => void saveCurrent(true) }]} />
+        <Menu
+          label="▾"
+          className="btn small primary"
+          title="More ways to save"
+          items={[
+            { label: 'Save as a copy', hint: 'A new tab in your library', onClick: () => void saveCurrent(true) },
+            ...(docId ? [{ label: 'History…', hint: 'Earlier saved versions: compare, bring one back', onClick: () => openHistory(docId) }] : []),
+          ]}
+        />
       </div>
     </div>
   );
@@ -259,6 +269,7 @@ export function App() {
         </Suspense>
       )}
       <PlainTextDialog />
+      <HistoryDialog />
       <Shortcuts />
       <Toast />
     </div>
