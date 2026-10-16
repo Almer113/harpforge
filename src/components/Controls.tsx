@@ -767,15 +767,38 @@ function OwnedHarps() {
 
 export function Toast() {
   const toast = useApp((s) => s.toast);
+  // (One with a button stays longer, and while the mouse or keyboard is on it.)
+  const [heldId, setHeldId] = useState<number | null>(null);
+  const held = !!toast && heldId === toast.id;
   useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => useApp.setState({ toast: null }), 3200);
+    if (!toast || held) return;
+    const t = setTimeout(() => useApp.setState({ toast: null }), toast.action ? 8000 : 3200);
     return () => clearTimeout(t);
-  }, [toast]);
+  }, [toast, held]);
   if (!toast) return null;
+  const { action } = toast;
   return (
-    <div className="toast" key={toast.id} role="status">
-      {toast.message}
+    <div
+      className={`toast ${action ? 'with-action' : ''}`}
+      key={toast.id}
+      role="status"
+      onMouseEnter={() => action && setHeldId(toast.id)}
+      onMouseLeave={() => setHeldId(null)}
+      onFocus={() => setHeldId(toast.id)}
+      onBlur={() => setHeldId(null)}
+    >
+      <span>{toast.message}</span>
+      {action && (
+        <button
+          className="btn small toast-action"
+          onClick={() => {
+            useApp.setState({ toast: null });
+            action.run();
+          }}
+        >
+          {action.label}
+        </button>
+      )}
     </div>
   );
 }

@@ -10,7 +10,8 @@ import { confirmDiscard, downloadData, importFile, newTab, openPasteImport } fro
 import { openHistory } from '../state/history';
 import { stop } from '../state/playback';
 import { useApp } from '../state/store';
-import { copyText, deleteTab, exportLibrary, importLibrary, listTabs, persistStorage, readBackup, recoverableTabs, recoverTabs, saveTab, seedDemos, type SavedTab } from '../storage/library';
+import { deleteForever, duplicateTab, emptyTheTrash, moveToTrash, restoreBackup, restoreFromTrash } from '../state/trash';
+import { exportLibrary, listTabs, listTrash, persistStorage, readBackup, recoverableTabs, recoverTabs, seedDemos, TRASH_DAYS, type SavedTab } from '../storage/library';
 
 export function LibraryPage() {
   const [tabs, setTabs] = useState<SavedTab[] | null>(null);
@@ -34,19 +35,26 @@ export function LibraryPage() {
   }, [sort]);
   const docId = useApp((s) => s.docId);
   const savedText = useApp((s) => s.savedText);
+  const libraryRev = useApp((s) => s.libraryRev);
+  const [showTrash, setShowTrash] = useState(false);
+  const [trash, setTrash] = useState<SavedTab[]>([]);
 
   // After the first-run demos are in (seedDemos runs once), and again whenever something is saved.
   const refresh = useCallback(() => {
     seedDemos()
       .catch(() => undefined)
       .then(listTabs)
-      .then((list) => {
+      .then(async (list) => {
         setTabs(list);
+        setTrash(await listTrash());
         setLoadError(null);
       })
       .catch((e: Error) => setLoadError(e?.message || 'storage unavailable'));
   }, []);
-  useEffect(refresh, [refresh, docId, savedText]);
+  useEffect(refresh, [refresh, docId, savedText, libraryRev]);
+  // (The trash emptied: back to the library.)
+  if (showTrash && !trash.length) setShowTrash(false);
+
 
   // An empty library whose tabs are still in the working copies: the browser cleared it.
   const [recoverable, setRecoverable] = useState(0);
@@ -89,26 +97,6 @@ export function LibraryPage() {
     if (newTab()) useApp.getState().setPage('editor');
   };
 
-  const remove = async (t: SavedTab) => {
-    if (!window.confirm(`Delete "${t.title}" from your library? This can't be undone.`)) return;
-    try {
-      await deleteTab(t.id);
-    } catch (e) {
-      useApp.getState().notify(`Couldn’t delete: ${(e as Error).message}`);
-      return;
-    }
-    if (useApp.getState().docId === t.id) useApp.setState({ docId: null, savedText: null });
-    refresh();
-  };
-
-  const duplicate = async (t: SavedTab) => {
-    try {
-      await saveTab(copyText(t));
-    } catch (e) {
-      useApp.getState().notify(`Couldn’t duplicate: ${(e as Error).message}`);
-    }
-    refresh();
-  };
 
   const backup = async () => {
     try {
@@ -133,14 +121,7 @@ export function LibraryPage() {
         useApp.getState().notify(`That isn’t a library backup (${(e as Error).message}).`);
         return;
       }
-      try {
-        const { added, skipped } = await importLibrary(files);
-        useApp.getState().notify(`Restored ${added} tab${added === 1 ? '' : 's'}${skipped ? ` (${skipped} already in your library)` : ''} ✓`);
-        void persistStorage();
-      } catch (e) {
-        useApp.getState().notify(`Couldn’t save the restored tabs: ${(e as Error).message}. Nothing was added.`);
-      }
-      refresh();
+      if (await restoreBackup(files)) void persistStorage();
     };
     input.click();
   };
@@ -165,7 +146,7 @@ export function LibraryPage() {
           <h1>Library</h1>
           <p className="muted">Your saved tabs. Click one to play it.</p>
         </div>
-        <div className="tb-group">
+        <div className="tb-group" style={showTrash ? { visibility: 'hidden' } : undefined}>
           <input className="search" type="search" aria-label="Search your tabs" placeholder="Search titles, artists, lyrics…" value={query} onChange={(e) => setQuery(e.target.value)} />
           <select value={family} onChange={(e) => setFamily(e.target.value)} title="Show one kind of harmonica" aria-label="Kind of harmonica">
             <option value="all">All harmonicas</option>
@@ -189,7 +170,9 @@ export function LibraryPage() {
           <button className="btn small" onClick={refresh}>Retry</button>
         </div>
       )}
-      {tabs === null ? (
+      {showTrash ? (
+        <TrashView tabs={trash} docId={docId} onBack={() => setShowTrash(false)} />
+      ) : tabs === null ? (
         !loadError && <p className="muted">Loading…</p>
       ) : tabs.length === 0 ? (
         <div className="lib-empty">
@@ -247,8 +230,8 @@ export function LibraryPage() {
                     title="More"
                     items={[
                       { label: 'History…', onClick: () => openHistory(t.id) },
-                      { label: 'Duplicate', onClick: () => void duplicate(t) },
-                      { label: <span className="danger-text">Delete…</span>, onClick: () => void remove(t) },
+                      { label: 'Duplicate', onClick: () => void duplicateTab(t) },
+                      { label: <span className="danger-text">Delete</span>, hint: 'To the trash (Undo, or restore it there)', onClick: () => void moveToTrash(t) },
                     ]}
                   />
                 </div>
@@ -266,8 +249,42 @@ export function LibraryPage() {
         <button className="btn small ghost" onClick={restore} title="Add the tabs from a backup .zip">
           Restore backup…
         </button>
+        {trash.length > 0 && !showTrash && (
+          <button className="btn small ghost" onClick={() => setShowTrash(true)} title={`Deleted tabs wait here for ${TRASH_DAYS} days`}>
+            Trash ({trash.length})
+          </button>
+        )}
       </div>
     </section>
+  );
+}
+
+/** The trash: deleted tabs, each to put back or delete for good; they go by themselves after a month. */
+function TrashView({ tabs, docId, onBack }: { tabs: SavedTab[]; docId: string | null; onBack: () => void }) {
+  return (
+    <div className="trash">
+      <div className="trash-head">
+        <button className="btn small ghost" onClick={onBack}>← Library</button>
+        <h2>Trash</h2>
+        <span className="muted small">Deleted tabs wait here for {TRASH_DAYS} days, then go for good.</span>
+        <button className="btn small ghost danger-text" onClick={() => void emptyTheTrash(tabs)}>Empty trash…</button>
+      </div>
+      <ul className="trash-list">
+        {tabs.map((t) => (
+          <li key={t.id} className="trash-item">
+            <div className="trash-info">
+              <b>{t.title}</b>
+              <span className="muted small">
+                {t.harmonica} · deleted {relativeDate(t.deletedAt!).toLowerCase()} · goes in {left(t)} day{left(t) === 1 ? '' : 's'}
+                {t.id === docId ? ' · open now' : ''}
+              </span>
+            </div>
+            <button className="btn small" onClick={() => void restoreFromTrash(t)}>Put back</button>
+            <button className="btn small ghost danger-text" onClick={() => void deleteForever(t)}>Delete for good…</button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -333,6 +350,11 @@ function describeTab(text: string): TabInfo {
     .filter(Boolean)
     .reduce((acc, syl) => (acc.endsWith('-') ? acc.slice(0, -1) + syl : `${acc} ${syl}`), '');
   return { doc, artist: doc.meta.artist, family: specFromMeta(doc.meta).family, searchText: `${doc.meta.artist ?? ''} ${doc.meta.key ?? ''} ${lyrics}` };
+}
+
+/** Days until a tab in the trash goes for good. */
+function left(t: SavedTab): number {
+  return Math.max(1, TRASH_DAYS - Math.floor((Date.now() - t.deletedAt!) / 86400000));
 }
 
 function relativeDate(t: number): string {

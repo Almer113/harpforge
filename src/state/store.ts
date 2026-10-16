@@ -290,7 +290,7 @@ export interface AppState {
   recording: RecordingState | null;
   recordAppend: boolean;
   recordGrid: number;
-  toast: { message: string; id: number } | null;
+  toast: { message: string; id: number; action?: ToastAction } | null;
   sheetView: SheetView;
   importDraft: ImportDraft | null;
   mic: MicState;
@@ -308,6 +308,10 @@ export interface AppState {
   ownedHarps: import('../core/instruments').HarmonicaSpec[];
   /** The library tab whose History dialog is open. */
   historyFor: string | null;
+  /** The open tab is in the library's trash (saving it brings it back). */
+  inTrash: boolean;
+  /** Counts changes to the library made outside the library page (an undo), so it reads it again. */
+  libraryRev: number;
   /** Plain-text export: open, and its choices (remembered). */
   plainTextOpen: boolean;
   /** The editor's "Fill lyrics from text" dialog, and the words in it (kept if it's closed by mistake). */
@@ -343,7 +347,8 @@ export interface AppState {
   loadSeq: number;
   /** Marks `text` (what was actually written to the library) as saved under `docId`. */
   markSaved(docId: string, text?: string): void;
-  notify(message: string): void;
+  /** A message at the bottom; with an action, a button in it (e.g. Undo). */
+  notify(message: string, action?: ToastAction): void;
 }
 
 const initial = loadWorking();
@@ -555,6 +560,8 @@ export const useApp = create<AppState>((set) => ({
   harpSize: prefs.harpSize ?? 'full',
   printPrefs: { view: 'tab', size: 'normal', title: true, details: true, chart: false, ...prefs.printPrefs },
   historyFor: null,
+  inTrash: false,
+  libraryRev: 0,
   plainTextOpen: false,
   fillLyricsOpen: false,
   fillDraft: '',
@@ -622,9 +629,9 @@ export const useApp = create<AppState>((set) => ({
   loadSeq: 0,
   loadText: (text, docId = null, saved = false) =>
     // A different tab: the editor's caret and selection start over (they belonged to the old one).
-    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0, verse: 0, lyricAt: undefined, restDraft: undefined }, showVerse: 0, fillLyricsOpen: false, loadSeq: s.loadSeq + 1, text, docId, savedText: saved ? text : null, selectedEvent: null, passage: null, loopRange: null, loop: s.loopRange ? false : s.loop, training: null, alongMarks: {}, alongPrev: {}, alongPasses: [], activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
-  markSaved: (docId, text) => set((s) => ({ docId, savedText: text ?? s.text })),
-  notify: (message) => set({ toast: { message, id: Date.now() } }),
+    set((s) => ({ ve: { ...s.ve, selection: [], anchor: undefined, panel: undefined, justEntered: undefined, caret: { m: 0, start: 0 }, measure: 0, verse: 0, lyricAt: undefined, restDraft: undefined }, showVerse: 0, fillLyricsOpen: false, loadSeq: s.loadSeq + 1, inTrash: false, text, docId, savedText: saved ? text : null, selectedEvent: null, passage: null, loopRange: null, loop: s.loopRange ? false : s.loop, training: null, alongMarks: {}, alongPrev: {}, alongPasses: [], activeEvents: [], history: { past: [], future: [], lastKind: '', lastAt: 0, groupAt: 0 } })),
+  markSaved: (docId, text) => set((s) => ({ docId, savedText: text ?? s.text, inTrash: false })),
+  notify: (message, action) => set((s) => ({ toast: { message, id: Math.max(Date.now(), (s.toast?.id ?? 0) + 1), action } })),
 }));
 
 // Remember preferences.
@@ -684,6 +691,12 @@ if (typeof window !== 'undefined') {
 export function useParsed(): Parsed {
   const text = useApp((s) => s.text);
   return getParsed(text);
+}
+
+/** A button in a message: what it says, and what it does. */
+export interface ToastAction {
+  label: string;
+  run: () => void;
 }
 
 export function isDirty(s: Pick<AppState, 'text' | 'savedText'>): boolean {

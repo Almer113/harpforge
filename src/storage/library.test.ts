@@ -110,3 +110,52 @@ describe('thinning', () => {
     expect(versionsToDrop([v('new', 0), v('a', 3 * DAY), v('b', 3 * DAY + HOUR, 'mine')], now)).toEqual([]);
   });
 });
+
+describe('the trash', () => {
+  it('a deleted tab leaves the library for the trash, with its history; it can be put back', async () => {
+    const id = await lib.saveTab(tab('T', '4 |'));
+    await lib.saveTab(tab('T', '5 |'), id);
+    await lib.trashTab(id);
+    expect((await lib.listTabs()).some((t) => t.id === id)).toBe(false);
+    expect((await lib.listTrash()).map((t) => t.id)).toContain(id);
+    expect(await lib.isTrashed(id)).toBe(true);
+    expect(await lib.listVersions(id)).toHaveLength(2);
+    await lib.untrashTab(id);
+    expect((await lib.listTabs()).some((t) => t.id === id)).toBe(true);
+    expect(await lib.isTrashed(id)).toBe(false);
+  });
+
+  it('saving a tab that’s in the trash puts it back', async () => {
+    const id = await lib.saveTab(tab('S', '4 |'));
+    await lib.trashTab(id);
+    await lib.saveTab(tab('S', '5 |'), id);
+    expect(await lib.isTrashed(id)).toBe(false);
+  });
+
+  it('after a month there it goes for good (history too); emptying the trash too', async () => {
+    const old = await lib.saveTab(tab('Old one'));
+    const recent = await lib.saveTab(tab('Recent one'));
+    await lib.trashTab(old, Date.now() - 31 * DAY);
+    await lib.trashTab(recent);
+    const left = (await lib.listTrash()).map((t) => t.id);
+    expect(left).toContain(recent);
+    expect(left).not.toContain(old);
+    expect(await lib.listVersions(old)).toEqual([]);
+    await lib.emptyTrash();
+    expect(await lib.listTrash()).toEqual([]);
+    expect(await lib.isTrashed(recent)).toBe(false);
+  });
+
+  it('a backup with a tab that’s in the trash brings it back; undoing the restore puts things as they were', async () => {
+    const inTrash = await lib.saveTab(tab('Binned'));
+    const when = Date.now() - 5 * DAY;
+    await lib.trashTab(inTrash, when);
+    const r = await lib.importLibrary({ 'a.htab': strToU8(tab('Binned')), 'b.htab': strToU8(tab('Brand new')) });
+    expect([r.added, r.skipped]).toEqual([2, 0]);
+    expect(await lib.isTrashed(inTrash)).toBe(false);
+    await lib.undoImport(r);
+    expect(await lib.isTrashed(inTrash)).toBe(true);
+    expect((await lib.listTrash()).find((t) => t.id === inTrash)?.deletedAt).toBe(when);
+    expect((await lib.listTabs()).some((t) => t.title === 'Brand new')).toBe(false);
+  });
+});

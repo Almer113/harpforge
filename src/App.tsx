@@ -14,7 +14,7 @@ import { startRouter } from './state/router';
 import { openHistory } from './state/history';
 import { copyShareLink } from './state/share';
 import { isDirty, useApp, useParsed, type Page } from './state/store';
-import { seedDemos } from './storage/library';
+import { isTrashed, seedDemos } from './storage/library';
 import { isTyping } from './live/focus';
 import { openSharedFromUrl } from './state/share';
 
@@ -55,6 +55,7 @@ const EditorPage = lazy(() => import('./pages/EditorPage').then((m) => ({ defaul
 function TabActions() {
   const dirty = useApp(isDirty);
   const docId = useApp((s) => s.docId);
+  const inTrash = useApp((s) => s.inTrash);
   return (
     <div className="tab-actions">
       <div className="wide-actions">
@@ -88,9 +89,14 @@ function TabActions() {
           ]}
         />
       </div>
+      {inTrash && (
+        <span className="chip trash-chip" title="You deleted this tab: it’s in the library’s trash. Saving it puts it back.">
+          In trash
+        </span>
+      )}
       <div className="save-split">
-        <button className="btn small primary" onClick={() => void saveCurrent()} title="Save to your library (Ctrl+S)">
-          {dirty || !docId ? 'Save' : 'Saved ✓'}
+        <button className="btn small primary" onClick={() => void saveCurrent()} title={inTrash ? 'Save it back into your library (Ctrl+S)' : 'Save to your library (Ctrl+S)'}>
+          {dirty || !docId || inTrash ? 'Save' : 'Saved ✓'}
         </button>
         <Menu
           label="▾"
@@ -112,8 +118,16 @@ export function App() {
   const setPage = useApp((s) => s.setPage);
   const dirty = useApp(isDirty);
   const docId = useApp((s) => s.docId);
+  const inTrash = useApp((s) => s.inTrash);
   // In the library and unchanged (as the Save button says "Saved ✓").
-  const saved = !!docId && !dirty;
+  const saved = !!docId && !dirty && !inTrash;
+  // The tab open (from before a reload, say) may be one you've since deleted.
+  useEffect(() => {
+    if (!docId) return;
+    isTrashed(docId)
+      .then((t) => useApp.getState().docId === docId && useApp.setState({ inTrash: t }))
+      .catch(() => undefined);
+  }, [docId]);
   const { doc } = useParsed();
   // The sticky headers sit just below the top bar, whatever its height.
   const topbar = useRef<HTMLElement>(null);
@@ -233,7 +247,7 @@ export function App() {
           ))}
         </div>
         {/* On Play and Edit the page shows the title itself, big. */}
-        <div className={`doc-status ${page === 'play' || page === 'editor' ? 'hidden-here' : ''}`} title={saved ? 'Saved in your library' : docId ? 'Unsaved changes (Ctrl+S to save)' : 'Not in your library yet (Ctrl+S to save)'}>
+        <div className={`doc-status ${page === 'play' || page === 'editor' ? 'hidden-here' : ''}`} title={saved ? 'Saved in your library' : inTrash ? 'In the trash (Ctrl+S saves it back)' : docId ? 'Unsaved changes (Ctrl+S to save)' : 'Not in your library yet (Ctrl+S to save)'}>
           <span className={`dot ${saved ? 'clean' : 'dirty'}`} aria-hidden />
           <span className="doc-title">{doc.meta.title || 'Untitled'}</span>
         </div>

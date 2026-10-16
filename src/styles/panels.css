@@ -156,3 +156,16 @@
 .diff-line.del .diff-sign { color: var(--danger); }
 .diff-fold { padding: 2px 6px; font-style: italic; }
 @media (max-width: 760px) { .history-grid { grid-template-columns: 1fr; } .history-list { max-height: 30vh; } }
+.toast.with-action { display: flex; align-items: center; gap: 14px; padding: 8px 10px 8px 18px; }
+.toast-action { color: var(--brass-2); font-weight: 700; }
+
+/* ---------- Trash ---------- */
+.trash-chip { color: var(--danger); border-color: rgba(239, 106, 90, 0.45); align-self: center; }
+.trash { display: flex; flex-direction: column; gap: 12px; }
+.trash-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.trash-head h2 { font-size: 18px; margin: 0; }
+.trash-head .muted { flex: 1; }
+.trash-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.trash-item { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+.trash-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.trash-info b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
