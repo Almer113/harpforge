@@ -86,9 +86,11 @@ it('a save while it’s open shows up at once (the newest “Current”, the one
 });
 
 it('brought back from the Library page: the tab opens to play', async () => {
-  s().loadText(tab('other'), null);
   window.confirm = () => true;
-  useApp.setState({ page: 'library', historyFor: id });
+  await act(async () => {
+    s().loadText(tab('other'), null);
+    useApp.setState({ page: 'library', historyFor: id });
+  });
   await settle();
   await act(async () => (items()[1] as HTMLButtonElement).click());
   await act(async () => button('Bring this version back').click());
