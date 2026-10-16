@@ -3,6 +3,7 @@
 
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
+import { pipeline } from 'node:stream/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 
@@ -75,8 +76,12 @@ export async function serveStatic(req: IncomingMessage, res: ServerResponse, roo
     // (Built files have their content's hash in their names: kept for good. The page itself: always asked again.)
     'Cache-Control': hashed ? 'public, max-age=31536000, immutable' : 'no-cache',
     'X-Content-Type-Options': 'nosniff',
+    // (Not inside another site's page.)
+    'X-Frame-Options': 'DENY',
+    'Content-Security-Policy': "frame-ancestors 'none'",
   });
   if (req.method === 'HEAD') res.end();
-  else createReadStream(file).pipe(res);
+  // (A file gone between looking and reading — a rebuild while it runs: that answer ends, the server goes on.)
+  else pipeline(createReadStream(file), res).catch(() => res.destroy());
   return true;
 }

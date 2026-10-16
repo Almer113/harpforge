@@ -5,7 +5,7 @@
 // the dev server can share data/ without overwriting each other.
 
 import { createHash, randomBytes, scrypt, timingSafeEqual, type ScryptOptions } from 'node:crypto';
-import { link, mkdir, readdir, rm } from 'node:fs/promises';
+import { link, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { readJson, writeFileAtomic, writeJson } from './files.ts';
 
@@ -62,8 +62,20 @@ export function checkPassword(raw: unknown): string {
   return raw;
 }
 
-function hashPassword(password: string, salt: Buffer): Promise<Buffer> {
-  return new Promise((resolve, reject) => scrypt(password.normalize('NFC'), salt, 64, SCRYPT, (e, key) => (e ? reject(e) : resolve(key))));
+// At most two passwords hashed at once (the rest wait their turn): a flood of sign-ins
+// can't take all of Node's worker threads, which file reads and writes need too.
+let hashing = 0;
+const waiting: (() => void)[] = [];
+
+async function hashPassword(password: string, salt: Buffer): Promise<Buffer> {
+  if (hashing >= 2) await new Promise<void>((r) => waiting.push(r));
+  hashing++;
+  try {
+    return await new Promise((resolve, reject) => scrypt(password.normalize('NFC'), salt, 64, SCRYPT, (e, key) => (e ? reject(e) : resolve(key))));
+  } finally {
+    hashing--;
+    waiting.shift()?.();
+  }
 }
 
 const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -93,9 +105,14 @@ export function createAccounts(dataDir: string) {
     // Written whole to a temporary file, then linked in under its name: the link fails if the
     // name is taken — even by a sign-up at the same moment in the other server.
     const tmp = `${accountFile(key)}.${randomBytes(4).toString('hex')}.tmp`;
-    await writeFileAtomic(tmp, `${JSON.stringify(record, null, 2)}\n`);
+    const text = `${JSON.stringify(record, null, 2)}\n`;
+    await writeFileAtomic(tmp, text);
     try {
-      await link(tmp, accountFile(key));
+      await link(tmp, accountFile(key)).catch(async (e: NodeJS.ErrnoException) => {
+        if (e.code === 'EEXIST') throw e;
+        // (A drive without links — FAT, exFAT: created only if it isn't there, the same way.)
+        await writeFile(accountFile(key), text, { flag: 'wx' });
+      });
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new UserError(409, 'That name is taken. Try another, or sign in.');
       throw e;
@@ -128,7 +145,7 @@ export function createAccounts(dataDir: string) {
   async function startSession(user: User): Promise<string> {
     const token = randomBytes(32).toString('base64url');
     await writeJson(sessionFile(token), { user: user.key, expires: Date.now() + SESSION_DAYS * DAY } satisfies Session);
-    void sweep();
+    void sweep().catch(() => undefined);
     return token;
   }
 
@@ -156,6 +173,8 @@ export function createAccounts(dataDir: string) {
     if (Date.now() - swept < 6 * 3600 * 1000) return;
     swept = Date.now();
     for (const f of await readdir(sessionsDir).catch(() => [] as string[])) {
+      // (Only sessions: not a session being written right now, in either server.)
+      if (!/^[0-9a-f]{64}\.json$/.test(f)) continue;
       const file = path.join(sessionsDir, f);
       const s = await readJson<Session | null>(file, null).catch(() => null);
       if (!s || s.expires < Date.now()) await rm(file, { force: true });
@@ -168,19 +187,53 @@ export function createAccounts(dataDir: string) {
 export type Accounts = ReturnType<typeof createAccounts>;
 
 /**
- * Wrong passwords, slowed: after 5 in a row from one address, each try waits longer
- * (1 s, 2 s, 4 s … up to a minute). Forgotten after 15 minutes without one, or a right one.
- * Sign-ups are limited too (20 an hour from one address).
+ * Who's asking, for the limits: an IPv4 address, or an IPv6 one's network (its first half —
+ * one device can have any number of addresses in it).
+ */
+export function clientKey(ip: string): string {
+  const v4 = /^(?:::ffff:)?(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (v4) return v4[1];
+  const full = ip.includes('::') ? expand(ip) : ip.split(':');
+  return full.slice(0, 4).join(':').toLowerCase();
+}
+
+function expand(ip: string): string[] {
+  const [head, tail] = ip.split('::');
+  const a = head ? head.split(':') : [];
+  const b = tail ? tail.split(':') : [];
+  return [...a, ...Array<string>(Math.max(0, 8 - a.length - b.length)).fill('0'), ...b];
+}
+
+/**
+ * Wrong passwords, slowed: after 5 from one address — counting tries still being checked,
+ * so sending many at once doesn't get round it — each try waits longer (1 s, 2 s, 4 s … up
+ * to a minute). Forgotten after 15 minutes without one, or a right one. Sign-ups are
+ * limited too: 20 an hour from one address, 60 an hour in all.
  */
 export function createLimits(now = () => Date.now()) {
   const fails = new Map<string, { count: number; last: number }>();
+  const pending = new Map<string, number>();
   const signups = new Map<string, number[]>();
+  let allSignups: number[] = [];
+  let pruned = now();
 
-  function waitFor(ip: string): number {
-    const f = fails.get(ip);
+  /** Old entries cleared now and then (the maps don't grow without end). */
+  function prune() {
+    if (now() - pruned < 10 * 60000) return;
+    pruned = now();
+    for (const [k, f] of fails) if (now() - f.last > 15 * 60000) fails.delete(k);
+    for (const [k, list] of signups) {
+      const recent = list.filter((t) => now() - t < 3600000);
+      if (recent.length) signups.set(k, recent);
+      else signups.delete(k);
+    }
+  }
+
+  function waitFor(key: string): number {
+    const f = fails.get(key);
     if (!f) return 0;
     if (now() - f.last > 15 * 60000) {
-      fails.delete(ip);
+      fails.delete(key);
       return 0;
     }
     if (f.count < 5) return 0;
@@ -188,23 +241,43 @@ export function createLimits(now = () => Date.now()) {
     return Math.max(0, f.last + wait - now());
   }
 
+  const done = (key: string) => {
+    const n = (pending.get(key) ?? 1) - 1;
+    if (n > 0) pending.set(key, n);
+    else pending.delete(key);
+  };
+
   return {
-    /** Throws (429) if this address must wait before trying again. */
+    /** A sign-in starts (throws 429 if this address must wait); then `failed` or `succeeded`. */
     checkSignIn(ip: string) {
-      const wait = waitFor(ip);
+      prune();
+      const key = clientKey(ip);
+      const wait = waitFor(key);
       if (wait > 0) throw new UserError(429, `Too many wrong passwords. Try again in ${Math.ceil(wait / 1000)} s.`, { retryAfter: Math.ceil(wait / 1000) });
+      const inFlight = pending.get(key) ?? 0;
+      if (inFlight > 0 && (fails.get(key)?.count ?? 0) + inFlight >= 5) throw new UserError(429, 'Too many tries at once. Try again in a moment.', { retryAfter: 2 });
+      pending.set(key, inFlight + 1);
     },
     failed(ip: string) {
-      const f = fails.get(ip);
-      fails.set(ip, { count: (f && now() - f.last <= 15 * 60000 ? f.count : 0) + 1, last: now() });
+      const key = clientKey(ip);
+      done(key);
+      const f = fails.get(key);
+      fails.set(key, { count: (f && now() - f.last <= 15 * 60000 ? f.count : 0) + 1, last: now() });
     },
     succeeded(ip: string) {
-      fails.delete(ip);
+      const key = clientKey(ip);
+      done(key);
+      fails.delete(key);
     },
     checkSignUp(ip: string) {
-      const recent = (signups.get(ip) ?? []).filter((t) => now() - t < 3600000);
+      prune();
+      const key = clientKey(ip);
+      const recent = (signups.get(key) ?? []).filter((t) => now() - t < 3600000);
+      allSignups = allSignups.filter((t) => now() - t < 3600000);
       if (recent.length >= 20) throw new UserError(429, 'Too many new accounts from here. Try again later.');
-      signups.set(ip, [...recent, now()]);
+      if (allSignups.length >= 60) throw new UserError(429, 'Too many new accounts just now. Try again later.');
+      signups.set(key, [...recent, now()]);
+      allSignups.push(now());
     },
   };
 }

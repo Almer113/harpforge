@@ -18,7 +18,8 @@ const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
 
 /** Practice: each song's sessions, both sides', once each (by time), the last 20; the 200 songs practised latest. */
 export function mergePractice(had: unknown, change: unknown): Practice {
-  const out: Practice = {};
+  // (No inherited keys: a song called "constructor" is just a song.)
+  const out: Practice = Object.create(null);
   for (const side of [had, change]) {
     if (!isObject(side)) continue;
     for (const [song, list] of Object.entries(side)) {
@@ -36,15 +37,17 @@ export function mergePractice(had: unknown, change: unknown): Practice {
 }
 
 /** Syllable fixes: both sides', a word's form from the change when both have it; the last 3000 a language. */
-export function mergeSyllables(had: unknown, change: unknown): Syllables {
-  const out: Syllables = {};
+export function mergeSyllables(had: unknown, change: unknown, prefer: 'change' | 'had' = 'change'): Syllables {
+  const out: Syllables = Object.create(null);
   for (const side of [had, change]) {
     if (!isObject(side)) continue;
     for (const [lang, words] of Object.entries(side)) {
       if (!isObject(words)) continue;
-      const list = { ...out[lang] };
+      const list: Record<string, string> = Object.assign(Object.create(null), out[lang]);
       for (const [word, form] of Object.entries(words)) {
         if (typeof form !== 'string') continue;
+        // (Bringing a browser's fixes in: the account's own, newer ones stay.)
+        if (prefer === 'had' && side === change && Object.hasOwn(list, word)) continue;
         delete list[word];
         list[word] = form;
       }
@@ -66,7 +69,7 @@ export function userData(dataDir: string, key: string) {
       return { practice: await read('practice'), syllables: await read('syllables') };
     },
     /** Merges a change in; what's there now, as JSON text. */
-    async merge(name: DataName, value: string): Promise<string> {
+    async merge(name: DataName, value: string, prefer: 'change' | 'had' = 'change'): Promise<string> {
       let change: unknown;
       try {
         change = JSON.parse(value);
@@ -76,7 +79,7 @@ export function userData(dataDir: string, key: string) {
       // (Under the library's lock: two devices' changes at once are both kept.)
       return withLock(path.join(dataDir, 'users', key), async () => {
         const had = await readJson<unknown>(file(name), null).catch(() => null);
-        const merged = name === 'practice' ? mergePractice(had, change) : mergeSyllables(had, change);
+        const merged = name === 'practice' ? mergePractice(had, change) : mergeSyllables(had, change, prefer);
         await writeJson(file(name), merged);
         return JSON.stringify(merged);
       });

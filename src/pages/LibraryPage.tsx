@@ -11,7 +11,7 @@ import { openHistory } from '../state/history';
 import { stop } from '../state/playback';
 import { useApp } from '../state/store';
 import { deleteForever, duplicateTab, emptyTheTrash, moveToTrash, restoreBackup, restoreFromTrash } from '../state/trash';
-import { exportLibrary, getTab, libraryStats, listTabs, listTrash, persistStorage, readBackup, recoverableTabs, recoverTabs, seedDemos, TRASH_DAYS, type SavedTab } from '../storage/library';
+import { exportLibrary, getTab, libraryOverview, libraryStats, persistStorage, readBackup, recoverableTabs, recoverTabs, seedDemos, TRASH_DAYS, type SavedTab } from '../storage/library';
 
 export function LibraryPage() {
   const [tabs, setTabs] = useState<SavedTab[] | null>(null);
@@ -49,18 +49,14 @@ export function LibraryPage() {
     const latest = () => n === reads.current;
     seedDemos()
       .catch(() => undefined)
-      .then(listTabs)
-      .then((list) => {
+      // (The library, its trash and its size in one read: two requests for an account's, not six.)
+      .then(() => libraryOverview())
+      .then((o) => {
         if (!latest()) return;
-        setTabs(list);
+        setTabs(o.tabs);
+        setTrash(o.trash);
+        setStats(o.stats);
         setLoadError(null);
-        // (The trash and the size are extras: if they can't be read, the library still shows.)
-        listTrash()
-          .then((t) => latest() && setTrash(t))
-          .catch(() => undefined);
-        libraryStats()
-          .then((st) => latest() && setStats(st))
-          .catch(() => undefined);
       })
       .catch((e: Error) => latest() && setLoadError(e?.message || 'storage unavailable'));
   }, []);
@@ -185,11 +181,17 @@ export function LibraryPage() {
         <div className="lib-error" role="alert">
           <p>
             <b>Couldn’t read your library</b> ({loadError}).{' '}
-            {account.status === 'signed-in'
-              ? 'Your tabs aren’t deleted: they’re in the HarpForge server’s data folder. Check that the server is running (npm run deploy:status), then retry.'
-              : 'Your tabs aren’t deleted: this usually means the browser is blocking storage for this site (private window, or site data settings).'}
+            {account.status === 'signed-out'
+              ? 'You were signed out: sign in again to see your library.'
+              : account.status === 'signed-in'
+                ? 'Your tabs aren’t deleted: they’re in the HarpForge server’s data folder. Check that the server is running (npm run deploy:status), then retry.'
+                : 'Your tabs aren’t deleted: this usually means the browser is blocking storage for this site (private window, or site data settings).'}
           </p>
-          <button className="btn small" onClick={refresh}>Retry</button>
+          {account.status === 'signed-out' ? (
+            <button className="btn small primary" onClick={() => useApp.setState({ accountGate: 'signin' })}>Sign in again</button>
+          ) : (
+            <button className="btn small" onClick={refresh}>Retry</button>
+          )}
         </div>
       )}
       {showTrash ? (
@@ -270,7 +272,7 @@ export function LibraryPage() {
 
       <div className="lib-backup muted small">
         <span>
-          {account.status === 'signed-in'
+          {account.status === 'signed-in' || account.status === 'signed-out'
             ? `Your tabs are kept on the HarpForge server, in its data folder (data/users/), as .htab files.`
             : 'Tabs are stored only in this browser — clearing its site data removes them. Back up now and then.'}
         </span>

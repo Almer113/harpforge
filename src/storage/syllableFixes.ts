@@ -36,7 +36,8 @@ export function saveSyllableFix(lang: Lang, form: string) {
   // (The oldest go first past the limit.)
   const entries = Object.entries(list).slice(-MAX);
   try {
-    writeData(KEY, JSON.stringify({ ...all, [lang]: Object.fromEntries(entries) }));
+    // (The server's told just this word: another device's newer fixes aren't undone by this list.)
+    writeData(KEY, JSON.stringify({ ...all, [lang]: Object.fromEntries(entries) }), JSON.stringify({ [lang]: { [word]: form.toLowerCase() } }));
   } catch {
     /* storage full or unavailable: the correction applies only this time */
   }

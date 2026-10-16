@@ -10,7 +10,17 @@ export async function writeFileAtomic(file: string, data: string | Uint8Array): 
   const tmp = `${file}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
   try {
     await writeFile(tmp, data);
-    await rename(tmp, file);
+    // (Windows may hold the file a moment — an editor, antivirus, the search indexer: tried again.)
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await rename(tmp, file);
+        break;
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code;
+        if (attempt >= 8 || (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES')) throw e;
+        await new Promise((r) => setTimeout(r, 25 * (attempt + 1)));
+      }
+    }
   } catch (e) {
     await rm(tmp, { force: true }).catch(() => undefined);
     throw e;

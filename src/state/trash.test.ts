@@ -15,6 +15,8 @@ import { deleteForever, duplicateTab, moveToTrash, restoreBackup } from './trash
 
 const tab = (title: string, body = '4 5 |') => `---\ntitle: ${title}\n---\n${body}\n`;
 const s = () => useApp.getState();
+// (A guest's library, decided: the open tab's checks run.)
+useApp.setState({ account: { status: 'guest' } });
 const find = async (id: string) => (await listTabs()).find((t) => t.id === id)!;
 const undo = async () => {
   s().toast!.action!.run();

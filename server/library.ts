@@ -9,7 +9,7 @@
 // server), and files are written whole. A tab written "over the text it had" is refused if
 // something else saved it in between (another window, another device).
 
-import { mkdir, readdir, readFile, rm, rmdir, stat } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, rmdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { SavedTab, TabVersion, VersionKind } from '../src/storage/types.ts';
 import { UserError } from './accounts.ts';
@@ -68,7 +68,9 @@ const RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/i;
 /** A title as a file name Windows (and everyone else) accepts. */
 export function fileTitle(title: string): string {
   // eslint-disable-next-line no-control-regex
-  let s = title.normalize('NFC').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80);
+  const clean = title.normalize('NFC').toWellFormed().replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').replace(/\s+/g, ' ').trim();
+  // (Cut by characters, not UTF-16 units: half an emoji would become "�" on disk — two titles, one file.)
+  let s = Array.from(clean).slice(0, 80).join('');
   s = s.replace(/[. ]+$/, '');
   if (!s) s = 'Untitled';
   if (RESERVED.test(s)) s = `_${s}`;
@@ -96,10 +98,14 @@ export async function withLock<T>(dir: string, fn: () => Promise<T>): Promise<T>
         break;
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+        if (i > 1000) throw new Error('the library is busy', { cause: e });
         const age = Date.now() - ((await stat(lock).catch(() => null))?.mtimeMs ?? Date.now());
-        if (age > 15000) await rmdir(lock).catch(() => undefined);
-        else if (i > 500) throw new Error('the library is busy', { cause: e });
-        else await sleep(10);
+        if (age > 15000) {
+          // (Only one taker wins the rename; the other finds it gone, or a fresh one, and waits.)
+          const stale = `${lock}.stale-${process.pid}-${Date.now()}`;
+          if (await rename(lock, stale).then(() => true, () => false)) await rmdir(stale).catch(() => undefined);
+        }
+        await sleep(10);
       }
     }
     try {
@@ -162,13 +168,21 @@ export function userLibrary(dataDir: string, key: string) {
 
   return {
     async allTabs(): Promise<SavedTab[]> {
-      const i = await readIndex();
-      return (await Promise.all(i.tabs.map(withText))).filter((t): t is SavedTab => t !== null);
+      // (A song renamed or moved to the trash between reading the index and its file: read again.)
+      for (let attempt = 0; ; attempt++) {
+        const i = await readIndex();
+        const tabs = await Promise.all(i.tabs.map(withText));
+        if (tabs.every(Boolean) || attempt === 2) return tabs.filter((t): t is SavedTab => t !== null);
+      }
     },
 
     async getTab(id: string): Promise<SavedTab | null> {
-      const e = (await readIndex()).tabs.find((t) => t.id === id);
-      return e ? withText(e) : null;
+      for (let attempt = 0; ; attempt++) {
+        const e = (await readIndex()).tabs.find((t) => t.id === id);
+        if (!e) return null;
+        const tab = await withText(e);
+        if (tab || attempt === 2) return tab;
+      }
     },
 
     /** Writes a tab; with `expectText`, only if its text there is still that (else the tab as it is: a clash). */
@@ -180,7 +194,10 @@ export function userLibrary(dataDir: string, key: string) {
           const now = await withText(old);
           if (now && now.text !== expectText) return { clash: now };
         }
-        const file = placeFor(i, tab, old);
+        let file = placeFor(i, tab, old);
+        // (Only the capitals changed — "ode" to "Ode": on Windows that's the same file. It's
+        // written where it is, so removing "the old one" can't remove the new one.)
+        if (old && old.file.toLowerCase() === file.toLowerCase()) file = old.file;
         // The text first, then the index (never an index pointing at a file not there yet).
         await writeFileAtomic(path.join(dir, file), tab.text);
         const { text: _text, ...meta } = tab;
@@ -242,7 +259,8 @@ export function userLibrary(dataDir: string, key: string) {
     },
 
     async getMeta(name: string): Promise<string | null> {
-      return (await readIndex()).meta[name] ?? null;
+      const meta = (await readIndex()).meta;
+      return Object.hasOwn(meta, name) && typeof meta[name] === 'string' ? meta[name] : null;
     },
 
     setMeta(name: string, value: string | null): Promise<void> {

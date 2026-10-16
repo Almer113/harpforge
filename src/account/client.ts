@@ -20,6 +20,8 @@ async function ask(path: string, body?: unknown): Promise<AccountAnswer> {
       headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials: 'same-origin',
+      // (A server that never answers isn't waited for forever.)
+      signal: AbortSignal.timeout(15000),
     });
   } catch {
     return { ok: false, reason: 'offline', message: OFFLINE };

@@ -8,7 +8,7 @@
 // The server runs on its own: closing this terminal doesn't stop it (restarting the computer does).
 
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { portInUse } from '../server/port.ts';
@@ -32,28 +32,35 @@ async function health() {
   }
 }
 
-function savedPid() {
+/** What the running server left in its pid file: its process id and its stop token. */
+function savedRun() {
   try {
-    return Number(readFileSync(PID_FILE, 'utf8').trim()) || null;
+    const raw = readFileSync(PID_FILE, 'utf8').trim();
+    const v = raw.startsWith('{') ? JSON.parse(raw) : { pid: Number(raw) };
+    return Number(v.pid) ? { pid: Number(v.pid), token: typeof v.token === 'string' ? v.token : null } : null;
   } catch {
     return null;
   }
 }
 
-/** Whether a process with this id is a Node process (so it can be ours). */
-function isNode(pid) {
+/**
+ * Whether a process is this project's HarpForge server: its command line runs server/main.ts.
+ * (A process id left in an old pid file may belong to anything since — never stopped then.)
+ */
+function isOurServer(pid) {
+  let line = '';
   if (process.platform === 'win32') {
-    const r = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { encoding: 'utf8' });
-    return /"node(\.exe)?"/i.test(r.stdout ?? '');
+    const r = spawnSync('powershell', ['-NoProfile', '-Command', `(Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}").CommandLine`], { encoding: 'utf8' });
+    line = r.stdout ?? '';
+  } else {
+    try {
+      line = readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ');
+    } catch {
+      line = '';
+    }
   }
-  try {
-    process.kill(pid, 0);
-    return readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes('node');
-  } catch {
-    return false;
-  }
+  return /server[\\/]main\.ts/.test(line);
 }
-
 
 function show(h) {
   console.log(`HarpForge is running (process ${h.pid}). Open it at:`);
@@ -84,6 +91,12 @@ async function deploy() {
     process.exit(1);
   }
   mkdirSync(DATA_DIR, { recursive: true });
+  // (The log kept small: past 1 MB the old one becomes server.log.1.)
+  try {
+    if (statSync(LOG_FILE).size > 1024 * 1024) renameSync(LOG_FILE, `${LOG_FILE}.1`);
+  } catch {
+    /* no log yet */
+  }
   const log = openSync(LOG_FILE, 'a');
   const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(ROOT, 'server', 'main.ts')], {
     cwd: ROOT,
@@ -112,21 +125,40 @@ async function deploy() {
 
 async function undeploy() {
   const h = await health();
-  const pid = h?.pid ?? savedPid();
-  // (Only ever our own server: the one answering as HarpForge, or the Node process it left its id for.)
-  if (!pid || (!h && !isNode(pid))) {
+  const run = savedRun();
+  // Answering: asked to stop (it finishes what it's writing, and tidies up); if it can't be asked, stopped.
+  if (h) {
+    let asked = false;
+    if (run?.token && run.pid === h.pid) {
+      asked = await fetch(`http://127.0.0.1:${PORT}/api/shutdown`, { method: 'POST', headers: { 'X-HarpForge-Shutdown': run.token }, signal: AbortSignal.timeout(2000) })
+        .then((r) => r.ok)
+        .catch(() => false);
+    }
+    if (!asked) {
+      try {
+        process.kill(h.pid);
+      } catch {
+        /* already gone */
+      }
+    }
+    for (let i = 0; i < 20 && (await health()); i++) await sleep(250);
     rmSync(PID_FILE, { force: true });
-    console.log('HarpForge isn’t running.');
+    console.log(`HarpForge stopped (process ${h.pid}).`);
     return;
   }
-  try {
-    process.kill(pid);
-  } catch {
-    /* already gone */
+  // Not answering, but its process still there (stuck): stopped — only if it's really ours.
+  if (run && isOurServer(run.pid)) {
+    try {
+      process.kill(run.pid);
+    } catch {
+      /* already gone */
+    }
+    rmSync(PID_FILE, { force: true });
+    console.log(`HarpForge stopped (process ${run.pid}, which wasn’t answering).`);
+    return;
   }
-  for (let i = 0; i < 20 && (await health()); i++) await sleep(250);
   rmSync(PID_FILE, { force: true });
-  console.log(`HarpForge stopped (process ${pid}).`);
+  console.log('HarpForge isn’t running.');
 }
 
 async function status() {

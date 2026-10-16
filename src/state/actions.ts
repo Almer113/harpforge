@@ -32,7 +32,7 @@ export function preloadFormats(): void {
 import { persistStorage, SaveClash, saveTab } from '../storage/library';
 import { stop } from './playback';
 import { finishRecording } from '../live/recorder';
-import { getParsed, isDirty, useApp } from './store';
+import { getParsed, isDirty, libraryInUse, useApp } from './store';
 
 /** Whether switching to `spec` is only a key change (same holes, other pitches), so the user can choose. */
 export function isKeyChange(spec: HarmonicaSpec): boolean {
@@ -140,15 +140,16 @@ const savedIds = new Map<number, string>();
 export function saveCurrent(asCopy = false): Promise<void> {
   const s = useApp.getState();
   // What to save is decided now; where it goes is decided when it's its turn.
-  const job = { text: s.text, seq: s.loadSeq, docId: s.docId, asCopy };
+  // (And which library it goes to: if that changes before it's done, it's not this song's any more.)
+  const job = { text: s.text, seq: s.loadSeq, docId: s.docId, asCopy, owner: libraryInUse(s) };
   const run = saveQueue.then(() => saveNow(job));
   saveQueue = run.catch(() => undefined);
   return run;
 }
 
-async function saveNow(job: { text: string; seq: number; docId: string | null; asCopy: boolean }) {
+async function saveNow(job: { text: string; seq: number; docId: string | null; asCopy: boolean; owner: string }) {
   const s = useApp.getState();
-  const stillOpen = () => useApp.getState().loadSeq === job.seq;
+  const stillOpen = () => useApp.getState().loadSeq === job.seq && libraryInUse(useApp.getState()) === job.owner;
   const id0 = job.asCopy ? null : stillOpen() ? useApp.getState().docId : (savedIds.get(job.seq) ?? job.docId);
   try {
     // (What this window last saved or opened: if the library has something else now, it was saved elsewhere.)
@@ -170,6 +171,7 @@ async function saveNow(job: { text: string; seq: number; docId: string | null; a
     useApp.setState((st) => ({ libraryRev: st.libraryRev + 1 }));
     if (stillOpen()) {
       s.markSaved(id, job.text);
+      useApp.setState({ libraryOwner: job.owner });
       s.notify(job.asCopy ? 'Saved a copy to your library ✓' : 'Saved to your library ✓');
     } else {
       // Another tab was opened while saving: the save is done, but it isn't this tab's.

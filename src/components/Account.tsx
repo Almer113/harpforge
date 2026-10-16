@@ -3,7 +3,7 @@
 // account.
 
 import { useState, type FormEvent } from 'react';
-import { bringSongs, continueAsGuest, createAccount, declineSongs, offerSongs, signInAs, signOutNow } from '../account/session';
+import { bringSongs, continueAsGuest, createAccount, declineSongs, offerSongs, postponeSongs, signInAs, signOutNow, startAccount } from '../account/session';
 import { useApp } from '../state/store';
 import { Dialog } from './Dialog';
 import { Menu } from './Menu';
@@ -11,10 +11,11 @@ import { Menu } from './Menu';
 /** The start screen: shown until you sign in or choose to go on as a guest in this browser. */
 export function AccountGate() {
   const mode = useApp((s) => s.accountGate);
+  const ended = useApp((s) => s.account.status === 'signed-out');
   if (!mode) return null;
   // (Closed without choosing — Escape, a click outside: a guest for this visit, asked again next time.)
   return (
-    <Dialog label="Sign in to HarpForge" className="account-modal" onClose={() => useApp.setState({ accountGate: null })}>
+    <Dialog label={ended ? 'Sign in again' : mode === 'signup' ? 'Create your account' : 'Sign in to HarpForge'} className="account-modal" onClose={() => useApp.setState({ accountGate: null })}>
       <GateBody mode={mode} />
     </Dialog>
   );
@@ -117,14 +118,14 @@ export function AccountMenu() {
   const account = useApp((s) => s.account);
   if (account.status === 'checking') return null;
   const signedIn = account.status === 'signed-in';
-  const label = signedIn ? account.name! : account.status === 'signed-out' ? `${account.name} (signed out)` : 'Guest';
+  const label = signedIn ? account.name! : account.status === 'signed-out' ? `${account.name} (signed out)` : account.status === 'offline' ? 'Guest (offline)' : 'Guest';
   const items =
     account.status === 'offline'
       ? [
           {
-            label: 'Accounts aren’t available',
-            hint: 'The HarpForge server isn’t answering here (npm run deploy, or npm run dev). Your songs are in this browser.',
-            onClick: () => undefined,
+            label: 'Try again',
+            hint: 'The HarpForge server isn’t answering here (is it running? npm run deploy:status). Meanwhile your songs are this browser’s.',
+            onClick: () => void startAccount(),
           },
         ]
       : signedIn
@@ -149,7 +150,15 @@ export function AccountMenu() {
         </span>
       }
       className="btn small ghost account-btn"
-      title={signedIn ? `Signed in as ${account.name}: your songs are kept in your account` : 'A guest: songs are kept in this browser only'}
+      title={
+        signedIn
+          ? `Signed in as ${account.name}: your songs are kept in your account`
+          : account.status === 'signed-out'
+            ? `Signed out of ${account.name}’s account: sign in again to use its library`
+            : account.status === 'offline'
+              ? 'The HarpForge server isn’t answering: songs are kept in this browser for now'
+              : 'A guest: songs are kept in this browser only'
+      }
       items={items}
     />
   );
@@ -159,20 +168,23 @@ export function AccountMenu() {
 export function BringSongsOffer() {
   const offer = useApp((s) => s.bringOffer);
   if (!offer) return null;
+  const one = offer.songs + offer.trashed === 1;
+  const count = (n: number) => `${n} song${n === 1 ? '' : 's'}`;
   return (
-    <Dialog label="Bring your songs into your account" className="account-modal" onClose={declineSongs}>
+    <Dialog label="Bring your songs into your account" className="account-modal" onClose={postponeSongs}>
       <div className="account-head">
         <h2>Bring your songs along?</h2>
         <p>
-          This browser has <b>{offer.songs} song{offer.songs === 1 ? '' : 's'}</b> of yours from before you signed in. Copy {offer.songs === 1 ? 'it' : 'them'} into{' '}
-          <b>{offer.name}’s</b> library, with {offer.songs === 1 ? 'its' : 'their'} history and the trash?
+          This browser has <b>{count(offer.songs + offer.trashed)}</b> of yours from before you signed in
+          {offer.trashed ? ` (${offer.trashed} of them in its trash)` : ''}. Copy {one ? 'it' : 'them'} into <b>{offer.name}’s</b> library, with{' '}
+          {one ? 'its' : 'their'} history, practice and your syllable fixes?
         </p>
         <p className="muted small">They stay in this browser too. You can do this later from the account menu.</p>
       </div>
       <div className="modal-actions">
         <button className="btn ghost" onClick={declineSongs}>Not now</button>
         <button className="btn primary" autoFocus onClick={() => void bringSongs()}>
-          Bring {offer.songs === 1 ? 'it' : 'them'} over
+          Bring {one ? 'it' : 'them'} over
         </button>
       </div>
     </Dialog>

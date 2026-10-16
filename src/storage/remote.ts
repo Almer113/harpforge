@@ -20,6 +20,11 @@ export function onSignedOut(fn: (() => void) | null) {
   signedOutHandler = fn;
 }
 
+/** The server answered "not signed in" (to anything of the account's). */
+export function signedOutSeen() {
+  signedOutHandler?.();
+}
+
 /** Where the server is (this page's own, unless a test says otherwise), and any extra headers. */
 export interface RemoteOptions {
   base?: string;
@@ -31,6 +36,8 @@ async function callWith<T>(opts: RemoteOptions, method: string, path: string, bo
   try {
     res = await fetch(`${opts.base ?? ''}/api/library${path}`, {
       method,
+      // (A server that never answers doesn't hang the library: reads give up after 20 s, big writes after 2 min.)
+      signal: AbortSignal.timeout(method === 'GET' ? 20000 : 120000),
       headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...opts.headers },
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials: 'same-origin',
@@ -44,8 +51,10 @@ async function callWith<T>(opts: RemoteOptions, method: string, path: string, bo
     throw new LibraryUnavailable('you’re signed out — sign in again', true);
   }
   if (res.status === 409 && data?.saved) throw new BackendClash(data.saved);
-  if (res.status === 404 && method === 'GET') return undefined as T;
-  if (!res.ok || data === null) throw new Error(data?.error ?? `the server answered ${res.status}`);
+  // (One tab or version not there: none. A whole list not there: this isn't a HarpForge server that has accounts.)
+  if (res.status === 404 && method === 'GET' && /^\/(tabs|versions)\/[^/]+$/.test(path)) return undefined as T;
+  if (data === null) throw new LibraryUnavailable('something other than the HarpForge server answered — is it running here?');
+  if (!res.ok) throw new Error(data.error ?? `the server answered ${res.status}`);
   return data;
 }
 

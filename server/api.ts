@@ -14,6 +14,8 @@ import { DATA_NAMES, userData, type DataName } from './userdata.ts';
 
 export interface ApiOptions {
   dataDir: string;
+  /** The deployed server: undeploy may ask it to stop (with this token, from this computer). */
+  shutdown?: { token: string; run: () => void };
 }
 
 const startedAt = Date.now();
@@ -21,7 +23,7 @@ const COOKIE = 'hf_session';
 
 export function sendJson(res: ServerResponse, status: number, body: unknown, headers: Record<string, string | string[]> = {}) {
   const text = JSON.stringify(body);
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(text), ...headers });
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Length': Buffer.byteLength(text), ...headers });
   res.end(text);
 }
 
@@ -44,7 +46,13 @@ export async function readBody<T>(req: IncomingMessage, limit = 5 * 1024 * 1024)
 export function cookie(req: IncomingMessage, name: string): string | undefined {
   for (const part of (req.headers.cookie ?? '').split(';')) {
     const i = part.indexOf('=');
-    if (i > 0 && part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim());
+    if (i > 0 && part.slice(0, i).trim() === name) {
+      try {
+        return decodeURIComponent(part.slice(i + 1).trim());
+      } catch {
+        return undefined;
+      }
+    }
   }
   return undefined;
 }
@@ -68,6 +76,8 @@ function sameOrigin(req: IncomingMessage): boolean {
 }
 
 const ipOf = (req: IncomingMessage) => req.socket.remoteAddress ?? '?';
+/** Asked from this computer itself. */
+const isLocal = (req: IncomingMessage) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ipOf(req));
 
 /** Handles a request if it's for the API (true), else leaves it (false). */
 export function createApi(opts: ApiOptions) {
@@ -85,7 +95,14 @@ export function createApi(opts: ApiOptions) {
   const route = async (req: IncomingMessage, res: ServerResponse, url: URL, extra: Record<string, unknown>) => {
     const { pathname } = url;
     const method = req.method ?? 'GET';
-    if (pathname === '/api/health' && method === 'GET') return sendJson(res, 200, { app: 'HarpForge', pid: process.pid, startedAt, ...extra });
+    // (Its process and addresses only to this computer — deploy and undeploy ask from here.)
+    if (pathname === '/api/health' && method === 'GET') return sendJson(res, 200, isLocal(req) ? { app: 'HarpForge', pid: process.pid, startedAt, ...extra } : { app: 'HarpForge', mode: extra.mode });
+    // Stopping, asked by undeploy: from this computer, with the token only the server's own files hold.
+    if (pathname === '/api/shutdown' && method === 'POST') {
+      if (!opts.shutdown || !isLocal(req) || req.headers['x-harpforge-shutdown'] !== opts.shutdown.token) throw new UserError(403, 'No.');
+      sendJson(res, 200, { ok: true });
+      return opts.shutdown.run();
+    }
 
     if (pathname.startsWith('/api/account')) {
       if (method === 'POST' && !sameOrigin(req)) throw new UserError(403, 'Refused: asked from another site.');
@@ -127,7 +144,12 @@ export function createApi(opts: ApiOptions) {
       if (!user) throw new UserError(401, 'Not signed in.');
       const lib = userLibrary(opts.dataDir, user.key);
       const send = (status: number, body: unknown) => sendJson(res, status, body, headers);
-      const parts = pathname.slice('/api/library/'.length).split('/').map((p) => decodeURIComponent(p));
+      let parts: string[];
+      try {
+        parts = pathname.slice('/api/library/'.length).split('/').map((p) => decodeURIComponent(p));
+      } catch {
+        throw new UserError(400, 'Not a path.');
+      }
       const [what, id] = parts;
       const idOk = (v: string | undefined | null): string => {
         if (!isId(v)) throw new UserError(400, 'Not an id.');
@@ -189,9 +211,10 @@ export function createApi(opts: ApiOptions) {
       }
       if (what === 'data' && parts.length === 1 && method === 'GET') return send(200, await userData(opts.dataDir, user.key).all());
       if (what === 'data' && parts.length === 2 && method === 'PUT' && DATA_NAMES.includes(id as DataName)) {
-        const body = await readBody<{ value?: unknown }>(req, 2 * 1024 * 1024);
+        const body = await readBody<{ value?: unknown; keep?: unknown }>(req, 2 * 1024 * 1024);
         if (typeof body?.value !== 'string') throw new UserError(400, 'Not a value.');
-        return send(200, { value: await userData(opts.dataDir, user.key).merge(id as DataName, body.value) });
+        // (keep: what the account has wins over this — bringing a browser's in.)
+        return send(200, { value: await userData(opts.dataDir, user.key).merge(id as DataName, body.value, body.keep === true ? 'had' : 'change') });
       }
       if (what === 'meta' && parts.length === 2 && /^[a-z-]{1,40}$/.test(id ?? '')) {
         if (method === 'GET') return send(200, { value: await lib.getMeta(id) });

@@ -2,7 +2,7 @@
 // restoring a backup. Only emptying the trash (or a tab's month there running out) is for good.
 
 import { copyText, deleteTab, emptyTrash, importLibrary, isTrashed, saveTab, tabStatus, trashTab, undoImport, untrashTab, type SavedTab } from '../storage/library';
-import { useApp } from './store';
+import { libraryInUse, useApp } from './store';
 
 const fail = (what: string, e: unknown) => useApp.getState().notify(`Couldn’t ${what}: ${(e as Error)?.message || 'storage unavailable'}`);
 
@@ -42,8 +42,9 @@ export async function restoreFromTrash(t: SavedTab): Promise<void> {
  * recovered, under the open tab's id.)
  */
 export async function checkOpenTab(): Promise<void> {
-  const id = useApp.getState().docId;
-  if (!id) return;
+  const { docId: id, account, libraryOwner } = useApp.getState();
+  // (Not before it's known whose library is in use; nor a song from another library — offline, say.)
+  if (!id || account.status === 'checking' || libraryOwner !== libraryInUse(useApp.getState())) return;
   const status = await tabStatus(id).catch(() => null);
   if (useApp.getState().docId !== id || !status) return;
   if (status === 'deleted') forget(id);

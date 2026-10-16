@@ -315,7 +315,7 @@ export interface AppState {
   /** The start screen (sign in, create an account, or go on as a guest), and which form it shows. */
   accountGate: 'signin' | 'signup' | null;
   /** Bringing this browser's songs into the account just signed in to: how many there are. */
-  bringOffer: { name: string; songs: number } | null;
+  bringOffer: { name: string; songs: number; trashed: number } | null;
   /** The open tab is in the library's trash (saving it brings it back). */
   inTrash: boolean;
   /** Counts changes to the library made outside the library page (an undo), so it reads it again. */
@@ -703,6 +703,14 @@ if (typeof window !== 'undefined') {
 export function useParsed(): Parsed {
   const text = useApp((s) => s.text);
   return getParsed(text);
+}
+
+/** Whose library a song's id belongs to, as the working copy keeps it ("browser", or "account:<name>"). */
+export const ownerOf = (name: string | null | undefined) => (name ? `account:${name.toLowerCase()}` : 'browser');
+
+/** Whose library is in use now (a signed-in account's, else this browser's). */
+export function libraryInUse(s: Pick<AppState, 'account'>): string {
+  return s.account.status === 'signed-in' || s.account.status === 'signed-out' ? ownerOf(s.account.name) : 'browser';
 }
 
 /** A button in a message: what it says, and what it does. */

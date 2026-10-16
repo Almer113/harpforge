@@ -91,7 +91,7 @@ describe('signing in and out', () => {
     expect(s().savedText).toBe(s().text);
     expect(s().accountGate).toBeNull();
     // This browser has a song of yours: the offer to bring it.
-    expect(s().bringOffer).toEqual({ name: 'Almer', songs: 1 });
+    expect(s().bringOffer).toEqual({ name: 'Almer', songs: 1, trashed: 0 });
   });
 
   it('a wrong password: still a guest, the reason to show', async () => {
@@ -192,5 +192,100 @@ describe('a song left open from the other library', () => {
     await startAccount();
     expect(s().docId).toBeNull();
     expect(s().libraryOwner).toBe('browser');
+  });
+});
+
+describe('the review’s cases', () => {
+  it('Undo of songs brought into the account, after signing out: the account’s go, this browser’s stay', async () => {
+    const { importLibrary, undoImport, getTab } = await import('../storage/library');
+    const { strToU8 } = await import('fflate');
+    // (The account: a pretend one that takes anything.)
+    const deleted: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'DELETE' && url.startsWith('/api/library/tabs/')) deleted.push(decodeURIComponent(url.split('/').pop()!));
+        if (url.startsWith('/api/library/tabs') && init?.method === 'GET') return json(200, []);
+        if (url.startsWith('/api/library/versions') && init?.method === 'GET') return json(200, []);
+        return json(200, { ok: true });
+      }),
+    );
+    setLibraryBackend(null);
+    const id = await saveTab('---\ntitle: Kept here\n---\n4 |\n');
+    const r = await importLibrary(
+      { 'k.htab': strToU8('---\ntitle: Kept here\n---\n4 |\n'), 'library.json': strToU8(JSON.stringify({ tabs: [{ file: 'k.htab', id, createdAt: 1, updatedAt: 1 }] })) },
+      { into: accountBackend() },
+    );
+    expect(r.addedIds).toEqual([id]);
+    // Signed out: this browser's library in use. Undo acts on the account.
+    setLibraryBackend(null);
+    await undoImport(r);
+    expect(deleted).toEqual([id]);
+    expect((await getTab(id))?.title).toBe('Kept here');
+  });
+
+  it('signing out with the server unreachable: still signed in (said so)', async () => {
+    signedIn = 'Almer';
+    await startAccount();
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))));
+    await signOutNow();
+    expect(s().account).toEqual({ status: 'signed-in', name: 'Almer' });
+    expect(s().toast?.message).toMatch(/Couldn’t sign out/);
+  });
+
+  it('a library switch clears an Undo meant for the old one', async () => {
+    signedIn = 'Almer';
+    await startAccount();
+    s().notify('Moved “X” to the trash', { label: 'Undo', run: () => undefined });
+    await signOutNow();
+    expect(s().toast).toBeNull();
+  });
+
+  it('while it’s still asked whose library it is, the open song isn’t checked against this browser’s', async () => {
+    const { checkOpenTab } = await import('../state/trash');
+    localStorage.setItem('harpforge:deleted', JSON.stringify(['shared-id']));
+    useApp.setState({ account: { status: 'checking' }, libraryOwner: 'account:almer' });
+    s().loadText('---\ntitle: A\n---\n4 |\n', 'shared-id', true);
+    await checkOpenTab();
+    expect(s().docId).toBe('shared-id');
+  });
+});
+
+describe('practice and syllables per account', () => {
+  it('an answer for one account arriving after switching to another isn’t taken in', async () => {
+    const data = await import('../storage/userData');
+    let release!: () => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === '/api/library/data' && !init?.method) return json(200, { practice: null, syllables: null });
+        await new Promise<void>((r) => (release = r));
+        return json(200, { value: JSON.stringify({ songA: [{ at: 1 }] }) });
+      }),
+    );
+    await data.accountData();
+    data.writeData('harpforge:practice-log', JSON.stringify({ songA: [{ at: 1 }] }));
+    await data.accountData();
+    release();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(data.readData('harpforge:practice-log')).toBeNull();
+    data.browserData();
+  });
+
+  it('a syllable fix tells the server only its word', async () => {
+    const data = await import('../storage/userData');
+    const { saveSyllableFix } = await import('../storage/syllableFixes');
+    const sent: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'PUT') sent.push(JSON.parse(String(init.body)).value);
+        return json(200, url === '/api/library/data' ? { practice: null, syllables: JSON.stringify({ en: { river: 'riv-er' } }) } : { value: '{}' });
+      }),
+    );
+    await data.accountData();
+    saveSyllableFix('en', 'ev-er-y');
+    expect(JSON.parse(sent[0])).toEqual({ en: { every: 'ev-er-y' } });
+    data.browserData();
   });
 });

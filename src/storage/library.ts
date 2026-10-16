@@ -200,8 +200,8 @@ export async function nameVersion(id: string, name: string): Promise<void> {
 }
 
 /** Deletes a tab and its history for good. */
-export async function deleteTab(id: string, opts: { remember?: boolean } = {}): Promise<void> {
-  const b = await lib();
+export async function deleteTab(id: string, opts: { remember?: boolean; in?: LibraryBackend } = {}): Promise<void> {
+  const b = opts.in ?? (await lib());
   await b.transaction(async () => {
     await b.tabs.delete(id);
     await b.versions.deleteOfTab(id);
@@ -325,6 +325,21 @@ export async function exportLibrary(opts: { full?: boolean; from?: LibraryBacken
   return zipSync(files, { level: 6 });
 }
 
+/** The library page's read: the tabs, the trash (a month's past ones gone for good), and the size. */
+export async function libraryOverview(now = Date.now()): Promise<{ tabs: SavedTab[]; trash: SavedTab[]; stats: Awaited<ReturnType<typeof libraryStats>> }> {
+  const b = await lib();
+  let all = await b.tabs.all();
+  const old = all.filter((t) => t.deletedAt && now - t.deletedAt > TRASH_DAYS * 86400000);
+  for (const t of old) await deleteTab(t.id, { in: b });
+  if (old.length) all = all.filter((t) => !old.includes(t));
+  const versions = await b.versions.all();
+  const size = (s: string) => strToU8(s).length;
+  const trash = all.filter((t) => t.deletedAt).sort((x, y) => y.deletedAt! - x.deletedAt!);
+  const tabs = all.filter((t) => !t.deletedAt).sort((x, y) => y.updatedAt - x.updatedAt);
+  const bytes = all.reduce((n, t) => n + size(t.text), 0) + versions.reduce((n, v) => n + size(v.text), 0);
+  return { tabs, trash, stats: { tabs: tabs.length, trashed: trash.length, versions: versions.length, bytes } };
+}
+
 /** How big the library is: its tabs, the trash, the saved versions, and roughly how many bytes. */
 export async function libraryStats(): Promise<{ tabs: number; trashed: number; versions: number; bytes: number }> {
   const b = await lib();
@@ -361,6 +376,8 @@ export interface Restored {
   /** The tabs it added, and the ones it took out of the trash (with when they'd been deleted): for an undo. */
   addedIds: string[];
   untrashed: { id: string; deletedAt: number }[];
+  /** The library it went into (an undo acts there, whichever library is in use by then). */
+  into: LibraryBackend;
 }
 
 export async function importLibrary(files: Record<string, Uint8Array>, opts: { into?: LibraryBackend } = {}): Promise<Restored> {
@@ -465,7 +482,7 @@ export async function importLibrary(files: Record<string, Uint8Array>, opts: { i
     // (All at once: one request to the server for a whole backup's history.)
     await b.versions.add(adding);
   });
-  return { added, skipped, toTrash, versions, addedIds, addedVersionIds, untrashed };
+  return { added, skipped, toTrash, versions, addedIds, addedVersionIds, untrashed, into: b };
 }
 
 /** A backup's index entry, if it's usable (a file and an id; dates as numbers). */
@@ -492,15 +509,18 @@ function cleanVersion(v: unknown): TabVersion | null {
 
 /** Undoes a restored backup: the tabs and versions it added go, the ones it took out of the trash go back. */
 export async function undoImport(r: Restored): Promise<void> {
-  for (const id of r.addedIds) await deleteTab(id, { remember: false });
-  if (r.addedVersionIds.length) await (await lib()).versions.delete(r.addedVersionIds);
-  for (const u of r.untrashed) await trashTab(u.id, u.deletedAt);
+  const b = r.into;
+  for (const id of r.addedIds) await deleteTab(id, { remember: false, in: b });
+  if (r.addedVersionIds.length) await b.versions.delete(r.addedVersionIds);
+  for (const u of r.untrashed) await setDeleted(b, u.id, u.deletedAt);
 }
 
 /** A library's songs that are yours: not the demos as they came (in the trash or not). */
-export async function ownSongs(b: LibraryBackend): Promise<number> {
+export async function ownSongs(b: LibraryBackend): Promise<{ songs: number; trashed: number }> {
   const demos = demoTexts();
-  return (await b.tabs.all()).filter((t) => !demos.has(t.text)).length;
+  const own = (await b.tabs.all()).filter((t) => !demos.has(t.text));
+  const trashed = own.filter((t) => t.deletedAt).length;
+  return { songs: own.length - trashed, trashed };
 }
 
 /** The demos' texts, as they are and as they were. */
@@ -517,11 +537,12 @@ let seeding: Promise<Map<string, string>> | null = null;
  */
 export function seedDemos(): Promise<Map<string, string>> {
   // A failure (storage blocked) is forgotten, so a later call can try again.
-  seeding ??= seedOnce().catch((e) => {
-    seeding = null;
+  const run: Promise<Map<string, string>> = (seeding ??= seedOnce().catch((e) => {
+    // (Forgotten only if it's still this library's: one switched to since keeps its own.)
+    if (seeding === run) seeding = null;
     throw e;
-  });
-  return seeding;
+  }));
+  return run;
 }
 
 async function seedOnce(): Promise<Map<string, string>> {
