@@ -111,3 +111,16 @@ describe('ports', () => {
     expect(await portInUse(port)).toBe(false);
   });
 });
+
+describe('song files', () => {
+  it('a title as a file name any system takes; ids are never paths', async () => {
+    const { fileTitle, isId } = await import('./library.ts');
+    expect(fileTitle('Bengawan Solo')).toBe('Bengawan Solo');
+    expect(fileTitle(String.raw`a/b\c:d*e?"f"<g>|h`)).toBe('a-b-c-d-e-f-g-h');
+    expect(fileTitle('Trailing dots...  ')).toBe('Trailing dots');
+    expect(fileTitle('CON')).toBe('_CON');
+    expect(fileTitle('   ')).toBe('Untitled');
+    expect(fileTitle('x'.repeat(200))).toHaveLength(80);
+    expect([isId('3f2a-b_9'), isId('../x'), isId('a/b'), isId(''), isId(7)]).toEqual([true, false, false, false, false]);
+  });
+});

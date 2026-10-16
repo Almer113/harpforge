@@ -36,6 +36,7 @@ export function LibraryPage() {
   const docId = useApp((s) => s.docId);
   const savedText = useApp((s) => s.savedText);
   const libraryRev = useApp((s) => s.libraryRev);
+  const account = useApp((s) => s.account);
   const [showTrash, setShowTrash] = useState(false);
   const [trash, setTrash] = useState<SavedTab[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -178,8 +179,10 @@ export function LibraryPage() {
       {loadError && (
         <div className="lib-error" role="alert">
           <p>
-            <b>Couldn’t read your library</b> ({loadError}). Your tabs aren’t deleted: this usually means the browser is blocking storage for this site
-            (private window, or site data settings).
+            <b>Couldn’t read your library</b> ({loadError}).{' '}
+            {account.status === 'signed-in'
+              ? 'Your tabs aren’t deleted: they’re in the HarpForge server’s data folder. Check that the server is running (npm run deploy:status), then retry.'
+              : 'Your tabs aren’t deleted: this usually means the browser is blocking storage for this site (private window, or site data settings).'}
           </p>
           <button className="btn small" onClick={refresh}>Retry</button>
         </div>
@@ -261,7 +264,11 @@ export function LibraryPage() {
       )}
 
       <div className="lib-backup muted small">
-        <span>Tabs are stored only in this browser — clearing its site data removes them. Back up now and then.</span>
+        <span>
+          {account.status === 'signed-in'
+            ? `Your tabs are kept on the HarpForge server, in its data folder (data/users/), as .htab files.`
+            : 'Tabs are stored only in this browser — clearing its site data removes them. Back up now and then.'}
+        </span>
         <div className="save-split">
           <button className="btn small ghost" onClick={() => void backup()} disabled={!tabs?.length} title="Download every tab as .htab files in one .zip">
             Back up library

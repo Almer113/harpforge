@@ -1,9 +1,13 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { startAccount } from './account/session';
 import { App } from './App';
 import { preloadAudio } from './audio/engine';
 import { preloadFormats } from './state/actions';
 import './styles/index.css';
+
+// Whose library: an account's (on the server) or this browser's — asked before it's read.
+void startAccount();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -9,6 +9,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createAccounts, createLimits, SESSION_DAYS, UserError, type User } from './accounts.ts';
+import { cleanTab, cleanVersion, isId, userLibrary } from './library.ts';
 
 export interface ApiOptions {
   dataDir: string;
@@ -115,6 +116,85 @@ export function createApi(opts: ApiOptions) {
       if (pathname === '/api/account/signout' && method === 'POST') {
         await accounts.endSession(cookie(req, COOKIE));
         return sendJson(res, 200, { user: null }, { 'Set-Cookie': clearCookie });
+      }
+    }
+
+    if (pathname.startsWith('/api/library/')) {
+      if (method !== 'GET' && !sameOrigin(req)) throw new UserError(403, 'Refused: asked from another site.');
+      const headers: Record<string, string> = {};
+      const user = await whoIs(req, headers);
+      if (!user) throw new UserError(401, 'Not signed in.');
+      const lib = userLibrary(opts.dataDir, user.key);
+      const send = (status: number, body: unknown) => sendJson(res, status, body, headers);
+      const parts = pathname.slice('/api/library/'.length).split('/').map((p) => decodeURIComponent(p));
+      const [what, id] = parts;
+      const idOk = (v: string | undefined | null): string => {
+        if (!isId(v)) throw new UserError(400, 'Not an id.');
+        return v;
+      };
+
+      if (what === 'tabs' && parts.length === 1 && method === 'GET') return send(200, await lib.allTabs());
+      if (what === 'tabs' && parts.length === 2) {
+        const tabId = idOk(id);
+        if (method === 'GET') {
+          const tab = await lib.getTab(tabId);
+          return tab ? send(200, tab) : send(404, { error: 'No such tab.' });
+        }
+        if (method === 'PUT') {
+          const body = await readBody<{ tab?: unknown; expectText?: unknown }>(req);
+          const tab = cleanTab(body?.tab);
+          if (tab.id !== tabId) throw new UserError(400, 'Not this tab.');
+          const result = await lib.putTab(tab, typeof body?.expectText === 'string' ? body.expectText : undefined);
+          return result ? send(409, { error: 'It was saved from somewhere else in the meantime.', saved: result.clash }) : send(200, { ok: true });
+        }
+        if (method === 'DELETE') {
+          await lib.deleteTab(tabId);
+          return send(200, { ok: true });
+        }
+      }
+      if (what === 'versions' && parts.length === 1) {
+        const tab = url.searchParams.get('tab');
+        if (method === 'GET') return send(200, tab === null ? await lib.allVersions() : await lib.versionsOf(idOk(tab)));
+        if (method === 'POST') {
+          const body = await readBody<{ versions?: unknown }>(req, 50 * 1024 * 1024);
+          if (!Array.isArray(body?.versions)) throw new UserError(400, 'No versions.');
+          await lib.addVersions(body.versions.map(cleanVersion));
+          return send(200, { ok: true });
+        }
+        if (method === 'DELETE') {
+          await lib.deleteVersionsOf(idOk(tab));
+          return send(200, { ok: true });
+        }
+      }
+      if (what === 'versions' && id === 'delete' && parts.length === 2 && method === 'POST') {
+        const body = await readBody<{ ids?: unknown }>(req);
+        if (!Array.isArray(body?.ids) || !body.ids.every(isId)) throw new UserError(400, 'Not ids.');
+        await lib.deleteVersions(body.ids);
+        return send(200, { ok: true });
+      }
+      if (what === 'versions' && parts.length === 2) {
+        const versionId = idOk(id);
+        if (method === 'GET') {
+          const v = await lib.getVersion(versionId);
+          return v ? send(200, v) : send(404, { error: 'No such version.' });
+        }
+        if (method === 'PUT') {
+          const body = await readBody<{ version?: unknown }>(req);
+          const v = cleanVersion(body?.version);
+          if (v.id !== versionId) throw new UserError(400, 'Not this version.');
+          await lib.addVersions([v]);
+          return send(200, { ok: true });
+        }
+      }
+      if (what === 'meta' && parts.length === 2 && /^[a-z-]{1,40}$/.test(id ?? '')) {
+        if (method === 'GET') return send(200, { value: await lib.getMeta(id) });
+        if (method === 'PUT') {
+          const body = await readBody<{ value?: unknown }>(req, 10000);
+          const value = body?.value;
+          if (value !== null && typeof value !== 'string') throw new UserError(400, 'Not a value.');
+          await lib.setMeta(id, value ?? null);
+          return send(200, { ok: true });
+        }
       }
     }
     sendJson(res, 404, { error: 'no such API' });

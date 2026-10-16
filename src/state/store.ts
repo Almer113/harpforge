@@ -308,6 +308,8 @@ export interface AppState {
   ownedHarps: import('../core/instruments').HarmonicaSpec[];
   /** The library tab whose History dialog is open. */
   historyFor: string | null;
+  /** Who's signed in here: the library is theirs (on the server), or this browser's (a guest). */
+  account: { status: 'checking' | 'guest' | 'signed-in' | 'offline'; name?: string };
   /** The open tab is in the library's trash (saving it brings it back). */
   inTrash: boolean;
   /** Counts changes to the library made outside the library page (an undo), so it reads it again. */
@@ -560,6 +562,7 @@ export const useApp = create<AppState>((set) => ({
   harpSize: prefs.harpSize ?? 'full',
   printPrefs: { view: 'tab', size: 'normal', title: true, details: true, chart: false, ...prefs.printPrefs },
   historyFor: null,
+  account: { status: 'checking' },
   inTrash: false,
   libraryRev: 0,
   plainTextOpen: false,
