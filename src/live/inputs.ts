@@ -135,6 +135,8 @@ export async function startMic(): Promise<void> {
     if (ctx && ctx.state !== 'closed') void ctx.close();
   };
   try {
+    // (Opened from another device on the network, over plain http: browsers keep the microphone off.)
+    if (!navigator.mediaDevices) throw Object.assign(new Error('insecure'), { name: 'InsecurePage' });
     stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     });
@@ -167,6 +169,8 @@ export async function startMic(): Promise<void> {
         ? 'Microphone access was blocked. Allow it in the browser’s address bar, then try again.'
         : err.name === 'NotFoundError'
           ? 'No microphone found.'
+          : err.name === 'InsecurePage'
+            ? 'The microphone only works on the computer running HarpForge (or over HTTPS): browsers turn it off on other devices’ plain network addresses.'
           : `Couldn’t start the microphone: ${err.message}`;
     useApp.setState({ mic: { status: 'error', level: 0, reading: null, error: message } });
   }

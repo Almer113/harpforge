@@ -4,6 +4,7 @@
 import { useEffect, useMemo } from 'react';
 import { slugify } from '../core/formats/common';
 import { writePlainText, type PlainTextOptions } from '../core/formats/plaintext';
+import { copyToClipboard } from '../live/copy';
 import { downloadData } from '../state/actions';
 import { Dialog } from './Dialog';
 import { useApp, useParsed } from '../state/store';
@@ -29,10 +30,9 @@ function PlainTextBody({ close }: { close: () => void }) {
   useEffect(() => useApp.setState((s) => ({ textPrefs: { ...s.textPrefs, spelling: s.readAs } })), []);
 
   const copy = () =>
-    navigator.clipboard
-      ?.writeText(text)
-      .then(() => useApp.getState().notify('Copied — paste it into your post ✓'))
-      .catch(() => useApp.getState().notify('Couldn’t copy; select the text and copy it instead.'));
+    void copyToClipboard(text).then((ok) =>
+      useApp.getState().notify(ok ? 'Copied — paste it into your post ✓' : 'Couldn’t copy; select the text and copy it instead.'),
+    );
 
   const check = (key: keyof PlainTextOptions, label: string) => (
     <label className="check">

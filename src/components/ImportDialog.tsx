@@ -17,6 +17,7 @@ import { FORMAT_NAMES, importText, sniffText, type Imported } from '../core/form
 import { serializeHtab } from '../core/htab/serializer';
 import { FAMILIES, getHarmonica, harmonicaName, specId, type HarmonicaSpec } from '../core/instruments';
 import { harmonicaFromMeta } from '../core/score';
+import { copyToClipboard } from '../live/copy';
 import { loadTabText } from '../state/actions';
 import { stop } from '../state/playback';
 import { getParsed, makeParsed, useApp, useParsed } from '../state/store';
@@ -447,7 +448,7 @@ function ImportBody() {
                 {playing ? '■' : '▶'}
               </button>
               <span className="muted small">{choice ? harmonicaName(choice.spec) : ''}</span>
-              <button className="btn small ghost" disabled={!result} onClick={() => result && navigator.clipboard?.writeText(result.text).then(() => useApp.getState().notify('Copied ✓'), () => useApp.getState().notify('Couldn’t copy; open it and copy from the editor instead.'))}>
+              <button className="btn small ghost" disabled={!result} onClick={() => result && void copyToClipboard(result.text).then((ok) => useApp.getState().notify(ok ? 'Copied ✓' : 'Couldn’t copy; open it and copy from the editor instead.'))}>
                 Copy text
               </button>
             </div>

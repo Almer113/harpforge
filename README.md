@@ -16,6 +16,28 @@ npm run build
 Each commit first runs the type-check, the linter and the tests (`.githooks/pre-commit`);
 a failure stops the commit. `git commit --no-verify` skips it once.
 
+## Running it for everyday use
+
+```bash
+npm run deploy          # build, then start the HarpForge server in the background
+npm run deploy:status   # running? and the addresses to open
+npm run undeploy        # stop it
+```
+
+The server (`server/`) serves the built app on port **5280**, on this computer
+(`http://localhost:5280`) and the local network (`http://<this computer's address>:5280`,
+printed by deploy). It keeps running after the terminal closes, until `npm run undeploy`
+or a restart of the computer. It never takes a port another program uses: if 5280 is
+busy it says so and stops (another port: `HARPFORGE_PORT=5281 npm run deploy`).
+`npm run deploy -- --no-build` starts it with the build already there.
+
+- Its files are in `data/` (left out of git): `server.log`, and (Phase 14) accounts and
+  their libraries.
+- Other devices: the first time, Windows asks whether Node may use private networks;
+  allow it. On other devices (plain `http://`), browsers turn off the microphone and the
+  clipboard API — copying falls back to an older way.
+- In development, `npm run dev` serves the same API (`/api/…`) from the same `data/`.
+
 ## What's in v0.1
 
 - **Play** — a virtual harmonica: diatonic (all keys + 5 tunings), chromatic (10/12/14/16 holes),

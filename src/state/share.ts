@@ -2,6 +2,7 @@
 // to a server — the fragment never leaves the browser until someone opens the link.
 
 import { deflateSync, Inflate, strFromU8, strToU8 } from 'fflate';
+import { copyToClipboard } from '../live/copy';
 import { loadTabText } from './actions';
 import { pageHash } from './router';
 import { useApp } from './store';
@@ -61,12 +62,8 @@ export function shareLink(text: string): string {
 export async function copyShareLink() {
   const s = useApp.getState();
   const link = shareLink(s.text);
-  try {
-    await navigator.clipboard.writeText(link);
-    s.notify(link.length > 8000 ? 'Link copied — it’s long, so some apps may cut it off.' : 'Share link copied ✓');
-  } catch {
-    window.prompt('Copy this link:', link);
-  }
+  if (await copyToClipboard(link)) s.notify(link.length > 8000 ? 'Link copied — it’s long, so some apps may cut it off.' : 'Share link copied ✓');
+  else window.prompt('Copy this link:', link);
 }
 
 /** Opens a tab from the page URL, if there is one. */

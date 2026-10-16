@@ -3,3 +3,5 @@ dist
 *.local
 .vite
 *.traineddata
+# Accounts and their libraries, the server's log (Phase 14)
+/data/
