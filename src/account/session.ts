@@ -6,10 +6,11 @@
 // Changing library (signing in, out, or to another account) keeps the song that's open
 // open: it just isn't linked to a library any more (save it to put it in the new one).
 
-import { browserLibrary, exportLibrary, importLibrary, libraryWaitsFor, ownSongs, readBackup, setLibraryBackend, undoImport } from '../storage/library';
+import { browserLibrary, exportLibrary, importLibrary, libraryWaitsFor, ownSongs, readBackup, seedDemos, setLibraryBackend, undoImport } from '../storage/library';
 import { accountBackend, onSignedOut } from '../storage/remote';
 import { isDirty, useApp } from '../state/store';
 import { libraryChanged } from '../state/trash';
+import { bringBrowserData, accountData, browserData } from '../storage/userData';
 import { currentAccount, signIn, signOut, signUp, type AccountAnswer } from './client';
 
 /** Chosen once in this browser: go on as a guest (the start screen isn't shown again). */
@@ -40,15 +41,29 @@ onSignedOut(() => {
   useApp.setState({ account: { status: 'signed-out', name: account.name }, accountGate: 'signin' });
 });
 
+/** Whose library a song's id belongs to, as the working copy keeps it. */
+export const ownerOf = (name: string | null) => (name ? `account:${name.toLowerCase()}` : 'browser');
+
+/** The library in use now belongs to `owner`: the open song, if it's from another, is unlinked. */
+function nowIn(owner: string) {
+  if (useApp.getState().libraryOwner !== owner) unlinkOpenSong();
+  useApp.setState({ libraryOwner: owner });
+}
+
 export function startAccount(): Promise<void> {
   useApp.setState({ account: { status: 'checking' } });
-  const decided = currentAccount().then((a) => {
+  const decided = currentAccount().then(async (a) => {
     if (a.ok && a.user) {
       setLibraryBackend(accountBackend());
+      await accountData();
       useApp.setState({ account: { status: 'signed-in', name: a.user.name } });
+      // (Reopened in another account's library — or a guest's song left open: not this library's.)
+      nowIn(ownerOf(a.user.name));
       return;
     }
     setLibraryBackend(null);
+    browserData();
+    nowIn('browser');
     // (No server answering: accounts aren't available, only this browser's library.)
     if (!a.ok) return useApp.setState({ account: { status: 'offline' } });
     useApp.setState({ account: { status: 'guest' }, accountGate: remembered(GUEST_KEY) ? null : 'signin' });
@@ -71,7 +86,8 @@ async function enter(name: string) {
   const same = account.status === 'signed-out' && account.name?.toLowerCase() === name.toLowerCase();
   if (!same) unlinkOpenSong();
   setLibraryBackend(accountBackend());
-  useApp.setState({ account: { status: 'signed-in', name }, accountGate: null });
+  await accountData();
+  useApp.setState({ account: { status: 'signed-in', name }, accountGate: null, libraryOwner: ownerOf(name) });
   libraryChanged();
   if (remembered(offeredKey(name))) return;
   const songs = await ownSongs(browserLibrary()).catch(() => 0);
@@ -101,7 +117,8 @@ export function continueAsGuest() {
     // (The account's session ended and you chose this browser's library instead.)
     unlinkOpenSong();
     setLibraryBackend(null);
-    useApp.setState({ account: { status: 'guest' } });
+    browserData();
+    useApp.setState({ account: { status: 'guest' }, libraryOwner: 'browser' });
     libraryChanged();
   }
   useApp.setState({ accountGate: null });
@@ -112,6 +129,8 @@ export async function signOutNow(then: 'signin' | null = 'signin') {
   await signOut();
   unlinkOpenSong();
   setLibraryBackend(null);
+  browserData();
+  useApp.setState({ libraryOwner: 'browser' });
   // (Signing out isn't choosing to be a guest: the start screen asks again.)
   remember(GUEST_KEY, null);
   useApp.setState({ account: { status: 'guest' }, accountGate: then, bringOffer: null });
@@ -125,8 +144,12 @@ export async function bringSongs() {
   useApp.setState({ bringOffer: null });
   remember(offeredKey(offer.name), 'done');
   try {
-    const zip = await exportLibrary({ full: true, from: browserLibrary() });
+    // (The account's own demos first — then only your songs come over, not this browser's copies of them.)
+    await seedDemos().catch(() => undefined);
+    const zip = await exportLibrary({ full: true, from: browserLibrary(), ownOnly: true });
     const r = await importLibrary(readBackup(zip));
+    // (Their practice history and your syllable fixes come too.)
+    await bringBrowserData().catch(() => undefined);
     libraryChanged();
     const n = r.added;
     useApp.getState().notify(

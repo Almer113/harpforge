@@ -65,6 +65,11 @@ export function LibraryPage() {
       .catch((e: Error) => latest() && setLoadError(e?.message || 'storage unavailable'));
   }, []);
   useEffect(refresh, [refresh, docId, savedText, libraryRev]);
+  // Back to this window: read it again (another device, or another window, may have changed it).
+  useEffect(() => {
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [refresh]);
   // (The trash emptied: back to the library.)
   if (showTrash && !trash.length) setShowTrash(false);
 

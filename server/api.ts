@@ -10,6 +10,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createAccounts, createLimits, SESSION_DAYS, UserError, type User } from './accounts.ts';
 import { cleanTab, cleanVersion, isId, userLibrary } from './library.ts';
+import { DATA_NAMES, userData, type DataName } from './userdata.ts';
 
 export interface ApiOptions {
   dataDir: string;
@@ -185,6 +186,12 @@ export function createApi(opts: ApiOptions) {
           await lib.addVersions([v]);
           return send(200, { ok: true });
         }
+      }
+      if (what === 'data' && parts.length === 1 && method === 'GET') return send(200, await userData(opts.dataDir, user.key).all());
+      if (what === 'data' && parts.length === 2 && method === 'PUT' && DATA_NAMES.includes(id as DataName)) {
+        const body = await readBody<{ value?: unknown }>(req, 2 * 1024 * 1024);
+        if (typeof body?.value !== 'string') throw new UserError(400, 'Not a value.');
+        return send(200, { value: await userData(opts.dataDir, user.key).merge(id as DataName, body.value) });
       }
       if (what === 'meta' && parts.length === 2 && /^[a-z-]{1,40}$/.test(id ?? '')) {
         if (method === 'GET') return send(200, { value: await lib.getMeta(id) });

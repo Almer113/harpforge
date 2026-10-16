@@ -1,7 +1,9 @@
-// Practice history: a line per session for each song in your library, kept in this
-// browser, so the report can show how you're getting on (the last 20 sessions a song).
+// Practice history: a line per session for each song in your library, kept with it (this
+// browser's, or the account's: see userData.ts), so the report can show how you're
+// getting on (the last 20 sessions a song).
 
 import { accuracy, type SessionReport } from '../core/report';
+import { readData, writeData } from './userData';
 
 export interface LogEntry {
   at: number;
@@ -22,7 +24,7 @@ type Log = Record<string, LogEntry[]>;
 
 function read(): Log {
   try {
-    const v: unknown = JSON.parse(localStorage.getItem(KEY) ?? '{}');
+    const v: unknown = JSON.parse(readData(KEY) ?? '{}');
     if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
     // (A song's entry that isn't a list is from something else: it's dropped.)
     return Object.fromEntries(Object.entries(v).filter(([, list]) => Array.isArray(list))) as Log;
@@ -44,7 +46,7 @@ export function logSession(docId: string, r: SessionReport, at = Date.now()) {
   log[docId] = [...songLog(docId), entry].slice(-PER_SONG);
   const songs = Object.entries(log).sort((a, b) => (b[1].at(-1)?.at ?? 0) - (a[1].at(-1)?.at ?? 0)).slice(0, SONGS);
   try {
-    localStorage.setItem(KEY, JSON.stringify(Object.fromEntries(songs)));
+    writeData(KEY, JSON.stringify(Object.fromEntries(songs)));
   } catch {
     /* storage full or unavailable: the report still shows */
   }

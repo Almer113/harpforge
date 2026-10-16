@@ -308,6 +308,8 @@ export interface AppState {
   ownedHarps: import('../core/instruments').HarmonicaSpec[];
   /** The library tab whose History dialog is open. */
   historyFor: string | null;
+  /** Whose library the open song's docId is in ("browser", or "account:<name>"): kept with the working copy. */
+  libraryOwner: string;
   /** Who's signed in here: the library is theirs (on the server), or this browser's (a guest). */
   account: { status: 'checking' | 'guest' | 'signed-in' | 'signed-out' | 'offline'; name?: string };
   /** The start screen (sign in, create an account, or go on as a guest), and which form it shows. */
@@ -512,6 +514,7 @@ export const useApp = create<AppState>((set) => ({
   text: initial.text,
   docId: initial.docId,
   savedText: initial.savedText,
+  libraryOwner: initial.owner ?? 'browser',
   play: 'stopped',
   activeEvents: [],
   selectedEvent: null,
@@ -663,7 +666,7 @@ function saveWorking() {
   try {
     const store = local();
     if (!store) throw new Error('no storage');
-    writeWorking(store, tabId, { text: s.text, docId: s.docId, savedText: s.savedText });
+    writeWorking(store, tabId, { text: s.text, docId: s.docId, savedText: s.savedText, owner: s.libraryOwner });
     autosaveFailed = false;
   } catch {
     // Storage full or blocked: say so once, so unsaved work isn't silently at risk.
@@ -672,7 +675,7 @@ function saveWorking() {
   }
 }
 useApp.subscribe((s, prev) => {
-  if (s.text === prev.text && s.docId === prev.docId && s.savedText === prev.savedText) return;
+  if (s.text === prev.text && s.docId === prev.docId && s.savedText === prev.savedText && s.libraryOwner === prev.libraryOwner) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveWorking, 300);
 });

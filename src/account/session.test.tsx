@@ -174,3 +174,23 @@ describe('the start screen', () => {
     expect(password.placeholder).toMatch(/6 characters/);
   });
 });
+
+describe('a song left open from the other library', () => {
+  it('reopened signed in, a guest’s song left open isn’t linked to the account’s library (nor the other way)', async () => {
+    signedIn = 'Almer';
+    useApp.setState({ libraryOwner: 'browser' });
+    s().loadText('---\ntitle: G\n---\n4 |\n', 'guest-id', true);
+    await startAccount();
+    expect(s().docId).toBeNull();
+    expect(s().libraryOwner).toBe('account:almer');
+    // Same account again: its song stays linked.
+    s().loadText('---\ntitle: A\n---\n4 |\n', 'account-id', true);
+    await startAccount();
+    expect(s().docId).toBe('account-id');
+    // Signed out since (elsewhere): a guest now, the account's song unlinked.
+    signedIn = null;
+    await startAccount();
+    expect(s().docId).toBeNull();
+    expect(s().libraryOwner).toBe('browser');
+  });
+});

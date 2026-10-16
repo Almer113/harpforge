@@ -85,7 +85,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * across servers (a .lock folder: making a folder either succeeds or finds one there; one
  * left by a crash is taken over after 15 s).
  */
-async function withLock<T>(dir: string, fn: () => Promise<T>): Promise<T> {
+export async function withLock<T>(dir: string, fn: () => Promise<T>): Promise<T> {
   const before = chains.get(dir) ?? Promise.resolve();
   const run = before.then(async () => {
     const lock = path.join(dir, '.lock');

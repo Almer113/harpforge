@@ -6,6 +6,8 @@ export interface WorkingCopy {
   text: string;
   docId: string | null;
   savedText: string | null;
+  /** Whose library `docId` is in: "browser" (a guest's), or "account:<name>". (Older copies: the browser's.) */
+  owner?: string;
 }
 
 const PREFIX = 'harpforge:working:';
@@ -50,7 +52,13 @@ function parse(raw: string | null): (WorkingCopy & { at: number }) | null {
   try {
     const v = JSON.parse(raw);
     if (!v || typeof v.text !== 'string') return null;
-    return { text: v.text, docId: typeof v.docId === 'string' ? v.docId : null, savedText: typeof v.savedText === 'string' ? v.savedText : null, at: typeof v.at === 'number' ? v.at : 0 };
+    return {
+      text: v.text,
+      docId: typeof v.docId === 'string' ? v.docId : null,
+      savedText: typeof v.savedText === 'string' ? v.savedText : null,
+      owner: typeof v.owner === 'string' ? v.owner : 'browser',
+      at: typeof v.at === 'number' ? v.at : 0,
+    };
   } catch {
     return null;
   }
@@ -90,7 +98,8 @@ export function savedCopies(store: Store): { docId: string; text: string; at: nu
   try {
     for (const k of keys(store)) {
       const c = parse(store.getItem(k));
-      if (!c?.docId || !c.savedText) continue;
+      // (Only this browser's library's tabs: an account's are on the server, not lost.)
+      if (!c?.docId || !c.savedText || c.owner !== 'browser') continue;
       const prev = latest.get(c.docId);
       if (!prev || c.at > prev.at) latest.set(c.docId, { docId: c.docId, text: c.savedText, at: c.at });
     }

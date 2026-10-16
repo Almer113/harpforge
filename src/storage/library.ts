@@ -300,10 +300,11 @@ interface BackupInfo {
  * Every saved tab as .htab files in one zip, plus their ids and dates. A full backup also
  * has the trash (in a "Trash" folder) and every tab's history (history.json).
  */
-export async function exportLibrary(opts: { full?: boolean; from?: LibraryBackend } = {}): Promise<Uint8Array> {
+export async function exportLibrary(opts: { full?: boolean; from?: LibraryBackend; ownOnly?: boolean } = {}): Promise<Uint8Array> {
   const b = opts.from ?? (await lib());
   const all = await b.tabs.all();
-  const tabs = all.filter((t) => opts.full || !t.deletedAt).sort((x, y) => (x.deletedAt ?? 0) - (y.deletedAt ?? 0) || y.updatedAt - x.updatedAt);
+  const demos = opts.ownOnly ? demoTexts() : null;
+  const tabs = all.filter((t) => (opts.full || !t.deletedAt) && !demos?.has(t.text)).sort((x, y) => (x.deletedAt ?? 0) - (y.deletedAt ?? 0) || y.updatedAt - x.updatedAt);
   const files: Record<string, Uint8Array> = {};
   const index: BackupInfo[] = [];
   const used = new Set<string>();
@@ -498,9 +499,12 @@ export async function undoImport(r: Restored): Promise<void> {
 
 /** A library's songs that are yours: not the demos as they came (in the trash or not). */
 export async function ownSongs(b: LibraryBackend): Promise<number> {
-  const demos = new Set(DEMOS.flatMap((d) => [d.text, ...(d.replaces ?? [])]));
+  const demos = demoTexts();
   return (await b.tabs.all()).filter((t) => !demos.has(t.text)).length;
 }
+
+/** The demos' texts, as they are and as they were. */
+const demoTexts = () => new Set(DEMOS.flatMap((d) => [d.text, ...(d.replaces ?? [])]));
 
 /** Which demos the library has had (kept with it: in this browser, or in the account). */
 const SEEDED_KEY = 'seeded';
