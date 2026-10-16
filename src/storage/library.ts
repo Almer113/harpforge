@@ -247,23 +247,44 @@ interface BackupInfo {
   id: string;
   createdAt: number;
   updatedAt: number;
+  /** In the trash since then (a full backup's "Trash/" files). */
+  deletedAt?: number;
 }
 
-/** Every saved tab as .htab files in one zip, plus their ids and dates. */
-export async function exportLibrary(): Promise<Uint8Array> {
-  const tabs = await listTabs();
+/**
+ * Every saved tab as .htab files in one zip, plus their ids and dates. A full backup also
+ * has the trash (in a "Trash" folder) and every tab's history (history.json).
+ */
+export async function exportLibrary(opts: { full?: boolean } = {}): Promise<Uint8Array> {
+  const tabs = opts.full ? [...(await listTabs()), ...(await listTrash())] : await listTabs();
   const files: Record<string, Uint8Array> = {};
   const index: BackupInfo[] = [];
   const used = new Set<string>();
   for (const t of tabs) {
-    let name = `${safeName(t.title)}.htab`;
-    for (let n = 2; used.has(name.toLowerCase()); n++) name = `${safeName(t.title)} (${n}).htab`;
+    const dir = t.deletedAt ? 'Trash/' : '';
+    let name = `${dir}${safeName(t.title)}.htab`;
+    for (let n = 2; used.has(name.toLowerCase()); n++) name = `${dir}${safeName(t.title)} (${n}).htab`;
     used.add(name.toLowerCase());
     files[name] = strToU8(t.text);
-    index.push({ file: name, id: t.id, createdAt: t.createdAt, updatedAt: t.updatedAt });
+    index.push({ file: name, id: t.id, createdAt: t.createdAt, updatedAt: t.updatedAt, ...(t.deletedAt ? { deletedAt: t.deletedAt } : {}) });
   }
-  files['library.json'] = strToU8(JSON.stringify({ app: 'HarpForge', version: 1, exportedAt: new Date().toISOString(), tabs: index }, null, 2));
+  if (opts.full) {
+    const ids = new Set(tabs.map((t) => t.id));
+    const versions = (await db.versions.toArray()).filter((v) => ids.has(v.tabId)).sort((a, b) => a.at - b.at);
+    files['history.json'] = strToU8(JSON.stringify({ versions }));
+  }
+  files['library.json'] = strToU8(JSON.stringify({ app: 'HarpForge', version: opts.full ? 2 : 1, exportedAt: new Date().toISOString(), tabs: index }, null, 2));
   return zipSync(files, { level: 6 });
+}
+
+/** How big the library is: its tabs, the trash, the saved versions, and roughly how many bytes. */
+export async function libraryStats(): Promise<{ tabs: number; trashed: number; versions: number; bytes: number }> {
+  const tabs = await db.tabs.toArray();
+  const versions = await db.versions.toArray();
+  const size = (s: string) => strToU8(s).length;
+  const bytes = tabs.reduce((n, t) => n + size(t.text), 0) + versions.reduce((n, v) => n + size(v.text), 0);
+  const trashed = tabs.filter((t) => t.deletedAt).length;
+  return { tabs: tabs.length - trashed, trashed, versions: versions.length, bytes };
 }
 
 /** The .htab files (and index) in a backup zip; throws if it isn't one. macOS "__MACOSX" extras are left out. */
@@ -281,6 +302,12 @@ export function readBackup(zip: Uint8Array): Record<string, Uint8Array> {
 export interface Restored {
   added: number;
   skipped: number;
+  /** Of those added, how many went into the trash (a full backup's trash). */
+  toTrash: number;
+  /** Saved versions it brought (a full backup's history). */
+  versions: number;
+  /** Versions it added to tabs that were already in the library: for an undo. */
+  addedVersionIds: string[];
   /** The tabs it added, and the ones it took out of the trash (with when they'd been deleted): for an undo. */
   addedIds: string[];
   untrashed: { id: string; deletedAt: number }[];
@@ -293,45 +320,79 @@ export async function importLibrary(files: Record<string, Uint8Array>): Promise<
   } catch {
     /* a plain zip of tabs */
   }
+  // A full backup's history: each tab's saved versions (by the tab's id in the backup).
+  let history: TabVersion[] = [];
+  try {
+    if (files['history.json']) history = (JSON.parse(strFromU8(files['history.json'])).versions ?? []).filter(isVersion);
+  } catch {
+    /* no history, or not readable: the tabs still come back */
+  }
+  const hasHistory = new Set(history.map((v) => v.tabId));
   const names = Object.keys(files).filter((n) => /\.htab$/i.test(n));
   let added = 0;
   let skipped = 0;
+  let toTrash = 0;
+  let versions = 0;
   const addedIds: string[] = [];
+  const addedVersionIds: string[] = [];
   const untrashed: Restored['untrashed'] = [];
+  /** The backup's tab ids → the library's (the tab added, or the one already there with its text). */
+  const mapped = new Map<string, string>();
   await db.transaction('rw', db.tabs, db.versions, async () => {
     const existing = await db.tabs.toArray();
     const texts = new Set(existing.map((t) => t.text));
     const ids = new Set(existing.map((t) => t.id));
     for (const name of names) {
       const text = strFromU8(files[name]);
+      const info = byFile.get(name);
+      const intoTrash = info?.deletedAt ?? (/^Trash\//i.test(name) ? Date.now() : undefined);
       if (texts.has(text)) {
-        // In the trash: the backup brings it back.
-        const trashed = existing.find((t) => t.text === text && t.deletedAt && !untrashed.some((u) => u.id === t.id));
+        // In the trash here (and not in the backup's): the backup brings it back.
+        const trashed = intoTrash ? undefined : existing.find((t) => t.text === text && t.deletedAt && !untrashed.some((u) => u.id === t.id));
         if (trashed) {
           await db.tabs.update(trashed.id, { deletedAt: undefined });
           untrashed.push({ id: trashed.id, deletedAt: trashed.deletedAt! });
           added++;
         } else skipped++;
+        const same = trashed ?? existing.find((t) => t.text === text);
+        if (info && same) mapped.set(info.id, same.id);
         continue;
       }
-      const info = byFile.get(name);
       const now = Date.now();
       const id = info && !ids.has(info.id) ? info.id : newId();
-      const tab: SavedTab = { id, ...describe(text), text, createdAt: info?.createdAt ?? now, updatedAt: info?.updatedAt ?? now };
+      const tab: SavedTab = { id, ...describe(text), text, createdAt: info?.createdAt ?? now, updatedAt: info?.updatedAt ?? now, ...(intoTrash ? { deletedAt: intoTrash } : {}) };
       await db.tabs.add(tab);
-      await db.versions.add(versionOf(tab, 'import'));
+      // (Its own history, if the backup has it, starts it; else the backup's text does.)
+      if (!info || !hasHistory.has(info.id)) await db.versions.add(versionOf(tab, 'import'));
+      if (info) mapped.set(info.id, id);
       texts.add(text);
       ids.add(id);
       addedIds.push(id);
       added++;
+      if (intoTrash) toTrash++;
+    }
+    const fresh = new Set(addedIds);
+    for (const v of history) {
+      const tabId = mapped.get(v.tabId);
+      // (A version already here — the same backup restored twice — isn't added again.)
+      if (!tabId || (await db.versions.get(v.id))) continue;
+      await db.versions.add({ ...v, tabId });
+      versions++;
+      if (!fresh.has(tabId)) addedVersionIds.push(v.id);
     }
   });
-  return { added, skipped, addedIds, untrashed };
+  return { added, skipped, toTrash, versions, addedIds, addedVersionIds, untrashed };
 }
 
-/** Undoes a restored backup: the tabs it added go, the ones it took out of the trash go back. */
+function isVersion(v: unknown): v is TabVersion {
+  const x = v as TabVersion;
+  return !!x && typeof x.id === 'string' && typeof x.tabId === 'string' && typeof x.text === 'string' && typeof x.at === 'number';
+}
+
+/** Undoes a restored backup: the tabs and versions it added go, the ones it took out of the trash go back. */
 export async function undoImport(r: Restored): Promise<void> {
   for (const id of r.addedIds) await deleteTab(id);
+  if (r.addedVersionIds.length) await db.versions.bulkDelete(r.addedVersionIds);
   for (const u of r.untrashed) await trashTab(u.id, u.deletedAt);
 }
 

@@ -92,10 +92,12 @@ export async function restoreBackup(files: Record<string, Uint8Array>): Promise<
     const open = () => r.untrashed.some((u) => u.id === useApp.getState().docId);
     if (open()) useApp.setState({ inTrash: false });
     libraryChanged();
-    const message = `Restored ${r.added} tab${r.added === 1 ? '' : 's'}${r.skipped ? ` (${r.skipped} already in your library)` : ''} ✓`;
+    const notes = [r.toTrash ? `${r.toTrash} of them into the trash` : '', r.skipped ? `${r.skipped} already in your library` : ''].filter(Boolean).join('; ');
+    const history = r.versions ? `, with ${r.versions} saved version${r.versions === 1 ? '' : 's'}` : '';
+    const message = `Restored ${r.added} tab${r.added === 1 ? '' : 's'}${history}${notes ? ` (${notes})` : ''} ✓`;
     useApp.getState().notify(
       message,
-      r.added
+      r.added || r.versions
         ? {
             label: 'Undo',
             run: () =>

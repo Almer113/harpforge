@@ -11,7 +11,7 @@ import { openHistory } from '../state/history';
 import { stop } from '../state/playback';
 import { useApp } from '../state/store';
 import { deleteForever, duplicateTab, emptyTheTrash, moveToTrash, restoreBackup, restoreFromTrash } from '../state/trash';
-import { exportLibrary, listTabs, listTrash, persistStorage, readBackup, recoverableTabs, recoverTabs, seedDemos, TRASH_DAYS, type SavedTab } from '../storage/library';
+import { exportLibrary, libraryStats, listTabs, listTrash, persistStorage, readBackup, recoverableTabs, recoverTabs, seedDemos, TRASH_DAYS, type SavedTab } from '../storage/library';
 
 export function LibraryPage() {
   const [tabs, setTabs] = useState<SavedTab[] | null>(null);
@@ -38,6 +38,7 @@ export function LibraryPage() {
   const libraryRev = useApp((s) => s.libraryRev);
   const [showTrash, setShowTrash] = useState(false);
   const [trash, setTrash] = useState<SavedTab[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
 
   // After the first-run demos are in (seedDemos runs once), and again whenever something is saved.
   const refresh = useCallback(() => {
@@ -47,6 +48,7 @@ export function LibraryPage() {
       .then(async (list) => {
         setTabs(list);
         setTrash(await listTrash());
+        setStats(await libraryStats());
         setLoadError(null);
       })
       .catch((e: Error) => setLoadError(e?.message || 'storage unavailable'));
@@ -98,10 +100,10 @@ export function LibraryPage() {
   };
 
 
-  const backup = async () => {
+  const backup = async (full = false) => {
     try {
-      const zip = await exportLibrary();
-      downloadData(`HarpForge library ${new Date().toISOString().slice(0, 10)}.zip`, zip, 'application/zip');
+      const zip = await exportLibrary({ full });
+      downloadData(`HarpForge library${full ? ' (full)' : ''} ${new Date().toISOString().slice(0, 10)}.zip`, zip, 'application/zip');
     } catch (e) {
       useApp.getState().notify(`Backup failed: ${(e as Error).message}`);
     }
@@ -243,9 +245,16 @@ export function LibraryPage() {
 
       <div className="lib-backup muted small">
         <span>Tabs are stored only in this browser — clearing its site data removes them. Back up now and then.</span>
-        <button className="btn small ghost" onClick={() => void backup()} disabled={!tabs?.length} title="Download every tab as .htab files in one .zip">
-          Back up library
-        </button>
+        <div className="save-split">
+          <button className="btn small ghost" onClick={() => void backup()} disabled={!tabs?.length} title="Download every tab as .htab files in one .zip">
+            Back up library
+          </button>
+          <Menu
+            label="▾"
+            title="More ways to back up"
+            items={[{ label: 'Back up with history and trash', hint: 'Every saved version, and the trash too (a bigger file)', onClick: () => void backup(true) }]}
+          />
+        </div>
         <button className="btn small ghost" onClick={restore} title="Add the tabs from a backup .zip">
           Restore backup…
         </button>
@@ -254,6 +263,7 @@ export function LibraryPage() {
             Trash ({trash.length})
           </button>
         )}
+        {stats && <span className="lib-stats">{statsLine(stats)}</span>}
       </div>
     </section>
   );
@@ -350,6 +360,16 @@ function describeTab(text: string): TabInfo {
     .filter(Boolean)
     .reduce((acc, syl) => (acc.endsWith('-') ? acc.slice(0, -1) + syl : `${acc} ${syl}`), '');
   return { doc, artist: doc.meta.artist, family: specFromMeta(doc.meta).family, searchText: `${doc.meta.artist ?? ''} ${doc.meta.key ?? ''} ${lyrics}` };
+}
+
+type Stats = Awaited<ReturnType<typeof libraryStats>>;
+
+/** "6 tabs, 24 saved versions, 1 in the trash: about 48 KB". */
+function statsLine(s: Stats): string {
+  const n = (k: number, one: string, many = `${one}s`) => `${k} ${k === 1 ? one : many}`;
+  const size = s.bytes < 1024 * 1024 ? `${Math.max(1, Math.round(s.bytes / 1024))} KB` : `${(s.bytes / 1024 / 1024).toFixed(1)} MB`;
+  const parts = [n(s.tabs, 'tab'), n(s.versions, 'saved version'), s.trashed ? `${s.trashed} in the trash` : ''].filter(Boolean);
+  return `${parts.join(', ')}: about ${size}`;
 }
 
 /** Days until a tab in the trash goes for good. */

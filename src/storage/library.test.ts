@@ -159,3 +159,62 @@ describe('the trash', () => {
     expect((await lib.listTabs()).some((t) => t.title === 'Brand new')).toBe(false);
   });
 });
+
+describe('backups with history and the trash', () => {
+  it('a full backup has the trash (in a Trash folder) and the history; a plain one neither', async () => {
+    const id = await lib.saveTab(tab('Full', '4 |'));
+    await lib.saveTab(tab('Full', '5 |'), id);
+    const binned = await lib.saveTab(tab('Binned full'));
+    await lib.trashTab(binned);
+    const plain = lib.readBackup(await lib.exportLibrary());
+    expect(Object.keys(plain).some((n) => n.startsWith('Trash/'))).toBe(false);
+    expect(plain['history.json']).toBeUndefined();
+    const full = lib.readBackup(await lib.exportLibrary({ full: true }));
+    expect(Object.keys(full)).toContain('Trash/Binned full.htab');
+    const versions = JSON.parse(new TextDecoder().decode(full['history.json'])).versions as { tabId: string; text: string }[];
+    expect(versions.filter((v) => v.tabId === id).map((v) => v.text)).toEqual([tab('Full', '4 |'), tab('Full', '5 |')]);
+  });
+
+  it('restored into an empty library: the tabs, the trash and the history come back; again, nothing doubles', async () => {
+    const id = await lib.saveTab(tab('Round trip', '4 |'));
+    await lib.saveTab(tab('Round trip', '5 |'), id);
+    const binned = await lib.saveTab(tab('Round trip binned'));
+    await lib.trashTab(binned);
+    const zip = lib.readBackup(await lib.exportLibrary({ full: true }));
+    // (As if on another computer: those tabs gone.)
+    await lib.deleteTab(id);
+    await lib.deleteTab(binned);
+    const r = await lib.importLibrary(zip);
+    expect(r.toTrash).toBe(1);
+    expect(await lib.isTrashed(binned)).toBe(true);
+    expect((await lib.listVersions(id)).map((v) => [v.text, v.kind])).toEqual([
+      [tab('Round trip', '5 |'), 'save'],
+      [tab('Round trip', '4 |'), 'save'],
+    ]);
+    const again = await lib.importLibrary(zip);
+    expect([again.added, again.versions]).toEqual([0, 0]);
+    expect(await lib.listVersions(id)).toHaveLength(2);
+  });
+
+  it('history for a tab already in the library joins its history; undo takes it out again', async () => {
+    const id = await lib.saveTab(tab('Joined', '4 |'));
+    await lib.saveTab(tab('Joined', '5 |'), id);
+    const zip = lib.readBackup(await lib.exportLibrary({ full: true }));
+    // Here, the tab's history was lost (only its text now).
+    const here = await lib.saveTab(tab('Joined', '5 |'));
+    await lib.deleteTab(id);
+    const r = await lib.importLibrary(zip);
+    expect(r.added).toBe(0);
+    expect((await lib.listVersions(here)).length).toBe(3);
+    await lib.undoImport(r);
+    expect((await lib.listVersions(here)).length).toBe(1);
+  });
+
+  it('says how big the library is', async () => {
+    const s = await lib.libraryStats();
+    expect(s.tabs).toBe((await lib.listTabs()).length);
+    expect(s.trashed).toBe((await lib.listTrash()).length);
+    expect(s.versions).toBeGreaterThan(s.tabs);
+    expect(s.bytes).toBeGreaterThan(0);
+  });
+});

@@ -169,3 +169,4 @@
 .trash-item { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
 .trash-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .trash-info b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-backup .lib-stats { flex-basis: 100%; margin-right: 0; color: var(--faint); }

@@ -138,7 +138,8 @@ w: Car-ry me down to the sea.
 w: to the sea.
 `;
 
-export const RIVER_SONG = `---
+/** The tour with the backing and the drone (library version 5): an unchanged copy is brought up to date. */
+const RIVER_SONG_V5 = `---
 title: Down by the River (a tour of HarpForge)
 artist: HarpForge demo
 harmonica: diatonic
@@ -176,6 +177,14 @@ w: Car-ry me down to the sea.
 w: to the sea.
 `;
 
+/** The tour now (library version 6): the library's history and trash too. */
+export const RIVER_SONG = RIVER_SONG_V5.replace(
+  "# in the editor, Ctrl+L to type lyrics, Fill lyrics from text, a bar's Ending.\n",
+  "# in the editor, Ctrl+L to type lyrics, Fill lyrics from text, a bar's Ending.\n" +
+    '# Save a change, then Save ▾ → History… to compare it with before, or bring the old one\n' +
+    '# back; Delete in the library puts a tab in its Trash (Undo in the message).\n',
+);
+
 /**
  * Demo songs with the library version that introduced them (`first`) and the one that brought
  * their text up to date (`since`); `replaces`: their older texts.
@@ -186,10 +195,10 @@ export const DEMOS: { text: string; since: number; first?: number; replaces?: st
   { text: ODE_TO_JOY, since: 1 },
   { text: FRERE_JACQUES, since: 2 },
   // (Version 4 brought endings and a repeat played three times; 5, the backing and the drone to
-  // try. An unchanged copy of an older one is updated.)
-  { text: RIVER_SONG, since: 5, first: 3, replaces: [RIVER_SONG_V3, RIVER_SONG_V4] },
+  // try; 6, the library's history and trash. An unchanged copy of an older one is updated.)
+  { text: RIVER_SONG, since: 6, first: 3, replaces: [RIVER_SONG_V3, RIVER_SONG_V4, RIVER_SONG_V5] },
 ];
-export const DEMO_VERSION = 5;
+export const DEMO_VERSION = 6;
 
 export const BLANK = `---
 title: Untitled
