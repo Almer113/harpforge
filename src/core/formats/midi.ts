@@ -1,12 +1,16 @@
 // Standard MIDI files: import (melody extraction) and export.
 
 import type { Harmonica } from '../instruments';
-import { beatsPerBar, type NoteEvent, type TabDoc } from '../htab/types';
+import { beatsPerBar, type NoteEvent, type RestEvent, type TabDoc, type TabEvent } from '../htab/types';
+import { isChordSymbol } from '../chords';
 import { keyFromSignature } from '../pitch';
 import { clustersToEvents, quantize } from '../timeline';
 import type { Sound } from '../types';
 import { wrapEvents } from '../htab/serializer';
-import { eventMidis, keyFifths, notesMeta, type Imported } from './common';
+import { keyFifths, notesMeta, type Imported } from './common';
+import { backingNotes, BACKING_STYLES, hasChords, type BackingStyle } from '../backing';
+import { playbackScore } from '../repeats';
+import { buildScore, harmonicaFromMeta } from '../score';
 
 // ---- Reading -------------------------------------------------------------------
 
@@ -99,7 +103,12 @@ export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Impor
     division = 480;
   }
 
-  let tempoUs: number | null = null;
+  // Every tempo set (the tab keeps one: the one it's played at longest), and the words and
+  // texts along the way (lyrics; chord symbols; a karaoke file's words as text).
+  const tempos: { tick: number; us: number }[] = [];
+  const lyricEvents: { tick: number; text: string }[] = [];
+  const textEvents: { tick: number; text: string; track: string }[] = [];
+  let lastTick = 0;
   let timeSig: string | null = null;
   let keySig: string | null = null;
   let title: string | undefined;
@@ -124,7 +133,9 @@ export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Impor
         const type = r.u8();
         const l = r.varlen();
         const d = r.bytes(l);
-        if (type === 0x51 && tempoUs === null) tempoUs = (d[0] << 16) | (d[1] << 8) | d[2];
+        if (type === 0x51) tempos.push({ tick, us: (d[0] << 16) | (d[1] << 8) | d[2] });
+        else if (type === 0x05) lyricEvents.push({ tick, text: decodeText(d) });
+        else if (type === 0x01) textEvents.push({ tick, text: decodeText(d), track: String(t) });
         else if (type === 0x58 && timeSig === null) timeSig = `${d[0]}/${Math.pow(2, d[1])}`;
         else if (type === 0x59 && keySig === null) {
           const sf = (d[0] << 24) >> 24;
@@ -158,7 +169,10 @@ export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Impor
         } else {
           const list = open.get(note);
           const on = list?.shift();
-          if (on) track.notes.push({ start: on.start, end: tick, midi: note, channel: on.channel });
+          if (on) {
+            track.notes.push({ start: on.start, end: tick, midi: note, channel: on.channel });
+            lastTick = Math.max(lastTick, tick);
+          }
         }
       } else if (type === 0xc0 || type === 0xd0) r.pos += 1;
       else r.pos += 2;
@@ -190,9 +204,23 @@ export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Impor
   const chosen = candidates.find((c) => c.id === opts.part) ?? candidates[0];
   if (candidates.length > 1) warnings.push(`Imported “${chosen.label}” as the melody (${candidates.length} parts with notes: pick another under Part).`);
 
+  // One tempo: the one the song is played at longest (from each change to the next, or the end).
+  const sortedTempos = [...tempos].sort((a, b) => a.tick - b.tick).filter((x, k, all) => all[k + 1]?.tick !== x.tick);
+  const bpm = (us: number) => Math.round(60_000_000 / us);
+  const lasting = new Map<number, number>();
+  sortedTempos.forEach((x, k) => {
+    const until = Math.max(sortedTempos[k + 1]?.tick ?? lastTick, x.tick);
+    lasting.set(bpm(x.us), (lasting.get(bpm(x.us)) ?? 0) + until - x.tick);
+  });
+  const kept = [...lasting].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? (sortedTempos[0] ? bpm(sortedTempos[0].us) : 120);
+  if (lasting.size > 1) {
+    const all = [...lasting.keys()];
+    warnings.push(`The tempo changes during the song (${Math.min(...all)}–${Math.max(...all)} bpm): the tab keeps ${kept} bpm, the tempo it’s played at longest.`);
+  }
+
   const meta = notesMeta({
     title: title || undefined,
-    tempo: tempoUs ? Math.round(60_000_000 / tempoUs) : 120,
+    tempo: kept,
     time: timeSig ?? '4/4',
     key: keySig ?? undefined,
   });
@@ -234,8 +262,66 @@ export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Impor
   const clusters = quantize(notes, gridAt, (a, b) => a.type === 'pitch' && b.type === 'pitch' && a.midi === b.midi, snapEnd);
   for (const c of clusters) c.sounds.sort((a, b) => (a.type === 'pitch' && b.type === 'pitch' ? a.midi - b.midi : 0));
   const events = clustersToEvents(clusters, beatsPerBar(meta));
+  placeMidiWords(events, lyricEvents, textEvents, tracks, division, warnings);
   const parts = candidates.length > 1 ? candidates.map((c) => ({ id: c.id, label: c.label })) : undefined;
   return { doc: { meta, lines: wrapEvents(events, 4) }, warnings, format: 'MIDI', parts, part: chosen.id, choosePart: (id) => parseMidi(data, { part: id }) };
+}
+
+const decodeText = (d: Uint8Array) => new TextDecoder().decode(d);
+
+/**
+ * The file's words on the notes (each syllable on the note starting nearest it, within a
+ * quarter beat), and its chord symbols. Words are its lyric events; or, in a karaoke file
+ * with none, its text events ("/" or "\\" starting a line, "@" lines being its title and
+ * such). A syllable starting with a space (or a line) starts a word; one that doesn't goes on
+ * the word before ("Twin-kle").
+ */
+function placeMidiWords(events: TabEvent[], lyrics: { tick: number; text: string }[], texts: { tick: number; text: string; track: string }[], tracks: RawTrack[], division: number, warnings: string[]) {
+  const heads: { at: number; ev: NoteEvent | RestEvent }[] = [];
+  let at = 0;
+  for (const e of events) {
+    if (e.kind === 'bar') continue;
+    if (e.kind === 'note' && !e.tied) heads.push({ at, ev: e });
+    else if (e.kind === 'rest') heads.push({ at, ev: e });
+    at += e.beats;
+  }
+  const nearest = (tick: number, notesOnly: boolean) => {
+    const b = tick / division;
+    let best: (typeof heads)[number] | null = null;
+    for (const h of heads) if ((!notesOnly || h.ev.kind === 'note') && Math.abs(h.at - b) <= 0.25 + 1e-6 && (!best || Math.abs(h.at - b) < Math.abs(best.at - b))) best = h;
+    return best?.ev;
+  };
+  // Chord symbols written as text (as our own export writes them).
+  for (const t of texts) {
+    const sym = t.text.trim();
+    if (!isChordSymbol(sym)) continue;
+    const ev = nearest(t.tick, false);
+    if (ev && !ev.chord) ev.chord = sym;
+  }
+  const kar = !lyrics.length && texts.some((t) => /^[/\\@]/.test(t.text) || /words|lyric|karaoke/i.test(tracks[Number(t.track)]?.name ?? ''));
+  const words = (lyrics.length ? lyrics : kar ? texts.filter((t) => !t.text.startsWith('@') && !isChordSymbol(t.text.trim())) : [])
+    .filter((w) => w.text.replace(/[\s/\\]/g, ''))
+    .sort((a, b) => a.tick - b.tick);
+  if (!words.length) return;
+  // (Some files mark no word breaks at all: each syllable is then a word.)
+  const marked = words.some((w) => /^[\s/\\]|\s$|-$/.test(w.text));
+  let placed = 0;
+  let missed = 0;
+  words.forEach((w, k) => {
+    let syl = w.text.replace(/^[\s/\\]+/, '').trimEnd();
+    const next = words[k + 1];
+    const goesOn = marked && !!next && !/\s$/.test(w.text) && !/^[\s/\\]/.test(next.text);
+    if (goesOn && !syl.endsWith('-')) syl += '-';
+    const ev = nearest(w.tick, true);
+    if (!ev) {
+      missed++;
+      return;
+    }
+    // (Two on one note: one word sung on it.)
+    ev.lyric = ev.lyric ? `${ev.lyric.replace(/-$/, '')}${syl}` : syl;
+    placed++;
+  });
+  if (placed) warnings.push(`Put the file’s words on the notes (${placed} syllable${placed === 1 ? '' : 's'}${missed ? `; ${missed} with no note under ${missed === 1 ? 'it' : 'them'} left out` : ''}).`);
 }
 
 // ---- Writing --------------------------------------------------------------------
@@ -255,61 +341,104 @@ function textEvent(type: number, text: string): number[] {
   return [0xff, type, ...varlen(b.length), ...b];
 }
 
-/** Writes a format-0 MIDI file with the melody on a harmonica patch. */
-export function writeMidi(doc: TabDoc, harp?: Harmonica): Uint8Array {
+/** The backing's sound in other programs (General MIDI): a pad, a guitar, an accordion. */
+const BACKING_PROGRAM: Record<'pad' | 'strum' | 'oompah', number> = { pad: 88, strum: 25, oompah: 21 };
+
+export interface MidiExportOptions {
+  /** The backing style (the ♫ menu's); "off" or the drone: a pad. Written only for songs with chords. */
+  backing?: BackingStyle | 'off';
+}
+
+/**
+ * A MIDI file of the song as it's played: repeats and endings played out, each time through
+ * singing its verse (the words as lyric events, a word's last syllable followed by a space),
+ * the chord symbols as text — the tune on a harmonica (track 1, channel 1) and, for a song with
+ * chords, the backing on a track and channel of its own (track 2, channel 2), to mute or keep.
+ */
+export function writeMidi(doc: TabDoc, harp?: Harmonica, opts: MidiExportOptions = {}): Uint8Array {
   const PPQ = 480;
   const { meta } = doc;
+  const h = harp ?? harmonicaFromMeta(meta);
+  const played = playbackScore(doc, buildScore(doc, h).score, { repeats: true, allVerses: true });
+  const score = played.score;
   type Ev = { tick: number; order: number; bytes: number[] };
-  const evs: Ev[] = [];
+  const tick = (beats: number) => Math.round(beats * PPQ);
+
+  // Track 1: the song's settings, then the tune.
+  const tune: Ev[] = [];
   const us = Math.round(60_000_000 / meta.tempo);
-  evs.push({ tick: 0, order: 0, bytes: textEvent(0x03, meta.title || 'HarpForge') });
-  evs.push({ tick: 0, order: 0, bytes: [0xff, 0x51, 3, (us >> 16) & 0xff, (us >> 8) & 0xff, us & 0xff] });
+  tune.push({ tick: 0, order: 0, bytes: textEvent(0x03, meta.title || 'HarpForge') });
+  tune.push({ tick: 0, order: 0, bytes: [0xff, 0x51, 3, (us >> 16) & 0xff, (us >> 8) & 0xff, us & 0xff] });
   const [n, d] = meta.time.split('/').map(Number);
-  if (n && d) evs.push({ tick: 0, order: 0, bytes: [0xff, 0x58, 4, n, Math.round(Math.log2(d)), 24, 8] });
+  if (n && d) tune.push({ tick: 0, order: 0, bytes: [0xff, 0x58, 4, n, Math.round(Math.log2(d)), 24, 8] });
   const fifths = keyFifths(meta.key);
   if (fifths !== null) {
     const minor = /m(in(or)?)?$/i.test(meta.key!.trim()) && !/maj/i.test(meta.key!);
-    evs.push({ tick: 0, order: 0, bytes: [0xff, 0x59, 2, fifths & 0xff, minor ? 1 : 0] });
+    tune.push({ tick: 0, order: 0, bytes: [0xff, 0x59, 2, fifths & 0xff, minor ? 1 : 0] });
   }
-  evs.push({ tick: 0, order: 0, bytes: [0xc0, 22] }); // GM 23: Harmonica
+  tune.push({ tick: 0, order: 0, bytes: [0xc0, 22] }); // GM 23: Harmonica
 
-  // Notes first (ties merged into the note they continue), then MIDI events.
+  // Notes (ties merged into the note they continue), each time through with its verse's words.
   const notes: { tick: number; ticks: number; midis: number[] }[] = [];
-  let t = 0;
   let open: (typeof notes)[number] | null = null;
-  for (const line of doc.lines) {
-    for (const e of line.events) {
-      if (e.kind === 'bar') continue;
-      const ticks = Math.round(e.beats * PPQ);
-      if (e.chord) evs.push({ tick: t, order: 1, bytes: textEvent(0x01, e.chord) });
-      if (e.kind === 'note') {
-        if (e.lyric && !e.tied) evs.push({ tick: t, order: 1, bytes: textEvent(0x05, e.lyric) });
-        if (e.tied && open) open.ticks += ticks;
-        else {
-          open = { tick: t, ticks, midis: eventMidis(e as NoteEvent, harp) };
-          notes.push(open);
-        }
-      } else open = null;
-      t += ticks;
+  score.events.forEach((e, k) => {
+    const t = tick(e.start);
+    const ticks = tick(e.beats);
+    if (e.chord) tune.push({ tick: t, order: 1, bytes: textEvent(0x01, e.chord) });
+    const v = played.verse[k] ?? 0;
+    const word = (v === 0 ? e.lyric : e.verses?.[v - 1])?.trim();
+    if (word && !e.tied && word !== '_') tune.push({ tick: t, order: 1, bytes: textEvent(0x05, word.endsWith('-') ? word : `${word} `) });
+    if (e.rest) {
+      open = null;
+      return;
+    }
+    if (e.tied && open) open.ticks += ticks;
+    else {
+      open = { tick: t, ticks, midis: e.midis.filter((m): m is number => m !== null) };
+      notes.push(open);
+    }
+  });
+  for (const nt of notes) {
+    const off = nt.tick + Math.max(1, nt.ticks - Math.min(30, Math.floor(nt.ticks / 10)));
+    for (const m of nt.midis) {
+      tune.push({ tick: nt.tick, order: 2, bytes: [0x90, m, 90] });
+      tune.push({ tick: off, order: 0, bytes: [0x80, m, 0] });
     }
   }
-  for (const n of notes) {
-    const off = n.tick + Math.max(1, n.ticks - Math.min(30, Math.floor(n.ticks / 10)));
-    for (const m of n.midis) {
-      evs.push({ tick: n.tick, order: 2, bytes: [0x90, m, 90] });
-      evs.push({ tick: off, order: 0, bytes: [0x80, m, 0] });
+
+  // Track 2: the backing, for a song with chords.
+  const tracks = [tune];
+  if (hasChords(score)) {
+    const style = opts.backing === 'strum' || opts.backing === 'oompah' ? opts.backing : 'pad';
+    const backing: Ev[] = [{ tick: 0, order: 0, bytes: textEvent(0x03, `Backing (${BACKING_STYLES.find((b) => b.id === style)!.label})`) }, { tick: 0, order: 0, bytes: [0xc1, BACKING_PROGRAM[style]] }];
+    for (const b of backingNotes(score, meta.time, style)) {
+      const at = tick(b.at);
+      const len = Math.max(1, tick(b.dur) - 10);
+      const vel = Math.max(1, Math.min(127, Math.round(b.vel * 100)));
+      // (A strum's notes a moment apart, upwards or down.)
+      const order = b.up ? [...b.midis].reverse() : b.midis;
+      order.forEach((m, i) => {
+        const on = at + (style === 'strum' ? i * 8 : 0);
+        backing.push({ tick: on, order: 2, bytes: [0x91, m, vel] });
+        backing.push({ tick: on + len, order: 0, bytes: [0x81, m, 0] });
+      });
     }
+    tracks.push(backing);
   }
-  evs.sort((a, b) => a.tick - b.tick || a.order - b.order);
-  const track: number[] = [];
-  let last = 0;
-  for (const e of evs) {
-    track.push(...varlen(e.tick - last), ...e.bytes);
-    last = e.tick;
-  }
-  track.push(0, 0xff, 0x2f, 0);
-  const header = [0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, (PPQ >> 8) & 0xff, PPQ & 0xff];
-  const len = track.length;
-  const trackHeader = [0x4d, 0x54, 0x72, 0x6b, (len >>> 24) & 0xff, (len >> 16) & 0xff, (len >> 8) & 0xff, len & 0xff];
-  return new Uint8Array([...header, ...trackHeader, ...track]);
+
+  const chunks = tracks.map((evs) => {
+    evs.sort((a, b) => a.tick - b.tick || a.order - b.order);
+    const track: number[] = [];
+    let last = 0;
+    for (const e of evs) {
+      track.push(...varlen(e.tick - last), ...e.bytes);
+      last = e.tick;
+    }
+    track.push(0, 0xff, 0x2f, 0);
+    const len = track.length;
+    return [0x4d, 0x54, 0x72, 0x6b, (len >>> 24) & 0xff, (len >> 16) & 0xff, (len >> 8) & 0xff, len & 0xff, ...track];
+  });
+  // (One track: format 0; with the backing: format 1, tracks played together.)
+  const header = [0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, tracks.length > 1 ? 1 : 0, 0, tracks.length, (PPQ >> 8) & 0xff, PPQ & 0xff];
+  return new Uint8Array([...header, ...chunks.flat()]);
 }

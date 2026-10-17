@@ -11,7 +11,7 @@ import { countTabLines, looksLikeGuitarTab, parseGuitarTab } from './guitartab';
 import { looksLikeJianpu, parseJianpu, writeJianpu } from './jianpu';
 import type { Imported } from './common';
 import { slugify } from './common';
-import { parseMidi, writeMidi } from './midi';
+import { parseMidi, writeMidi, type MidiExportOptions } from './midi';
 import { parseMusicXml, unzipMxl, writeMusicXml } from './musicxml';
 
 export type { Imported } from './common';
@@ -90,7 +90,7 @@ export function importBytes(filename: string, bytes: Uint8Array): Imported & { k
 
 // ---- Export ---------------------------------------------------------------------
 
-export function exportDoc(kind: ExportKind, doc: TabDoc, harp: Harmonica, htabText?: string): { filename: string; data: string | Uint8Array; mime: string } {
+export function exportDoc(kind: ExportKind, doc: TabDoc, harp: Harmonica, htabText?: string, opts: MidiExportOptions = {}): { filename: string; data: string | Uint8Array; mime: string } {
   const info = EXPORTS.find((e) => e.id === kind)!;
   const filename = `${slugify(doc.meta.title ?? 'tab')}${kind === 'notes' ? '-notes' : ''}.${info.ext}`;
   let data: string | Uint8Array;
@@ -105,7 +105,7 @@ export function exportDoc(kind: ExportKind, doc: TabDoc, harp: Harmonica, htabTe
       data = writeMusicXml(doc, harp);
       break;
     case 'midi':
-      data = writeMidi(doc, harp);
+      data = writeMidi(doc, harp, opts);
       break;
     case 'chordpro':
       data = writeChordPro(doc);

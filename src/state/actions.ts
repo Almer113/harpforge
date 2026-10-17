@@ -208,7 +208,8 @@ export async function exportAs(kind: ExportKind, text = useApp.getState().text) 
   try {
     const f = await formats();
     if (!f) return;
-    const { filename, data, mime } = f.exportDoc(kind, p.doc, p.harp, text);
+    // (MIDI: the backing on a track of its own, in the style chosen to play along with.)
+    const { filename, data, mime } = f.exportDoc(kind, p.doc, p.harp, text, { backing: useApp.getState().backing });
     downloadData(filename, data, mime);
   } catch (e) {
     useApp.getState().notify(`Export failed: ${(e as Error).message}`);

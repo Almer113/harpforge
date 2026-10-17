@@ -9,6 +9,7 @@ import { fromDoc, toDoc, updateItem } from './edit/model';
 import { spliceBody } from './edit/splice';
 import { exportDoc, EXPORTS, importText, type ExportKind, type ImportKind } from './formats';
 import { parseMidi } from './formats/midi';
+import { playbackScore } from './repeats';
 import { parseHtab, splitHeader } from './htab/parser';
 import { serializeHtab } from './htab/serializer';
 import type { TabDoc } from './htab/types';
@@ -38,6 +39,21 @@ function music(d: TabDoc, harp = harmonicaFromMeta(d.meta)): Note[] {
       ...(e.chord ? { chord: e.chord } : {}),
       ...(e.lyric ? { lyric: e.lyric } : {}),
     }));
+}
+/** The notes in the order they're played (repeats played out, every verse), ties joined. */
+function played(d: TabDoc) {
+  const { score } = playbackScore(d, buildScore(d, harmonicaFromMeta(d.meta)).score, { repeats: true, allVerses: true });
+  const out: { at: number; len: number; pitches: string }[] = [];
+  for (const e of score.events) {
+    if (e.rest) continue;
+    const last = out.at(-1);
+    if (e.tied && last) {
+      last.len = +(last.len + e.beats).toFixed(4);
+      continue;
+    }
+    out.push({ at: +e.start.toFixed(4), len: +e.beats.toFixed(4), pitches: e.midis.map((m) => (m === null ? '?' : midiToName(m))).join('+') });
+  }
+  return out;
 }
 const sections = (d: TabDoc) => d.lines.filter((l) => l.section !== undefined).map((l) => l.section);
 /** Chord symbols in order, wherever they are (notes, rests, markers). */
@@ -95,12 +111,13 @@ describe('2. an edit to one note changes only its line', () => {
  * - MIDI: notes and rhythm only (no lyrics, chord symbols or sections).
  * - ChordPro: chord symbols and words only (no melody).
  */
-const KEEPS: Record<Exclude<ExportKind, 'htab'>, 'all' | 'top-note' | 'notes-only' | 'chords-and-words'> = {
+const KEEPS: Record<Exclude<ExportKind, 'htab'>, 'all' | 'top-note' | 'notes-only' | 'played-notes' | 'chords-and-words'> = {
   notes: 'all',
   abc: 'all',
   musicxml: 'all',
   jianpu: 'top-note',
-  midi: 'notes-only',
+  // (Repeats played out, every verse sung: MIDI has no repeat signs.)
+  midi: 'played-notes',
   chordpro: 'chords-and-words',
 };
 
@@ -112,6 +129,7 @@ function kept(d: TabDoc, keeps: Keeps) {
   if (keeps === 'chords-and-words') return { title, chords: chords(d), words: words(d) };
   const timing = { title, time: d.meta.time, tempo: d.meta.tempo };
   const ns = music(d);
+  if (keeps === 'played-notes') return { ...timing, notes: played(d) };
   if (keeps === 'notes-only') return { ...timing, notes: ns.filter((n) => n.pitches !== '.').map(({ at, len, pitches }) => ({ at, len, pitches })) };
   return {
     ...timing,
