@@ -62,6 +62,7 @@ import { ReadAsSwitch } from '../Sheet';
 import { holeSoundText } from '../../core/htab/serializer';
 import { Inspector } from './Inspector';
 import { moveSectionAt, sectionAtCaret, SectionGroup, SectionHeading } from './SectionTools';
+import { useFound } from './FindBar';
 import { isTyping, keysTaken, overlayOpen } from '../../live/focus';
 import { copyText, pasteText } from '../../core/edit/clipboard';
 import { openShortcuts } from '../Shortcuts';
@@ -883,6 +884,7 @@ function Score({ song, flats, showSecond, asNotes }: { song: Song; flats: Spelli
   const clickGridNow = useApp((s) => clickGrid(s.ve));
   const activeEvents = useApp((s) => s.activeEvents);
   const loopRange = useApp((s) => (s.loop ? s.loopRange : null));
+  const foundNotes = useFound(song);
   const parsed = useParsed();
   // Fit to width: measures fill each row and only sections start a new one; the
   // text's own line breaks show as a small mark.
@@ -1163,6 +1165,8 @@ function Score({ song, flats, showSecond, asNotes }: { song: Song; flats: Spelli
         )
       : [],
   );
+  // Notes find and replace has found.
+  const found = byMeasure(foundNotes.map((p) => ({ m: p.m, v: +p.start.toFixed(4) })));
   const ghosts = byMeasure<Piece & { copy: boolean }>(
     ghost ? [...ghost.others.flatMap((o) => segments(song, o.abs, o.dur)), ...segments(song, ghost.abs, ghost.dur)].map((g) => ({ m: g.m, v: { start: g.start, len: g.len, copy: ghost.copy } })) : [],
   );
@@ -1196,6 +1200,7 @@ function Score({ song, flats, showSecond, asNotes }: { song: Song; flats: Spelli
             just={justEntered?.m === mi ? +justEntered.start.toFixed(4) : null}
             playing={(playing.get(mi) ?? []).join(',')}
             looped={(looped.get(mi) ?? []).join(',')}
+            found={(found.get(mi) ?? []).join(',')}
             caret={caret.m === mi ? caret.start : null}
             ghosts={ghosts.get(mi)}
             resizes={resizes.get(mi)}
@@ -1243,6 +1248,8 @@ interface MeasureProps {
   just: number | null;
   /** Starts of the notes sounding now ("2"). */
   playing: string;
+  /** Starts of the notes find and replace has found ("0,1"). */
+  found: string;
   /** Starts of the notes in the looped passage ("0,1"). */
   looped: string;
   caret: number | null;
@@ -1299,6 +1306,7 @@ const MeasureView = memo(function MeasureView(p: MeasureProps) {
   const selected = new Set(p.selected ? p.selected.split(',').map(Number) : []);
   const playing = new Set(p.playing ? p.playing.split(',').map(Number) : []);
   const looped = new Set(p.looped ? p.looped.split(',').map(Number) : []);
+  const found = new Set(p.found ? p.found.split(',').map(Number) : []);
   const at = (start: number) => +start.toFixed(4);
   // Cards are exactly as long as their notes (no minimum, so they never overlap).
   const cardW = (n: number) => {
@@ -1369,7 +1377,7 @@ const MeasureView = memo(function MeasureView(p: MeasureProps) {
             return (
               <div
                 key={it.start}
-                className={`ve-item ${breath} ${lod} ${it.tied ? 'tied' : ''} ${isSelected ? 'selected' : ''} ${isSelected && p.solo ? 'solo' : ''} ${just ? 'just' : ''} ${isPlaying ? 'playing' : ''} ${looped.has(at(it.start)) ? 'in-loop' : ''} ${dragging ? 'dragging' : ''} ${it.dur <= EPS ? 'marker' : ''} ${offNote ? 'bad' : ''}`}
+                className={`ve-item ${breath} ${lod} ${it.tied ? 'tied' : ''} ${isSelected ? 'selected' : ''} ${isSelected && p.solo ? 'solo' : ''} ${just ? 'just' : ''} ${isPlaying ? 'playing' : ''} ${looped.has(at(it.start)) ? 'in-loop' : ''} ${found.has(at(it.start)) ? 'found' : ''} ${dragging ? 'dragging' : ''} ${it.dur <= EPS ? 'marker' : ''} ${offNote ? 'bad' : ''}`}
                 style={{ left: it.start * zoom, width: it.dur <= EPS ? undefined : w }}
                 onPointerDown={(e) => handlers.itemDown(e, pos, it)}
                 // Narrow cards: everything in an instant label on hover (and on the selected note).

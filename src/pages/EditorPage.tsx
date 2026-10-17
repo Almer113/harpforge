@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CodeEditor, type CodeEditorHandle } from '../components/CodeEditor';
 import { PlayStop, Transport } from '../components/Controls';
 import { SplitIcon, TextIcon, VisualIcon } from '../components/icons';
+import { FindBar } from '../components/editor/FindBar';
 import { SongLine } from '../components/editor/SongDetails';
 import { UndoRedo, VisualEditor, VisualToolbar } from '../components/editor/VisualEditor';
 import { Sheet } from '../components/Sheet';
@@ -57,6 +58,7 @@ export function EditorPage() {
           <span className="bar-spacer" />
           <Transport compact />
         </div>
+        {mode === 'visual' && <FindBar />}
       </div>
 
       {mode === 'visual' ? (

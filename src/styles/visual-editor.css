@@ -291,3 +291,16 @@ button.ve-section > span { color: inherit; opacity: 0.75; font-size: 11px; lette
 /* The rest block being made: dashed, until it has its words or chord. */
 .ve-item.ghost-rest { border-style: dashed; border-color: var(--brass-2); background: color-mix(in srgb, var(--brass) 6%, transparent); z-index: 3; }
 .ve-chord-input { top: 1px; bottom: auto; font-style: normal; font-weight: 700; }
+
+/* ---------- Find and replace holes (Phase 17b) ---------- */
+.find-bar { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin-top: 6px; padding: 6px 10px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; }
+.find-field { display: inline-flex; align-items: center; gap: 6px; }
+.find-field > span { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.find-field input { font-family: var(--mono); width: 7ch; padding: 3px 6px; }
+.find-chords { font-size: 12.5px; }
+.find-scope button { max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.find-status { color: var(--muted); font-size: 12.5px; flex: 1 1 200px; min-width: 0; }
+.find-change { color: var(--warn); }
+.find-change.same { color: var(--ok); }
+.find-actions { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.ve-item.found { outline: 2px dashed var(--warn); outline-offset: 1px; }

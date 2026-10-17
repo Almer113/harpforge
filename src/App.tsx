@@ -212,6 +212,22 @@ export function App() {
         else useApp.getState().setPage('print');
         return;
       }
+      // Ctrl+H: find and replace holes, in the editor (elsewhere it's the browser's).
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'h' && useApp.getState().page === 'editor') {
+        e.preventDefault();
+        // (The editor's code is loaded already: this is the editor page.)
+        const open = () => void import('./components/editor/FindBar').then((m) => m.openFind());
+        if (useApp.getState().editorMode === 'visual') open();
+        else
+          useApp.getState().notify('Find and replace holes is in the Visual editor', {
+            label: 'Open it there',
+            run: () => {
+              useApp.setState({ editorMode: 'visual' });
+              open();
+            },
+          });
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         // Holding the keys down saves once.

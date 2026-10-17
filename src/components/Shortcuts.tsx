@@ -58,6 +58,7 @@ const COLUMNS: Group[][] = [
         ['Click under / above a rest', 'Words or a chord on a rest (empty space)'],
         ['↑ ↓', 'Note up / down (Shift: a semitone)'],
         ['Alt+↑ ↓', 'Move the section up / down (its heading ▾ has the other section tools)'],
+        ['Ctrl+H', 'Find and replace holes (Enter: next, Shift+Enter: previous, Esc: close)'],
         ['Del', 'Delete the selection'],
         ['Backspace', 'Step entry: take back the last note'],
         ['Ins', 'Insert or overwrite'],

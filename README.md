@@ -105,6 +105,8 @@ old one. No server answering: guest only (the account menu offers **Try again**)
 - **Section tools** (a heading's ▾ menu, or ⋯ More tools): rename, duplicate, move up and
   down (Alt+↑/↓), repeat it ×2–×4, loop it, select its notes, delete (with Undo), new
   section, a section from the selection. A section's comments and lyrics move with it.
+- **Find and replace holes** (Ctrl+H): `-2` → `3` across the song, a section or the
+  selection; says whether the tune stays the same; tied notes as one, chords if asked.
 - **Lyrics:** type them onto the notes (Ctrl+L), fill them from pasted text with syllable
   suggestions for English and Indonesian (your corrections remembered), several verses
   per line, sung rests and held syllables ("Oh___").
@@ -144,7 +146,7 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `src/core/playAlong.ts`, `report.ts`, `passage.ts` | Play-along marking, the practice report, passages |
 | `src/core/formats` | ABC, ChordPro / chord sheets, guitar tab, MusicXML, MIDI, numbered notation, plain text |
 | `src/core/formats/pdf*.ts` | PDF text layer / OCR → positioned words → column-aligned chord sheet |
-| `src/core/edit` | The visual editor's measure model, lyrics typing, clipboard, section tools |
+| `src/core/edit` | The visual editor's measure model, lyrics typing, clipboard, section tools, find and replace |
 | `src/audio/engine.ts` | What the app calls for sound; loads `engineImpl.ts` in the background |
 | `src/audio/engineImpl.ts`, `voices.ts`, `backingVoices.ts` | Playback (Tone.js), harmonica voices, backing and drone |
 | `src/audio/pitch.ts` | Pitch detection (YIN) for the microphone |
@@ -193,11 +195,11 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
   own labels, held syllables, this README and the format guide.
 - **Phase 16:** themes — Dark, Light, Paper and Match system, per device; every colour
   named in one place, with contrast tests.
+- **Phase 17:** editing tools — section tools (heading menu, Alt+↑/↓), find and replace
+  holes (Ctrl+H).
 
 **Planned**
 
-17. Editing tools in the editor: section tools (duplicate, move, rename, repeat, delete),
-    find and replace holes (Ctrl+H).
 18. A contour view: the melody's shape, notes as bars by pitch and length.
 19. Chord sheets: warnings for chords played without their root, and fully playable
     nearby chords to pick instead.

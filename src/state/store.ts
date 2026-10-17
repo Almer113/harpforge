@@ -77,6 +77,17 @@ export type SheetView = 'simple' | 'tab' | 'staff' | 'numbers' | 'lyrics';
 export type HarpSize = 'full' | 'slim' | 'hidden';
 export type EditorMode = 'visual' | 'text' | 'split';
 
+/** Find and replace holes (Ctrl+H): what the bar holds. */
+export interface FindState {
+  query: string;
+  by: string;
+  chords: boolean;
+  scope: 'song' | 'section' | 'selection';
+  /** The section's bars (from, to) and the selected notes, as they were when the bar opened. */
+  section: [number, number];
+  notes: import('../core/edit/model').Pos[];
+}
+
 /** Visual editor UI state. Positions are (measure index, start beat). */
 export interface VisualState {
   selection: import('../core/edit/model').Pos[];
@@ -109,6 +120,8 @@ export interface VisualState {
   lyricAt?: import('../core/edit/model').Pos;
   /** The bar whose section heading is being named (the box in place of the heading). */
   naming?: number;
+  /** Find and replace holes, while its bar is open. */
+  find?: FindState;
   /** A rest block being made in empty space, for words (lyrics mode) or a chord. */
   restDraft?: { pos: import('../core/edit/model').Pos; dur: number; field: 'lyric' | 'chord' };
 }
