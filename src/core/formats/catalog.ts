@@ -1,9 +1,9 @@
 // The import and export formats by name: what the top bar and menus need right away.
 // The readers and writers themselves (index.ts) load when you first import or export.
 
-export type ImportKind = 'htab' | 'abc' | 'chordpro' | 'chordsheet' | 'guitartab' | 'jianpu' | 'musicxml' | 'mxl' | 'midi' | 'pdf' | 'mscz' | 'mscx';
+export type ImportKind = 'htab' | 'abc' | 'chordpro' | 'chordsheet' | 'guitartab' | 'jianpu' | 'musicxml' | 'mxl' | 'midi' | 'pdf' | 'mscz' | 'mscx' | 'gp';
 
-export const IMPORT_ACCEPT = '.htab,.txt,.pdf,.tab,.abc,.cho,.chopro,.chordpro,.crd,.pro,.musicxml,.xml,.mxl,.mid,.midi,.mscz,.mscx,text/plain';
+export const IMPORT_ACCEPT = '.htab,.txt,.pdf,.tab,.abc,.cho,.chopro,.chordpro,.crd,.pro,.musicxml,.xml,.mxl,.mid,.midi,.mscz,.mscx,.gp,text/plain';
 
 export const FORMAT_NAMES: Record<ImportKind, string> = {
   htab: 'HarpTab',
@@ -18,6 +18,7 @@ export const FORMAT_NAMES: Record<ImportKind, string> = {
   midi: 'MIDI',
   mscz: 'MuseScore',
   mscx: 'MuseScore (uncompressed)',
+  gp: 'Guitar Pro',
 };
 
 export type ExportKind = 'htab' | 'notes' | 'abc' | 'musicxml' | 'midi' | 'chordpro' | 'jianpu';

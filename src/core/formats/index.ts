@@ -13,6 +13,7 @@ import type { Imported } from './common';
 import { slugify } from './common';
 import { parseMidi, writeMidi, type MidiExportOptions } from './midi';
 import { parseMusicXml, unzipMxl, writeMusicXml } from './musicxml';
+import { isGp, parseGuitarPro, unzipGp } from './guitarpro';
 import { isMscz, parseMuseScore, unzipMscz } from './musescore';
 import { unzipSync } from 'fflate';
 
@@ -51,8 +52,13 @@ export function detectKind(filename: string, bytes: Uint8Array): ImportKind {
   if (ext === 'mid' || ext === 'midi' || (bytes[0] === 0x4d && bytes[1] === 0x54 && bytes[2] === 0x68 && bytes[3] === 0x64)) return 'midi';
   if (ext === 'mscz') return 'mscz';
   if (ext === 'mscx') return 'mscx';
-  // A zip: by what's in it (a MuseScore score, else compressed MusicXML).
-  if (ext === 'mxl' || (bytes[0] === 0x50 && bytes[1] === 0x4b)) return ext !== 'mxl' && isMscz(zipNames(bytes)) ? 'mscz' : 'mxl';
+  if (ext === 'gp') return 'gp';
+  // A zip: by what's in it (a MuseScore or Guitar Pro score, else compressed MusicXML).
+  if (ext === 'mxl' || (bytes[0] === 0x50 && bytes[1] === 0x4b)) {
+    if (ext === 'mxl') return 'mxl';
+    const names = zipNames(bytes);
+    return isMscz(names) ? 'mscz' : isGp(names) ? 'gp' : 'mxl';
+  }
   if (ext === 'abc') return 'abc';
   if (['cho', 'chopro', 'chordpro', 'crd', 'pro'].includes(ext)) return 'chordpro';
   if (ext === 'musicxml' || ext === 'xml') return 'musicxml';
@@ -105,10 +111,12 @@ export function importText(raw: string, kind: ImportKind = sniffText(raw)): Impo
 }
 
 export function importBytes(filename: string, bytes: Uint8Array): Imported & { kind: ImportKind } {
+  if (/\.gpx$/i.test(filename)) throw new Error('Guitar Pro 6 files (.gpx) aren’t read: save the song from Guitar Pro 7 or 8 as .gp, or export it as MusicXML.');
   const kind = detectKind(filename, bytes);
   if (kind === 'midi') return { ...parseMidi(bytes), kind };
   if (kind === 'mxl') return { ...parseMusicXml(unzipMxl(bytes)), kind };
   if (kind === 'mscz') return { ...parseMuseScore(unzipMscz(bytes)), kind };
+  if (kind === 'gp') return { ...parseGuitarPro(unzipGp(bytes)), kind };
   if (kind === 'pdf') throw new Error('PDFs are read asynchronously — use importPdf().');
   return { ...importText(decodeText(bytes), kind), kind };
 }
