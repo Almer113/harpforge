@@ -46,7 +46,7 @@ export function Popover({ label, buttonClass = 'btn small ghost', title, ariaLab
   useEffect(() => {
     if (!open) return;
     const panel = () => root.current?.querySelector<HTMLElement>(':scope > .pop-panel');
-    const items = () => [...(panel()?.querySelectorAll<HTMLElement>(kind === 'menu' ? '[role=menuitem]' : FOCUSABLE) ?? [])];
+    const items = () => [...(panel()?.querySelectorAll<HTMLElement>(kind === 'menu' ? '[role=menuitem], [role=menuitemradio]' : FOCUSABLE) ?? [])];
     // The keyboard goes to the first item (a menu) or field (a panel).
     items()[0]?.focus({ preventScroll: true });
     // A dialog opened over the popover (e.g. the shortcut list from the keyboard help) has the
@@ -98,11 +98,13 @@ export function Popover({ label, buttonClass = 'btn small ghost', title, ariaLab
 }
 
 /** One command in a menu popover. */
-export function MenuItem({ label, hint, onClick, close }: { label: ReactNode; hint?: ReactNode; onClick: () => void; close: () => void }) {
+export function MenuItem({ label, hint, onClick, close, checked }: { label: ReactNode; hint?: ReactNode; onClick: () => void; close: () => void; checked?: boolean }) {
+  // (`checked` given: one of a set to pick from, marked when it's the one.)
   return (
     <button
-      role="menuitem"
-      className="menu-item"
+      role={checked === undefined ? 'menuitem' : 'menuitemradio'}
+      aria-checked={checked}
+      className={`menu-item ${checked ? 'checked' : ''}`}
       onClick={() => {
         close();
         onClick();

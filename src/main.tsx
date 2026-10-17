@@ -4,7 +4,11 @@ import { startAccount } from './account/session';
 import { App } from './App';
 import { preloadAudio } from './audio/engine';
 import { preloadFormats } from './state/actions';
+import { startTheme } from './state/theme';
 import './styles/index.css';
+
+// This device's theme (index.html has shown it already), and following its changes.
+startTheme();
 
 // Whose library: an account's (on the server) or this browser's — asked before it's read.
 void startAccount();

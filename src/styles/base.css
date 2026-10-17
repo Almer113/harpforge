@@ -7,6 +7,8 @@
 }
 
 * { box-sizing: border-box; }
+/* Changing the theme: everything takes its new colours at once (see state/theme.ts). */
+.theme-switching, .theme-switching *, .theme-switching *::before, .theme-switching *::after { transition: none !important; }
 html, body, #root { height: 100%; }
 body {
   margin: 0;

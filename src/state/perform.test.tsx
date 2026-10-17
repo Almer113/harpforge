@@ -235,3 +235,29 @@ it('in the editor, Shift+M and Shift+D (M is the triplet there)', async () => {
   await act(async () => root.unmount());
   host.remove();
 });
+
+it('◐ in the bar: the next theme, Dark → Light → Paper → Dark, named in its label', async () => {
+  localStorage.removeItem('harpforge:theme');
+  delete document.documentElement.dataset.theme;
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => root.render(<PlayPage />));
+  await act(async () => enterPerform());
+  const button = () => host.querySelector<HTMLButtonElement>('.pf-theme')!;
+  expect(button().getAttribute('aria-label')).toBe('Theme: Dark. Switch to Light');
+  const shown: (string | undefined)[] = [];
+  for (let i = 0; i < 3; i++) {
+    await act(async () => button().click());
+    shown.push(document.documentElement.dataset.theme);
+  }
+  expect(shown).toEqual(['light', 'paper', undefined]);
+  expect(localStorage.getItem('harpforge:theme')).toBe('dark');
+  await act(async () => button().click());
+  expect(button().getAttribute('aria-label')).toBe('Theme: Light. Switch to Paper');
+  await act(async () => root.unmount());
+  host.remove();
+  localStorage.removeItem('harpforge:theme');
+  delete document.documentElement.dataset.theme;
+  vi.unstubAllGlobals();
+});

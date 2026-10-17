@@ -61,6 +61,10 @@
 .menu-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; border: 0; background: transparent; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
 .menu-item:hover { background: var(--panel-2); }
 .mi-name { font-weight: 600; }
+/* One of a set to pick from (the theme): a dot by the one picked. */
+.menu-item[role='menuitemradio'] { padding-left: 26px; position: relative; }
+.menu-item[role='menuitemradio'].checked::before { content: ''; position: absolute; left: 10px; top: 13px; width: 7px; height: 7px; border-radius: 50%; background: var(--brass-2); }
+.menu-item[role='menuitemradio'].checked .mi-name { color: var(--brass-2); }
 .mi-ext { color: var(--faint); font-family: var(--mono); font-size: 11.5px; margin-left: 4px; }
 .mi-hint { color: var(--muted); font-size: 12px; }
 .mi-loses { color: var(--faint); font-size: 11px; font-style: italic; }

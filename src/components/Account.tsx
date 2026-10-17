@@ -5,6 +5,7 @@
 import { useState, type FormEvent } from 'react';
 import { bringSongs, continueAsGuest, createAccount, declineSongs, offerSongs, postponeSongs, signInAs, signOutNow, startAccount } from '../account/session';
 import { useApp } from '../state/store';
+import { setTheme, systemTheme, THEME_NAMES, useThemeChoice, type ThemeChoice } from '../state/theme';
 import { Dialog } from './Dialog';
 import { Menu } from './Menu';
 
@@ -116,6 +117,7 @@ function GateBody({ mode }: { mode: 'signin' | 'signup' }) {
 /** Who's here, in the top bar: the account's name (or Guest) and its menu. */
 export function AccountMenu() {
   const account = useApp((s) => s.account);
+  const theme = useThemeChoice();
   if (account.status === 'checking') return null;
   const signedIn = account.status === 'signed-in';
   const label = signedIn ? account.name! : account.status === 'signed-out' ? `${account.name} (signed out)` : account.status === 'offline' ? 'Guest (offline)' : 'Guest';
@@ -139,6 +141,14 @@ export function AccountMenu() {
               { label: 'Sign in…', hint: 'Keep your songs in your account, on the HarpForge computer', onClick: () => useApp.setState({ accountGate: 'signin' }) },
               { label: 'Create an account…', onClick: () => useApp.setState({ accountGate: 'signup' }) },
             ];
+  // The theme is this device's, whoever is signed in.
+  const themes = (['dark', 'light', 'paper', 'system'] as ThemeChoice[]).map((t, k) => ({
+    label: THEME_NAMES[t],
+    hint: t === 'system' ? `Dark or Light, as this computer is set (now ${THEME_NAMES[systemTheme()]})` : t === 'paper' ? 'Cream and ink, like the printed sheet' : undefined,
+    checked: theme === t,
+    heading: k === 0 ? 'Theme (this device)' : undefined,
+    onClick: () => setTheme(t),
+  }));
   return (
     <Menu
       label={
@@ -159,7 +169,7 @@ export function AccountMenu() {
               ? 'The HarpForge server isn’t answering: songs are kept in this browser for now'
               : 'A guest: songs are kept in this browser only'
       }
-      items={items}
+      items={[...items, ...themes]}
     />
   );
 }

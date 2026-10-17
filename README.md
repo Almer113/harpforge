@@ -84,7 +84,10 @@ old one. No server answering: guest only (the account menu offers **Try again**)
 - **Playback** with count-in, an accented metronome, speed, repeats and 1st/2nd endings
   played as written, verses sung in turn ("Play all verses"), and playing from any note.
 - **Performance mode** (F): the music fills the screen, scrolls at tempo or turns pages
-  (page-turner pedals send the arrow keys), reads ahead, can play silently.
+  (page-turner pedals send the arrow keys), reads ahead, can play silently; ◐ changes the
+  theme for the room's light.
+- **Themes:** Dark, Light, Paper (cream and ink, like the printed sheet) or Match system
+  (Dark or Light, as the computer is set), in the account menu — kept per device.
 - **Print** or save as PDF, and a **plain-text tab** for posting on forums.
 
 **Practising**
@@ -145,10 +148,10 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `src/live` | Keyboard, mouse, microphone and MIDI input; recording; clipboard |
 | `src/storage` | The library (`library.ts`) on two backends: this browser (`local.ts`, IndexedDB) or an account (`remote.ts`); version thinning, practice and syllable data |
 | `src/account` | Signing in and out, whose library is in use |
-| `src/state` | Zustand store (incl. undo history), playback, practice, the trash, actions |
+| `src/state` | Zustand store (incl. undo history), playback, practice, the trash, actions, the theme |
 | `src/pages`, `src/components` | UI |
 | `src/demo/songs.ts` | The demo songs (and their older versions, for updating unchanged copies) |
-| `src/styles/` | Stylesheets by area; `index.css` imports them in cascade order (keep it) |
+| `src/styles/` | Stylesheets by area; `index.css` imports them in cascade order (keep it). Every colour is named in `themes.css` (Dark, Light, Paper); the others use the names only (a test checks) |
 | `server/` | The HarpForge server: the built app, accounts, account libraries (run by Node directly) |
 | `scripts/server.mjs` | `npm run deploy` / `undeploy` / `deploy:status` |
 | `scripts/prepare-samples.py` | Turns the VCSL recordings into web-ready, looped samples |

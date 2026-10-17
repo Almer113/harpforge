@@ -3,6 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#13110f" />
+    <script>
+      // This device's theme before anything draws (no flash of Dark) — the same rules as
+      // resolve() in src/state/theme.ts: Dark unless Light or Paper is chosen; Match system
+      // is Light only when the computer is set to light.
+      try {
+        var c = localStorage.getItem('harpforge:theme');
+        var t = c === 'system' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : c;
+        if (t === 'light' || t === 'paper') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
