@@ -13,6 +13,7 @@ import type { Imported } from './common';
 import { slugify } from './common';
 import { parseMidi, writeMidi, type MidiExportOptions } from './midi';
 import { parseMusicXml, unzipMxl, writeMusicXml } from './musicxml';
+import { isGp345, parseGp345 } from './gp345';
 import { isGp, parseGuitarPro, unzipGp } from './guitarpro';
 import { isMscz, parseMuseScore, unzipMscz } from './musescore';
 import { unzipSync } from 'fflate';
@@ -53,6 +54,7 @@ export function detectKind(filename: string, bytes: Uint8Array): ImportKind {
   if (ext === 'mscz') return 'mscz';
   if (ext === 'mscx') return 'mscx';
   if (ext === 'gp') return 'gp';
+  if (ext === 'gp3' || ext === 'gp4' || ext === 'gp5' || isGp345(bytes)) return 'gp3to5';
   // A zip: by what's in it (a MuseScore or Guitar Pro score, else compressed MusicXML).
   if (ext === 'mxl' || (bytes[0] === 0x50 && bytes[1] === 0x4b)) {
     if (ext === 'mxl') return 'mxl';
@@ -117,6 +119,7 @@ export function importBytes(filename: string, bytes: Uint8Array): Imported & { k
   if (kind === 'mxl') return { ...parseMusicXml(unzipMxl(bytes)), kind };
   if (kind === 'mscz') return { ...parseMuseScore(unzipMscz(bytes)), kind };
   if (kind === 'gp') return { ...parseGuitarPro(unzipGp(bytes)), kind };
+  if (kind === 'gp3to5') return { ...parseGp345(bytes), kind };
   if (kind === 'pdf') throw new Error('PDFs are read asynchronously — use importPdf().');
   return { ...importText(decodeText(bytes), kind), kind };
 }
