@@ -294,7 +294,8 @@ export function bodyText(lines: TabLine[], opts: SerializeOptions = {}): string 
 }
 
 export function serializeHtab(doc: TabDoc, opts: SerializeOptions = {}): string {
-  return headerText(doc.meta) + '\n' + bodyText(doc.lines, { barBeats: beatsPerBar(doc.meta), ...opts }) + '\n';
+  const comments = doc.comments?.length ? '\n' + doc.comments.map((c) => (c ? `# ${c}` : '#')).join('\n') + '\n' : '';
+  return headerText(doc.meta) + '\n' + bodyText(doc.lines, { barBeats: beatsPerBar(doc.meta), ...opts }) + '\n' + comments;
 }
 
 /** Breaks a flat list of events into lines of `barsPerLine` bars (or `notesPerLine` if no bars). */

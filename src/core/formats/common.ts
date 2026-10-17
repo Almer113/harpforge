@@ -10,12 +10,38 @@ export interface Imported {
   doc: TabDoc;
   warnings: string[];
   format: string;
-  /** The parts the file holds (MIDI tracks and channels), when there's a choice. */
-  parts?: { id: string; label: string }[];
+  /** The parts the file holds (tunes, voices, tracks…), when there's a choice. */
+  parts?: PartChoice[];
   /** The part imported. */
   part?: string;
   /** Imports another of `parts`. */
   choosePart?: (id: string) => Imported;
+}
+
+/** A part of a file the import can take instead (a tune, a voice, a track…). */
+export interface PartChoice {
+  id: string;
+  label: string;
+}
+
+/**
+ * How much a part looks like the melody: named so ("melody", "voice", "harmonica"…), then
+ * one note at a time, then high (the tune is usually on top).
+ */
+export function melodyScore(doc: TabDoc, name = ''): number {
+  const notes = doc.lines.flatMap((l) => l.events).filter((e): e is NoteEvent => e.kind === 'note' && !e.tied);
+  if (!notes.length) return -Infinity;
+  const pitches = notes.flatMap((e) => eventMidis(e));
+  const single = notes.filter((e) => e.sounds.length === 1).length / notes.length;
+  const avg = pitches.reduce((a, m) => a + m, 0) / Math.max(1, pitches.length);
+  const named = /harmonica|harp|melod|lead|vocal|voice|solo|tune|sopran|singer|lyric/i.test(name) ? 1000 : /bass|accomp|drum|perc|chord|rhythm|pad/i.test(name) ? -500 : 0;
+  const sung = notes.some((e) => e.lyric) ? 200 : 0;
+  return named + sung + single * 100 + avg / 10 + Math.min(notes.length, 50) / 10;
+}
+
+/** The warning when a part was picked from several: which one, and that there are others. */
+export function partWarning(label: string, count: number): string {
+  return `Imported “${label}” as the melody (${count} parts: pick another under Part).`;
 }
 
 export function notesMeta(partial: Partial<TabMeta> = {}): TabMeta {

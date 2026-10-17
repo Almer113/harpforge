@@ -49,6 +49,7 @@ function mapEvents(doc: TabDoc, fn: (e: NoteEvent) => TabEvent): TabDoc {
   return {
     meta: cloneMeta(doc.meta),
     lines: doc.lines.map((l) => ({ ...l, events: l.events.map((e) => (e.kind === 'note' ? fn(e) : { ...e })) })),
+    ...(doc.comments ? { comments: [...doc.comments] } : {}),
   };
 }
 
@@ -226,6 +227,7 @@ export function notesToTab(doc: TabDoc, harp: Harmonica, opts: NotesToTabOptions
         return result;
       }),
     })),
+    ...(doc.comments ? { comments: [...doc.comments] } : {}),
   };
 
   function convertOne(e: TabEvent, li: number, ei: number): TabEvent {
@@ -550,7 +552,7 @@ export function chordSheetToTab(doc: TabDoc, harp: Harmonica, pattern: StrumPatt
   stats.thinChords = thin.size;
   stats.unplayableChords = missing.size;
   const warnings = [...missing].map((c) => `No way to play ${c} on ${harp.name}`);
-  return { doc: { meta, lines }, warnings, stats, missingChords: [...missing] };
+  return { doc: { meta, lines, ...(doc.comments ? { comments: [...doc.comments] } : {}) }, warnings, stats, missingChords: [...missing] };
 }
 
 /** Ranks harmonicas by how well they cover a chord sheet's chords. */

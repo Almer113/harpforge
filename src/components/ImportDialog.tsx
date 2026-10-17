@@ -116,16 +116,19 @@ function ImportBody() {
   // (Leaving the page with pasted text not opened yet asks first, as closing the dialog does.)
   useDraft(pasteMode && paste.trim() !== '' && paste !== (draft.pasteText ?? ''));
 
+  // The part picked from pasted text (several tunes or voices in it), while it's pasted.
+  const [pastePart, setPastePart] = useState<string | null>(null);
   const imported = useMemo<(Imported & { kind?: string }) | null>(() => {
     if (draft.imported) return draft.imported;
     if (!pasteMode || !pasteSettled.trim()) return null;
     try {
       const kind = sniffText(pasteSettled);
-      return { ...importText(pasteSettled, kind), kind };
+      const read = importText(pasteSettled, kind);
+      return { ...(pastePart && read.choosePart && read.parts?.some((p) => p.id === pastePart) ? read.choosePart(pastePart) : read), kind };
     } catch {
       return null;
     }
-  }, [draft.imported, pasteSettled, pasteMode]);
+  }, [draft.imported, pasteSettled, pasteMode, pastePart]);
 
   const analysis = useMemo(() => {
     if (!imported) return null;
@@ -398,16 +401,18 @@ function ImportBody() {
               )}
             </div>
             {analysis.chordSheet && <p className="hint">A chord sheet: the chords are played as harmonica chords. Record or type the melody afterwards if you like.</p>}
-            {imported.parts && imported.choosePart && draft.imported && (
+            {imported.parts && imported.choosePart && (
               <label className="import-part">
                 <span>Part</span>
                 <select
                   value={imported.part}
                   onChange={(e) => {
-                    const next = imported.choosePart!(e.target.value);
                     setPicked(null);
                     setShifts({});
-                    useApp.setState({ importDraft: { ...draft, imported: { ...next, kind: draft.imported!.kind } } });
+                    // (Pasted text is read again with it; a file's import is replaced.)
+                    if (!draft.imported) return setPastePart(e.target.value);
+                    const next = imported.choosePart!(e.target.value);
+                    useApp.setState({ importDraft: { ...draft, imported: { ...next, kind: draft.imported.kind } } });
                   }}
                   title="The file holds several parts: pick the one with the melody"
                 >

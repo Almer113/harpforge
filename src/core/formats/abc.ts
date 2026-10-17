@@ -5,12 +5,13 @@
 // chord symbols, rests, bars, lyrics (w:) and parts. Only the first tune and first
 // voice are read.
 
-import { isHeld, lineShown, lyricOf, setHeld, setLyricOf, songVerses } from '../verses';
+import { hasWords, isHeld, lineShown, lyricOf, setHeld, setLyricOf, songVerses } from '../verses';
+import { detectLang, syllablesId } from '../syllables';
 import type { Harmonica } from '../instruments';
 import { holeSoundText } from '../htab/serializer';
 import { beatsPerBar, type BarEvent, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine } from '../htab/types';
 import type { HoleSound } from '../types';
-import { eventMidis, keyFifths, keySignature, LETTER_PC, notesMeta, spell, toFraction, type Imported } from './common';
+import { eventMidis, keyFifths, keySignature, LETTER_PC, melodyScore, notesMeta, partWarning, spell, toFraction, type Imported, type PartChoice } from './common';
 
 // ---- Import ---------------------------------------------------------------------
 
@@ -22,12 +23,69 @@ interface PendingNote {
   letter?: string;
 }
 
-export function parseAbc(text: string): Imported {
-  const warnings: string[] = [];
+/**
+ * An ABC file: one of its tunes, one voice of it — the part asked for, or else the first tune's
+ * most melody-like voice. The others are offered under Part.
+ */
+export function parseAbc(text: string, opts: { part?: string } = {}): Imported {
   const src = text.replace(/\r\n?/g, '\n');
-  const tunes = src.split(/\n(?=X:)/);
-  const tune = tunes.find((t) => /(^|\n)K:/.test(t)) ?? src;
-  if (tunes.filter((t) => /(^|\n)X:/.test(t)).length > 1) warnings.push('This file has several tunes; only the first was imported.');
+  const tunes = src.split(/\n(?=X:)/).filter((t) => /(^|\n)K:/.test(t));
+  if (!tunes.length) return parseTune(src, src, null);
+  const options: (PartChoice & { tune: string; voice: string | null; name: string; first: boolean })[] = [];
+  tunes.forEach((t, ti) => {
+    const title = /(^|\n)T:(.*)/.exec(t)?.[2].trim() ?? '';
+    const voices = abcVoices(t);
+    const tuneLabel = tunes.length > 1 ? `Tune ${ti + 1}${title ? `: ${title}` : ''}` : '';
+    if (voices.length <= 1) options.push({ id: `${ti}`, label: tuneLabel || title || 'The tune', tune: t, voice: null, name: title, first: ti === 0 });
+    else
+      for (const v of voices)
+        options.push({ id: `${ti}:${v.id}`, label: [tuneLabel, `Voice ${v.id}${v.name ? ` (${v.name})` : ''}`].filter(Boolean).join(' · '), tune: t, voice: v.id, name: v.name, first: ti === 0 });
+  });
+  const read = (o: (typeof options)[number]) => parseTune(src, o.tune, o.voice);
+  let chosen = options.find((o) => o.id === opts.part);
+  let result = chosen ? read(chosen) : null;
+  if (!chosen || !result) {
+    // (A file of several tunes starts on its first; of a tune's voices, the melody's.)
+    let best = -Infinity;
+    for (const o of options.filter((x) => x.first)) {
+      const r = read(o);
+      const score = melodyScore(r.doc, o.name);
+      if (!result || score > best) {
+        best = score;
+        result = r;
+        chosen = o;
+      }
+    }
+  }
+  if (options.length < 2) return result!;
+  return {
+    ...result!,
+    warnings: [partWarning(chosen!.label, options.length), ...result!.warnings],
+    parts: options.map((o) => ({ id: o.id, label: o.label })),
+    part: chosen!.id,
+    choosePart: (id) => parseAbc(text, { part: id }),
+  };
+}
+
+/** A tune's voices, in order (from V: lines and inline [V:…]), with their names if given. */
+function abcVoices(tune: string): { id: string; name: string }[] {
+  const out: { id: string; name: string }[] = [];
+  const add = (id: string, rest = '') => {
+    const name = /\b(?:name|nm)\s*=\s*"([^"]*)"/.exec(rest)?.[1] ?? /\b(?:name|nm)\s*=\s*(\S+)/.exec(rest)?.[1] ?? '';
+    const had = out.find((v) => v.id === id);
+    if (!had) out.push({ id, name });
+    else if (!had.name && name) had.name = name;
+  };
+  for (const m of tune.matchAll(/^V:\s*([^\s\]]+)(.*)$/gm)) add(m[1], m[2]);
+  for (const m of tune.matchAll(/\[V:\s*([^\]\s]+)([^\]]*)\]/g)) add(m[1], m[2]);
+  return out;
+}
+
+/** One tune of an ABC file, one voice of it (the first if `wanted` is null). */
+function parseTune(src: string, tune: string, wanted: string | null): Imported {
+  const warnings: string[] = [];
+  // Words written after the tune ("W:"), to go on the notes as verses after the import.
+  const afterWords: string[] = [];
 
   const meta = notesMeta({ time: '4/4', tempo: 120 });
   let unit = 1 / 8;
@@ -37,6 +95,11 @@ export function parseAbc(text: string): Imported {
   let inBody = false;
   let firstVoice: string | null = null;
   let currentVoice: string | null = null;
+  // (Music with no voice named yet is the first voice's.)
+  const inVoice = () => {
+    const target = wanted ?? firstVoice;
+    return !currentVoice || !target || currentVoice === target;
+  };
   let pendingSection: string | undefined;
   // One entry per written note head; null = a head merged into the previous note by a
   // tie (it still takes a lyric slot, but the syllable is dropped).
@@ -119,6 +182,9 @@ export function parseAbc(text: string): Imported {
       case 'P':
         if (inBody) pendingSection = v;
         break;
+      case 'W':
+        afterWords.push(v);
+        break;
       case 'V': {
         const id = v.split(/\s/)[0];
         firstVoice ??= id;
@@ -199,7 +265,7 @@ export function parseAbc(text: string): Imported {
     if (field && !/^[|[]/.test(trimmed) && !field[2].startsWith('|')) {
       const [, f, v] = field;
       if (f === '+') {
-        if (lastField === 'w' && (!currentVoice || currentVoice === firstVoice)) attachLyrics(v, true);
+        if (lastField === 'w' && inVoice()) attachLyrics(v, true);
         continue;
       }
       lastField = f;
@@ -214,7 +280,7 @@ export function parseAbc(text: string): Imported {
           lastField = 'w-tab';
           continue;
         }
-        if (!currentVoice || currentVoice === firstVoice) attachLyrics(v);
+        if (inVoice()) attachLyrics(v);
         continue;
       }
       if (f === 'K' && !inBody) {
@@ -231,7 +297,7 @@ export function parseAbc(text: string): Imported {
     }
     if (!inBody) continue;
     lastField = '';
-    if (currentVoice && firstVoice && currentVoice !== firstVoice) continue;
+    if (!inVoice()) continue;
 
     // Music line. A "w:" line belongs to the music line just before it, so notes of a line
     // that had no lyrics aren't given the next line's words (unless it continued with "\").
@@ -309,7 +375,7 @@ export function parseAbc(text: string): Imported {
 
     while (i < s.length) {
       // Music of another voice ("[V:2] ..." on the same line) is skipped up to the next voice change.
-      if (currentVoice && firstVoice && currentVoice !== firstVoice) {
+      if (!inVoice()) {
         const next = s.indexOf('[V:', i);
         if (next < 0) break;
         const inline = /^\[V:([^\]]*)\]/.exec(s.slice(next));
@@ -487,7 +553,59 @@ export function parseAbc(text: string): Imported {
   }
 
   if (!inBody) warnings.push('No "K:" line found — is this an ABC file?');
-  return { doc: { meta, lines }, warnings, format: 'ABC' };
+  const comments = placeAfterWords(lines, afterWords, warnings);
+  return { doc: { meta, lines, ...(comments.length ? { comments } : {}) }, warnings, format: 'ABC' };
+}
+
+/**
+ * Words written after the tune ("W:" lines; a blank one, or a number like "2.", starts the
+ * next verse) go on the notes as verses after the ones under the music — each verse whose
+ * syllables fit the notes exactly (hyphens as written; Indonesian words split by its rules).
+ * The rest are kept as comment lines (returned), for Fill lyrics from text.
+ */
+function placeAfterWords(lines: TabLine[], words: string[], warnings: string[]): string[] {
+  const stanzas: string[][] = [];
+  let cur: string[] | null = null;
+  for (const raw of words) {
+    const w = raw.trim();
+    const numbered = /^\d+[.)]?\s+/.exec(w);
+    if (!w || numbered) cur = null;
+    if (!w) continue;
+    if (!cur) stanzas.push((cur = []));
+    cur.push(numbered ? w.slice(numbered[0].length) : w);
+  }
+  if (!stanzas.length) return [];
+  const events = lines.flatMap((l) => l.events).filter((e): e is NoteEvent | RestEvent => e.kind !== 'bar');
+  const sungFirst = events.some((e) => hasWords(e));
+  // The notes a verse is sung on: those verse 1 gives a new syllable to (or, without words
+  // under the music, every note that isn't tied over).
+  const slots = sungFirst ? events.filter((e) => !!lyricOf(e, 0)?.trim() && !isHeld(e, 0)) : events.filter((e) => e.kind === 'note' && !e.tied);
+  let verse = sungFirst ? Math.max(...events.map((e) => (e.verses?.length ?? 0) + 1)) : 0;
+  // (The language from all the song's words: those under the music say it too.)
+  const lang = detectLang([...words, ...events.flatMap((e) => [e.lyric ?? '', ...(e.verses ?? []).map((v) => v ?? '')])].join(' ').replace(/-/g, ''), 'en');
+  const left: string[][] = [];
+  let placed = 0;
+  for (const stanza of stanzas) {
+    const syllables = stanza
+      .join(' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .flatMap((word) => {
+        const parts = word.includes('-') ? word.split('-').filter(Boolean) : lang === 'id' ? syllablesId(word) : [word];
+        return parts.map((x, k) => (k < parts.length - 1 ? `${x}-` : x));
+      });
+    if (syllables.length !== slots.length) {
+      left.push(stanza);
+      continue;
+    }
+    slots.forEach((e, k) => setLyricOf(e, verse, syllables[k]));
+    verse++;
+    placed++;
+  }
+  if (placed) warnings.push(`Put ${placed} verse${placed === 1 ? '' : 's'} written after the tune (W:) on the notes.`);
+  if (!left.length) return [];
+  warnings.push(`${left.length} verse${left.length === 1 ? '' : 's'} written after the tune (W:) didn’t fit the notes: kept as comments at the end — Fill lyrics from text in the editor can put ${left.length === 1 ? 'it' : 'them'} on.`);
+  return ['Words written after the tune (W:), to put on the notes with Fill lyrics from text:', ...left.flatMap((st, k) => [...(k ? [''] : []), ...st])];
 }
 
 // ---- Export ---------------------------------------------------------------------

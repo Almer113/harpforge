@@ -97,6 +97,8 @@ export interface ParseIssue {
 export interface TabDoc {
   meta: TabMeta;
   lines: TabLine[];
+  /** Comment lines written at the end of the tab ("# …"): words an import couldn't place, say. */
+  comments?: string[];
 }
 
 export interface ParseResult {
