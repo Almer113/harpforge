@@ -18,7 +18,7 @@ tuning: richter          # see the table below
 harp-key: C              # key of the harmonica (G…F#; diatonic also Low C…Low F#, High G)
 key: G                   # key of the song (optional)
 position: 2              # optional
-tempo: 100               # beats per minute
+tempo: 100               # beats per minute (one tempo for the whole song)
 time: 4/4
 lang: en                 # language of the lyrics (en | id), set by the syllable suggestions
 ---
@@ -89,9 +89,9 @@ A `~` right after a note holds it (`6~~` = 3 beats). A `~` **on its own** is a t
 the note before it keeps sounding — across bar lines and line breaks too:
 
 ```
-6~ | ~~ 5 6 |          6 is held for 4 beats, over the bar line
--(1 2 3)~~~ | ~ .~ |   a chord tied over the bar
-{-4 ~} 5 …             ties work inside beat groups
+6~ | ~~ 5 6 |          # 6 is held for 4 beats, over the bar line
+-(1 2 3)~~~ | ~ .~ |   # a chord tied over the bar
+{-4 ~} 5 |             # ties work inside beat groups
 ```
 
 A tie takes its sound from the note it continues, plays as one unbroken note,
@@ -111,12 +111,29 @@ one group per beat (`{4 5}`), and a note that runs over a beat continues with a 
 in the next group. Lines you don't touch keep their own spelling.
 
 ```
-{4 5} {~ 6} {~ 7} {~ 8}     eighth, three quarters, eighth (syncopation)
-4 {~ 5} 6~                  dotted quarter, eighth, half
-{4 5 6}~                    quarter-note triplet: tuplets over several beats stay one group
-{4}/2 5 | …                 a pickup (eighth + quarter) is counted from its end
-``` A beat is a quarter note; `tempo` counts
-quarter notes per minute (so a 6/8 bar is 3 beats).
+{4 5} {~ 6} {~ 7} {~ 8}     # eighth, three quarters, eighth (syncopation)
+4 {~ 5} 6~                  # dotted quarter, eighth, half
+{4 5 6}~                    # quarter-note triplet: tuplets over several beats stay one group
+{4}/2 5 |                   # a pickup (eighth + quarter) is counted from its end
+```
+
+A beat is a quarter note; `tempo` counts quarter notes per minute (so a 6/8 bar is 3
+beats). A song has one tempo.
+
+### Lyrics and verses
+
+```
+4 4 6 6 | -6 -6 6~ |
+w: Twin-kle twin-kle lit-tle star,
+w: How I won-der what you are
+[N.C.] _ 4 5 | -6~ 6 -5 4 |
+w: Oh la la Oh _ ri-ver
+```
+
+Each `w:` line under a tab line is a verse (1, 2, …), one syllable per note; a sung rest
+(`_` in the tab) takes a syllable too. In a `w:` line, `-` joins a word's syllables, `_`
+holds the syllable before over the next note, and `*` leaves a note without words. `lang:`
+in the header (`en` or `id`) says which language's syllable rules the editor suggests.
 
 ## Semantics
 
