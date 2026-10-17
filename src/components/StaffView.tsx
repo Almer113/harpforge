@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { lineHasNoteWords, writeAbc } from '../core/formats/abc';
 import { eventKey } from '../core/score';
 import type { Parsed } from '../state/store';
-import { lineShown, lyricOf, songVerses } from '../core/verses';
+import { isHeld, lineShown, lyricOf, songVerses } from '../core/verses';
 import { followTo } from './follow';
 
 interface Props {
@@ -107,6 +107,9 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
     // Words sung over a rest ("_"): the staff only puts words under notes, so they're drawn
     // here, under the rest, in their verse's row.
     if (lyrics) drawRestWords(elems, abc.order, parsed, holes, versesKey === undefined ? undefined : versesKey.split(',').map(Number));
+    // Syllables held over the notes after them ("_"): the extender line, which the staff
+    // library doesn't draw.
+    if (lyrics) drawHolds(elems, abc.order, parsed, holes, versesKey === undefined ? undefined : versesKey.split(',').map(Number));
   }, [abc, parsed, oneSvgPerLine, holes, staffWidth, lyrics, versesKey]);
 
   // Highlight sounding + selected notes.
@@ -181,4 +184,71 @@ function drawRestWords(elems: SVGElement[][], order: [number, number][], parsed:
       sample.parentNode?.appendChild(t);
     });
   });
+}
+
+/**
+ * Draws the extender line of each syllable held over the notes after it ("Oh___"): from just
+ * after the word to the last held note, in the verse's row, on the same staff line.
+ */
+function drawHolds(elems: SVGElement[][], order: [number, number][], parsed: Parsed, holes: boolean, verses: number[] | undefined) {
+  const shown = verses ?? Array.from({ length: Math.max(1, songVerses(parsed.doc)) }, (_, k) => k);
+  const boxOf = (el: SVGElement | undefined): DOMRect | null => {
+    try {
+      const b = (el as unknown as SVGGraphicsElement | undefined)?.getBBox();
+      return b && (b.width || b.height) ? b : null;
+    } catch {
+      return null;
+    }
+  };
+  for (let row = 0; row < shown.length; row++) {
+    // The syllable under way in this row: its note, its staff line, its word's length, and how far its line goes.
+    let run: { el: SVGElement; line: string; chars: number; to: number } | null = null;
+    const finish = () => {
+      if (!run) return;
+      const svg = run.el.ownerSVGElement;
+      const { ys, sample } = svg ? lyricRows(svg, run.line) : { ys: [], sample: null };
+      const from = boxOf(run.el);
+      if (svg && sample && ys.length && from) {
+        const size = Number(sample.getAttribute('font-size') || 16);
+        const gap = size * 1.2;
+        const start = from.x + from.width / 2 + (run.chars * size * 0.55) / 2 + 2;
+        if (run.to > start + 2) {
+          const y = ys[0] + (row + (holes ? 1 : 0)) * gap + 2;
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', String(start));
+          line.setAttribute('x2', String(run.to));
+          line.setAttribute('y1', String(y));
+          line.setAttribute('y2', String(y));
+          line.setAttribute('stroke', sample.getAttribute('fill') || 'currentColor');
+          line.setAttribute('stroke-width', '1.2');
+          line.classList.add('lyric-hold');
+          sample.parentNode?.appendChild(line);
+        }
+      }
+      run = null;
+    };
+    order.forEach(([l, ei], k) => {
+      const line = parsed.doc.lines[l];
+      const ev = line?.events[ei];
+      const el = elems[k]?.[0];
+      if (!ev || ev.kind === 'bar' || !el) return;
+      const v = lineShown(line, shown)[row];
+      if (v === undefined) return;
+      const staffLine = [...el.classList].find((c) => /^abcjs-l\d+$/.test(c)) ?? '';
+      const words = lyricOf(ev, v);
+      if (words) {
+        finish();
+        run = { el, line: staffLine, chars: words.replace(/-$/, '').length, to: 0 };
+        return;
+      }
+      if (run && isHeld(ev, v) && staffLine === run.line) {
+        const b = boxOf(el);
+        if (b) run.to = b.x + b.width;
+        return;
+      }
+      if (ev.kind === 'note' && ev.tied) return;
+      finish();
+    });
+    finish();
+  }
 }

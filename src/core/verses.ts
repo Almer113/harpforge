@@ -6,6 +6,7 @@ import type { TabDoc, TabLine } from './htab/types';
 interface Sung {
   lyric?: string;
   verses?: (string | undefined)[];
+  holds?: number[];
 }
 
 /** An event's syllable in verse `v` (0 = verse 1). */
@@ -13,8 +14,30 @@ export function lyricOf(ev: Sung, v: number): string | undefined {
   return v === 0 ? ev.lyric : ev.verses?.[v - 1];
 }
 
-/** Sets an event's syllable in verse `v` (undefined clears it), tidying away empty verses. */
+/** Whether it holds the syllable before it in verse `v` ("_": "Oh___"). */
+export function isHeld(ev: Sung, v: number): boolean {
+  return !!ev.holds?.includes(v);
+}
+
+/** Makes it hold the syllable before it in verse `v` (or not). A hold has no syllable of its own. */
+export function setHeld(ev: Sung, v: number, on: boolean) {
+  const holds = (ev.holds ?? []).filter((x) => x !== v);
+  if (on) {
+    holds.push(v);
+    holds.sort((a, b) => a - b);
+    setLyricOf(ev, v, undefined);
+  }
+  if (holds.length) ev.holds = holds;
+  else delete ev.holds;
+}
+
+/** Sets an event's syllable in verse `v` (undefined clears it), tidying away empty verses. A syllable replaces a hold. */
 export function setLyricOf(ev: Sung, v: number, text: string | undefined) {
+  if (text && ev.holds?.includes(v)) {
+    const holds = ev.holds.filter((x) => x !== v);
+    if (holds.length) ev.holds = holds;
+    else delete ev.holds;
+  }
   if (v === 0) {
     if (text) ev.lyric = text;
     else delete ev.lyric;

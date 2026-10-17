@@ -1,6 +1,6 @@
 // Turns a TabDoc back into .htab text.
 
-import { hasLyrics, lineVerses, lyricOf } from '../verses';
+import { hasLyrics, isHeld, lineVerses, lyricOf } from '../verses';
 import { midiToName, type Spelling } from '../pitch';
 import type { HoleSound, Sound } from '../types';
 import { beatsPerBar, type BarEvent, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine, type TabMeta } from './types';
@@ -228,12 +228,15 @@ function lyricsText(line: TabLine, verse = 0): string | null {
   // Every note sung (not tied ones) and every sung rest ("_") takes a syllable.
   const notes = line.events.filter((e): e is NoteEvent | RestEvent => (e.kind === 'note' && !e.tied) || (e.kind === 'rest' && e.beats > EPS && isSung(e)));
   const syllable = (e: NoteEvent | RestEvent) => lyricOf(e, verse);
+  const held = (e: NoteEvent | RestEvent) => isHeld(e, verse);
   if (!notes.some(syllable)) return null;
+  // (Up to the last note with words — or holding them: "Oh _ _" keeps its holds.)
   let last = notes.length - 1;
-  while (last >= 0 && !syllable(notes[last])) last--;
+  while (last >= 0 && !syllable(notes[last]) && !held(notes[last])) last--;
   const parts: string[] = [];
   for (let k = 0; k <= last; k++) {
-    const syl = syllable(notes[k]) ?? '*';
+    // "_": holds the syllable before; "*": no words.
+    const syl = syllable(notes[k]) ?? (held(notes[k]) ? '_' : '*');
     // A syllable that is just a hyphen is written "\-" (a bare "-" would join two syllables).
     if (syl.trim() === '-') {
       parts.push('\\-');

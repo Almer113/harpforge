@@ -221,7 +221,7 @@ const LyricsLine = memo(function LyricsLine({
                   return i !== undefined && activeSet.has(i);
                 });
                 return (
-                  <span key={si} className={`ly-syl ${s.joined ? 'joined' : ''} ${on ? 'active' : ''} ${s.text ? '' : 'fill'}`}>
+                  <span key={si} className={`ly-syl ${s.joined ? 'joined' : ''} ${s.held ? 'held' : ''} ${on ? 'active' : ''} ${s.text ? '' : 'fill'}`}>
                     <span className="ly-notes">{s.notes.map((n, k) => column(n, k === 0 && !!s.text, ri === 0))}</span>
                     {s.text && (
                       // The words play from their note too. The note above is the button for the
@@ -242,6 +242,8 @@ const LyricsLine = memo(function LyricsLine({
                         {s.text}
                         {/* (Its own element: the mark of a note played along goes on ::after.) */}
                         {s.joined && <span className="ly-dash" aria-hidden />}
+                        {/* (Held over the notes after it: "Oh___".) */}
+                        {s.held && !s.joined && <span className="ly-hold" aria-hidden />}
                       </span>
                     )}
                   </span>

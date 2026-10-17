@@ -22,6 +22,8 @@ export interface Item {
   lyric?: string;
   /** Syllables in verses 2, 3… (see verses.ts). */
   verses?: (string | undefined)[];
+  /** The verses where it holds the syllable before it ("_"; see verses.ts). */
+  holds?: number[];
   /** Tied from the item before it (same sound, keeps sounding across the gap/bar). */
   tied?: boolean;
 }
@@ -147,6 +149,7 @@ export function fromDoc(doc: TabDoc): Song {
       if (sounds.length || chord || hasLyrics(ev)) {
         const item: Item = { start: t, dur: ev.beats, sounds, chord, lyric: ev.lyric };
         if (ev.verses) item.verses = [...ev.verses];
+        if (ev.holds) item.holds = [...ev.holds];
         if (ev.kind === 'note' && ev.tied) item.tied = true;
         cur.items.push(item);
       }
@@ -249,12 +252,14 @@ function itemEvent(it: Item, tie = false): TabEvent {
     if (it.chord) ev.chord = it.chord;
     if (it.lyric) ev.lyric = it.lyric;
     if (it.verses?.some(Boolean)) ev.verses = [...it.verses];
+    if (it.holds?.length) ev.holds = [...it.holds];
     return ev;
   }
   const r: RestEvent = { kind: 'rest', beats: it.dur };
   if (it.chord) r.chord = it.chord;
   if (it.lyric) r.lyric = it.lyric;
   if (it.verses?.some(Boolean)) r.verses = [...it.verses];
+  if (it.holds?.length) r.holds = [...it.holds];
   return r;
 }
 
@@ -298,6 +303,7 @@ export function placeItem(song: Song, m: number, item: Item): Song {
       delete piece.chord;
       delete piece.lyric;
       delete piece.verses;
+      delete piece.holds;
     }
     s = placeOne(s, at.m, piece);
     left -= take;
@@ -399,6 +405,7 @@ export function updateItem(song: Song, pos: Pos, patch: Partial<Omit<Item, 'star
   if (!target.chord) delete target.chord;
   if (!target.lyric) delete target.lyric;
   if (!target.verses?.some(Boolean)) delete target.verses;
+  if (!target.holds?.length) delete target.holds;
   if (!target.tied) delete target.tied;
   return s;
 }
@@ -568,6 +575,7 @@ export function setTie(song: Song, pos: Pos, on: boolean): Song {
   findItem(s2, pos)!.tied = true;
   delete findItem(s2, pos)!.lyric;
   delete findItem(s2, pos)!.verses;
+  delete findItem(s2, pos)!.holds;
   return s2;
 }
 
@@ -729,6 +737,7 @@ function rebar(
         delete piece.chord;
         delete piece.lyric;
         delete piece.verses;
+        delete piece.holds;
         if (!piece.sounds.length) break;
         piece.tied = true;
       }

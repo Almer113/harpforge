@@ -232,3 +232,8 @@
   display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px; white-space: nowrap;
   border: 1px solid var(--border-2); background: var(--panel-2); color: var(--text); font-size: 12px; font-weight: 600;
 }
+
+/* A held syllable ("_"): a hold line after the word in the Lyrics view, a short mark on cards. */
+.ly-syl.held .ly-text { display: flex; align-items: baseline; }
+.ly-hold { flex: 1; min-width: 14px; margin-left: 3px; align-self: flex-end; margin-bottom: 0.32em; border-bottom: 1.5px solid currentColor; opacity: 0.55; }
+.hold-mark { opacity: 0.5; letter-spacing: 0; }

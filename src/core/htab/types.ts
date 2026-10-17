@@ -18,6 +18,11 @@ export interface NoteEvent {
   /** Its syllables in verses 2, 3… (verses[0] is verse 2); see verses.ts. */
   verses?: (string | undefined)[];
   /**
+   * The verses (0 = verse 1) where it holds the syllable before it ("_" in the "w:" line:
+   * "Oh___"), rather than having no words ("*"). A hold takes no new syllable.
+   */
+  holds?: number[];
+  /**
    * Tied from the previous note: it keeps sounding instead of being played again
    * (written as a bare "~", e.g. "6~ | ~~ 5"). Its sounds are the previous note's.
    */
@@ -34,6 +39,11 @@ export interface RestEvent {
   /** Lyrics over a rest: used by chord sheets, where chords have no melody yet. */
   lyric?: string;
   verses?: (string | undefined)[];
+  /**
+   * The verses (0 = verse 1) where it holds the syllable before it ("_" in the "w:" line:
+   * "Oh___"), rather than having no words ("*"). A hold takes no new syllable.
+   */
+  holds?: number[];
   /** Written "_": the harp rests while a syllable is sung (the "w:" line counts it like a note). */
   sung?: boolean;
   /** Its bar starts an ending (see NoteEvent.ending). */

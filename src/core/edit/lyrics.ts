@@ -2,7 +2,7 @@
 // syllable, and what each key does. The keys are MuseScore's: Space goes on to the next note
 // (a new word), "-" goes on joined ("Twin-kle"), "_" holds the syllable over the next note.
 
-import { hasLyrics, lyricOf, setLyricOf } from '../verses';
+import { hasLyrics, isHeld, lyricOf, setHeld, setLyricOf } from '../verses';
 import { splitLyrics } from '../htab/parser';
 import { allPositions, cloneSong, EPS, findItem, measureSpan, updateItem, type Pos, type Song } from './model';
 
@@ -18,15 +18,31 @@ export function singable(song: Song): Pos[] {
   });
 }
 
-/** Sets several notes' syllables in verse `verse` at once (one copy of the song, however many). */
+/** A note's words in a verse: a syllable, a hold of the one before ("_"), or none. */
+export const HOLD = '_';
+
+/**
+ * Sets several notes' syllables in verse `verse` at once (one copy of the song, however
+ * many). `text` HOLD: the note holds the syllable before it; undefined: no words (nor hold).
+ */
 export function setLyrics(song: Song, changes: { pos: Pos; text: string | undefined }[], verse: number): Song {
   if (!changes.length) return song;
   const s = cloneSong(song);
   for (const { pos, text } of changes) {
     const it = findItem(s, pos);
-    if (it) setLyricOf(it, verse, text);
+    if (!it) continue;
+    if (text === HOLD) setHeld(it, verse, true);
+    else {
+      setHeld(it, verse, false);
+      setLyricOf(it, verse, text);
+    }
   }
   return s;
+}
+
+/** A note's words in verse `verse` as setLyrics takes them: its syllable, HOLD, or undefined. */
+function wordsOf(it: { lyric?: string; verses?: (string | undefined)[]; holds?: number[] }, verse: number): string | undefined {
+  return lyricOf(it, verse) ?? (isHeld(it, verse) ? HOLD : undefined);
 }
 
 const same = (a: Pos, b: Pos) => a.m === b.m && Math.abs(a.start - b.start) < EPS;
@@ -63,9 +79,13 @@ export function shownLyric(song: Song, pos: Pos, verse: number): { text: string;
 export function setLyric(song: Song, pos: Pos, verse: number, text: string | undefined): Song {
   const it = findItem(song, pos);
   if (!it) return song;
-  const copy = { lyric: it.lyric, verses: it.verses };
-  setLyricOf(copy, verse, text);
-  return updateItem(song, pos, verse === 0 ? { lyric: copy.lyric } : { verses: copy.verses });
+  const copy = { lyric: it.lyric, verses: it.verses, holds: it.holds };
+  if (text === HOLD) setHeld(copy, verse, true);
+  else {
+    setHeld(copy, verse, false);
+    setLyricOf(copy, verse, text);
+  }
+  return updateItem(song, pos, { lyric: copy.lyric, verses: copy.verses, holds: copy.holds });
 }
 
 export type LyricKey = 'next' | 'join' | 'hold' | 'prev' | 'done';
@@ -97,7 +117,7 @@ export function typeLyric(song: Song, pos: Pos, verse: number, typed: string, wa
       // Typed: this syllable carries on over the next note. Empty: this note is the held one.
       const held = text ? stepSingable(s, pos, 1) : pos;
       if (!held) return { song: s, next: null };
-      s = setLyric(s, held, verse, undefined);
+      s = setLyric(s, held, verse, HOLD);
       return { song: s, next: stepSingable(s, held, 1) };
     }
     default:
@@ -128,13 +148,14 @@ export function fillLyrics(song: Song, from: Pos | null, verse: number, text: st
   const start = lyricStart(song, from ?? undefined);
   const notes = start ? singable(song).filter((p) => p.m > start.m || (p.m === start.m && p.start >= start.start - EPS)) : [];
   const placed = syllables.slice(0, notes.length).map((syl, k) => ({ pos: notes[k], syllable: syl === '*' || syl === '_' ? undefined : syl }));
-  const s = setLyrics(song, placed.map((p) => ({ pos: p.pos, text: p.syllable })), verse);
+  // ("_": the note holds the syllable before; "*": no words.)
+  const s = setLyrics(song, placed.map((p, k) => ({ pos: p.pos, text: syllables[k] === '_' ? HOLD : p.syllable })), verse);
   return { song: s, placed, extra: syllables.slice(notes.length).filter((x) => x !== '*' && x !== '_') };
 }
 
 /** Clears verse `verse`'s syllables on `positions` (every note when null). */
 export function clearLyrics(song: Song, positions: Pos[] | null, verse: number): Song {
-  return setLyrics(song, (positions ?? allPositions(song)).filter((p) => lyricOf(findItem(song, p) ?? {}, verse)).map((pos) => ({ pos, text: undefined })), verse);
+  return setLyrics(song, (positions ?? allPositions(song)).filter((p) => wordsOf(findItem(song, p) ?? {}, verse)).map((pos) => ({ pos, text: undefined })), verse);
 }
 
 /**
@@ -146,9 +167,11 @@ export function shiftLyrics(song: Song, from: Pos, verse: number, dir: 1 | -1): 
   const start = lyricStart(song, from);
   if (!start) return { song, lost: undefined };
   const notes = singable(song).filter((p) => p.m > start.m || (p.m === start.m && p.start >= start.start - EPS));
-  const syls = notes.map((p) => lyricOf(findItem(song, p)!, verse));
+  // (Holds move with the syllables.)
+  const syls = notes.map((p) => wordsOf(findItem(song, p)!, verse));
   const moved = dir === 1 ? [undefined, ...syls.slice(0, -1)] : [...syls.slice(1), undefined];
-  const lost = dir === 1 ? syls[syls.length - 1] : syls[0];
+  const gone = dir === 1 ? syls[syls.length - 1] : syls[0];
+  const lost = gone === HOLD ? undefined : gone;
   const s = setLyrics(song, notes.flatMap((pos, k) => (moved[k] !== syls[k] ? [{ pos, text: moved[k] }] : [])), verse);
   return { song: s, lost };
 }

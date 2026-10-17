@@ -1,6 +1,6 @@
 // Visual tab sheet: lines → measures → note cards, sized by duration.
 
-import { lineShown, lineVerse, lineVerses, lyricOf } from '../core/verses';
+import { isHeld, lineShown, lineVerse, lineVerses, lyricOf } from '../core/verses';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { BarStyle, NoteEvent, RestEvent, TabEvent } from '../core/htab/types';
 import { midiToName, keySpelling, type Spelling } from '../core/pitch';
@@ -385,12 +385,12 @@ const TabCard = memo(function TabCard({
         </span>
       )}
       {showLyrics && verses === '0' ? (
-        <span className="card-lyric">{ev.lyric ?? ''}</span>
+        <span className="card-lyric">{ev.lyric ?? (isHeld(ev, 0) ? <HoldMark /> : '')}</span>
       ) : showLyrics ? (
         <span className={`card-lyric verses ${singing >= 0 ? 'singing' : ''}`}>
           {verses.split(',').map((v) => (
             <span key={v} className={`verse-syl ${Number(v) === singing ? 'sung' : ''}`} data-n={numbered.split(',').includes(v) ? `${Number(v) + 1}.` : undefined}>
-              {lyricOf(ev, Number(v)) ?? ''}
+              {lyricOf(ev, Number(v)) ?? (isHeld(ev, Number(v)) ? <HoldMark /> : '')}
             </span>
           ))}
         </span>
@@ -474,6 +474,15 @@ function TieDashes({ beats }: { beats: number }) {
       {Array.from({ length: n }, (_, k) => (
         <span key={k} className="jp-dash">–</span>
       ))}
+    </span>
+  );
+}
+
+/** Under a note that holds the syllable before it ("_"): a short line. */
+function HoldMark() {
+  return (
+    <span className="hold-mark" title="Holds the syllable before (_)">
+      —
     </span>
   );
 }

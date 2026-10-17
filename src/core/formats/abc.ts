@@ -5,7 +5,7 @@
 // chord symbols, rests, bars, lyrics (w:) and parts. Only the first tune and first
 // voice are read.
 
-import { lineShown, lyricOf, setLyricOf, songVerses } from '../verses';
+import { isHeld, lineShown, lyricOf, setHeld, setLyricOf, songVerses } from '../verses';
 import type { Harmonica } from '../instruments';
 import { holeSoundText } from '../htab/serializer';
 import { beatsPerBar, type BarEvent, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine } from '../htab/types';
@@ -152,6 +152,9 @@ export function parseAbc(text: string): Imported {
         continue;
       }
       if (tok === '_' || tok === '*' || tok === '-') {
+        // ("_": the syllable before goes on over this note; "*" and a lone "-": no words.)
+        const held = notes[k];
+        if (tok === '_' && held && !held.tied) setHeld(held, verse, true);
         k++;
         continue;
       }
@@ -747,7 +750,7 @@ export function writeAbc(doc: TabDoc, harp?: Harmonica, opts: AbcExportOptions =
           const syl = lyricOf(ev, v);
           // (A syllable that's just a hyphen, or one ending in a literal "‐", is written "\-".)
           const text = syl?.trim();
-          lyr[k].push(!text ? '*' : text === '-' ? '\\-' : text.replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-').replace(/\u2010/g, '\\-').replace(/[*_|]/g, '').replace(/%/g, '\\%'));
+          lyr[k].push(!text ? (isHeld(ev, v) ? '_' : '*') : text === '-' ? '\\-' : text.replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-').replace(/\u2010/g, '\\-').replace(/[*_|]/g, '').replace(/%/g, '\\%'));
         });
       tabs.push(tabToken(ev));
     }

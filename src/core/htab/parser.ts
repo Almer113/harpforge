@@ -4,7 +4,7 @@
 // and accepts common internet tab spellings (+4, 4D, -3b, <5 ...).
 
 import { docBars, ordinal } from '../endings';
-import { setLyricOf } from '../verses';
+import { setHeld, setLyricOf } from '../verses';
 import { parseNoteName } from '../pitch';
 import type { Breath, HoleSound, Sound } from '../types';
 import {
@@ -403,7 +403,9 @@ function attachLyrics(line: TabLine, text: string, verse: number): number {
     if (!((ev.kind === 'note' && !ev.tied) || (ev.kind === 'rest' && ev.sung))) continue;
     if (k >= syllables.length) break;
     const syl = syllables[k++];
-    if (syl !== '*' && syl !== '_') setLyricOf(ev, verse, syl);
+    // ("_": the syllable before goes on over this note; "*": no words on it.)
+    if (syl === '_') setHeld(ev, verse, true);
+    else if (syl !== '*') setLyricOf(ev, verse, syl);
   }
   return syllables.slice(k).filter((syl) => syl !== '*').length;
 }

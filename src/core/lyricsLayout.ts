@@ -2,7 +2,7 @@
 // with the notes sung on it (its own note first, then any held over it). Notes before the
 // line's first syllable, or in a line with no words, are fills: one group per bar.
 
-import { lyricOf } from './verses';
+import { isHeld, lyricOf } from './verses';
 import type { TabLine } from './htab/types';
 
 /** A column above a syllable: a played note, or a rest that's sung or carries a chord. */
@@ -19,6 +19,8 @@ export interface LySyllable {
   text: string;
   /** Continues into the next syllable of the same word ("Twin-" of "Twin-kle"). */
   joined: boolean;
+  /** Held over notes after its own ("_": "Oh___"): drawn with a hold line. */
+  held?: boolean;
 }
 
 export interface LyWord {
@@ -59,6 +61,7 @@ export function lyricsLine(line: TabLine, verse = 0): LyWord[] {
       return;
     }
     // No words on it: held over the syllable before (a melisma), or a fill.
+    if (syl?.text && (ev.kind === 'note' || ev.kind === 'rest') && isHeld(ev, verse)) syl.held = true;
     if (!syl) {
       syl = { notes: [], text: '', joined: false };
       word = { syllables: [syl] };

@@ -68,7 +68,7 @@ import { LYRIC_KEYS, LyricInput, LyricsButton, openRestBlock, RestChordInput, st
 import { FillLyricsDialog } from './FillLyrics';
 import { clearLyrics, restSlot, shiftLyrics, songVerseCount } from '../../core/edit/lyrics';
 import { endingLabel, measureEndings, ordinal } from '../../core/endings';
-import { lyricOf } from '../../core/verses';
+import { isHeld, lyricOf } from '../../core/verses';
 
 // ---- Helpers shared with the inspector ------------------------------------------------
 
@@ -1343,7 +1343,8 @@ const MeasureView = memo(function MeasureView(p: MeasureProps) {
             const pos = { m: mi, start: it.start };
             // Chords and lyrics run on past a narrow card, up to the next chord or lyric.
             const laneEnd = Math.max(cap, len);
-            const has = (o: Item, key: 'chord' | 'lyric') => (key === 'chord' ? o.chord : lyricOf(o, p.verse)) !== undefined;
+            // (A held note — "_" — stops the lane like words do: its hold mark is shown there.)
+            const has = (o: Item, key: 'chord' | 'lyric') => (key === 'chord' ? o.chord !== undefined : lyricOf(o, p.verse) !== undefined || isHeld(o, p.verse));
             const nextWith = (key: 'chord' | 'lyric') => meas.items.reduce((best, o) => (o.start > it.start + EPS && has(o, key) && o.start < best ? o.start : best), laneEnd);
             const w = cardW(it.dur);
             const lod = it.dur <= EPS ? '' : detailLevel(w, glyphEms(it.sounds, it.sounds.map((s) => (s.type === 'pitch' ? s.midi : soundPitch(harp, s))), asNotes, flats), it.sounds.length > 1);
@@ -1382,7 +1383,7 @@ const MeasureView = memo(function MeasureView(p: MeasureProps) {
                   </span>
                 )}
                 <span className="ve-lyric" style={{ maxWidth: lyricRoom }} title={lyric?.cut && !lod ? words : undefined}>
-                  {lyric?.shown ?? ''}
+                  {lyric?.shown ?? (isHeld(it, p.verse) ? <span className="hold-mark" title="Holds the syllable before (_)">—</span> : '')}
                 </span>
                 {p.typing === at(it.start) && <LyricInput key={p.verse} pos={pos} verse={p.verse} />}
                 {it.dur > EPS && <span className="ve-resize" title="Drag to change the length" />}

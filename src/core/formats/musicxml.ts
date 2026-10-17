@@ -1,6 +1,6 @@
 // MusicXML (partwise) import & export. Import reads the first part and first voice.
 
-import { hasLyrics, lineVerses, lyricOf, setLyricOf } from '../verses';
+import { hasLyrics, isHeld, lineVerses, lyricOf, setHeld, setLyricOf } from '../verses';
 import { strFromU8, unzipSync } from 'fflate';
 import { isNoChord, parseChord } from '../chords';
 import type { Harmonica } from '../instruments';
@@ -55,14 +55,38 @@ export function parseMusicXml(xml: string): Imported {
   // (Numbered: verse n is number n, an empty verse 1 included; named: in order of appearance.)
   const numbered = numbers.every((n) => /^\d+$/.test(n) && Number(n) >= 1);
   const verseOf = new Map(numbers.map((n, k) => [n, numbered ? Number(n) - 1 : k]));
+  /**
+   * Each verse's extender under way: a syllable with <extend> holds over the notes after it
+   * ("Oh___") — those with an extend of their own, or (as most programs write it) with no
+   * words in that verse — up to the next words, a rest, or an extend "stop".
+   */
+  const extending = new Map<number, boolean>();
   /** A note's (or rest's) lyric lines, as verses. */
   const readLyrics = (el: Element, ev: NoteEvent | RestEvent) => {
+    const seen = new Set<number>();
     for (const lyric of el.getElementsByTagName('lyric')) {
       if (lyric.getAttribute('name') === 'tab') continue;
       const v = verseOf.get(lyric.getAttribute('number') ?? '1');
+      if (v === undefined) continue;
       const t = text(lyric, 'text');
       const syl = text(lyric, 'syllabic');
-      if (v !== undefined && t && !lyricOf(ev, v)) setLyricOf(ev, v, t + (syl === 'begin' || syl === 'middle' ? '-' : ''));
+      const extend = lyric.getElementsByTagName('extend')[0];
+      const goesOn = !!extend && extend.getAttribute('type') !== 'stop';
+      if (t) {
+        if (!lyricOf(ev, v)) setLyricOf(ev, v, t + (syl === 'begin' || syl === 'middle' ? '-' : ''));
+        extending.set(v, goesOn);
+        seen.add(v);
+      } else if (extend && ev.kind === 'note') {
+        setHeld(ev, v, true);
+        extending.set(v, goesOn);
+        seen.add(v);
+      }
+    }
+    for (const [v, on] of extending) {
+      if (!on || seen.has(v)) continue;
+      // (A rest ends it; a note with no words in that verse is held.)
+      if (ev.kind === 'rest') extending.set(v, false);
+      else setHeld(ev, v, true);
     }
   };
 
@@ -490,6 +514,18 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
   // A lyric line per verse (number 1, 2, …), then the tab; each verse's word under way.
   const verses = Math.max(1, ...doc.lines.map(lineVerses));
   const wordOpen: boolean[] = Array.from({ length: verses }, () => false);
+  // Each verse's syllables held over the notes after them ("_"): their lyric starts an
+  // extender (<extend type="start"/>); the held notes go on with it.
+  const holdStarts = new Map<object, Set<number>>();
+  for (let v = 0; v < verses; v++) {
+    let lastSyllable: object | null = null;
+    for (const line of doc.lines)
+      for (const ev of line.events) {
+        if (ev.kind === 'bar') continue;
+        if (lyricOf(ev, v)) lastSyllable = ev;
+        else if (isHeld(ev, v) && lastSyllable) holdStarts.set(lastSyllable, (holdStarts.get(lastSyllable) ?? new Set()).add(v));
+      }
+  }
   // A short first bar is a pickup: numbered 0 and marked implicit, as notation programs expect.
   const firstLen = measures[0]?.pieces.reduce((a, p) => a + p.beats, 0) ?? 0;
   const pickup = measures.length > 1 && firstLen > 1e-6 && firstLen < bpb - 1e-6;
@@ -524,12 +560,16 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
         let xml = '';
         for (let v = 0; v < verses; v++) {
           const lyric = lyricOf(ev, v);
-          if (!lyric) continue;
+          if (!lyric) {
+            if (isHeld(ev, v)) xml += `<lyric number="${v + 1}"><extend type="continue"/></lyric>`;
+            continue;
+          }
           const hyphen = lyric.length > 1 && lyric.endsWith('-');
           const word = hyphen ? lyric.slice(0, -1) : lyric;
           const syllabic = wordOpen[v] ? (hyphen ? 'middle' : 'end') : hyphen ? 'begin' : 'single';
           wordOpen[v] = hyphen;
-          xml += `<lyric number="${v + 1}"><syllabic>${syllabic}</syllabic><text>${esc(word)}</text></lyric>`;
+          const extend = holdStarts.get(ev)?.has(v) ? '<extend type="start"/>' : '';
+          xml += `<lyric number="${v + 1}"><syllabic>${syllabic}</syllabic><text>${esc(word)}</text>${extend}</lyric>`;
         }
         return xml;
       };
