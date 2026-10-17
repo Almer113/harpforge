@@ -162,12 +162,14 @@ export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Impor
       if (type === 0x90 || type === 0x80) {
         const note = r.u8();
         const vel = r.u8();
+        // (Notes held by channel and pitch: the same pitch on two channels are two notes.)
+        const key = channel * 128 + note;
         if (type === 0x90 && vel > 0) {
-          const list = open.get(note) ?? [];
+          const list = open.get(key) ?? [];
           list.push({ start: tick, channel });
-          open.set(note, list);
+          open.set(key, list);
         } else {
-          const list = open.get(note);
+          const list = open.get(key);
           const on = list?.shift();
           if (on) {
             track.notes.push({ start: on.start, end: tick, midi: note, channel: on.channel });
@@ -197,7 +199,7 @@ export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Impor
     let mono = 0;
     for (let i = 1; i < sorted.length; i++) if (sorted[i].start >= sorted[i - 1].end - division / 8) mono++;
     const avg = sorted.reduce((a, n) => a + n.midi, 0) / sorted.length;
-    const named = /harmonica|harp|melody|lead|vocal|voice|solo|tune/i.test(tr.name) ? 1000 : 0;
+    const named = /harmonica|harp|melody|lead|vocal|voice|solo|tune/i.test(tr.name) ? 1000 : /bass|accomp|drum|perc|chord|rhythm|pad/i.test(tr.name) ? -500 : 0;
     return named + mono + avg / 10;
   };
   candidates.sort((a, b) => score(b) - score(a));
@@ -205,7 +207,9 @@ export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Impor
   if (candidates.length > 1) warnings.push(`Imported “${chosen.label}” as the melody (${candidates.length} parts with notes: pick another under Part).`);
 
   // One tempo: the one the song is played at longest (from each change to the next, or the end).
-  const sortedTempos = [...tempos].sort((a, b) => a.tick - b.tick).filter((x, k, all) => all[k + 1]?.tick !== x.tick);
+  // (120 until the first tempo given; one given after the last note isn't played at.)
+  const sortedTempos = [...tempos].sort((a, b) => a.tick - b.tick).filter((x, k, all) => all[k + 1]?.tick !== x.tick && (x.tick < lastTick || k === 0));
+  if (sortedTempos[0] && sortedTempos[0].tick > 0) sortedTempos.unshift({ tick: 0, us: 500_000 });
   const bpm = (us: number) => Math.round(60_000_000 / us);
   const lasting = new Map<number, number>();
   sortedTempos.forEach((x, k) => {
@@ -262,12 +266,21 @@ export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Impor
   const clusters = quantize(notes, gridAt, (a, b) => a.type === 'pitch' && b.type === 'pitch' && a.midi === b.midi, snapEnd);
   for (const c of clusters) c.sounds.sort((a, b) => (a.type === 'pitch' && b.type === 'pitch' ? a.midi - b.midi : 0));
   const events = clustersToEvents(clusters, beatsPerBar(meta));
-  placeMidiWords(events, lyricEvents, textEvents, tracks, division, warnings);
+  // (The tab starts at the bar of the first note.)
+  const origin = clusters.length ? Math.floor(clusters[0].start / beatsPerBar(meta)) * beatsPerBar(meta) : 0;
+  placeMidiWords(events, origin, lyricEvents, textEvents, tracks, division, warnings);
   const parts = candidates.length > 1 ? candidates.map((c) => ({ id: c.id, label: c.label })) : undefined;
   return { doc: { meta, lines: wrapEvents(events, 4) }, warnings, format: 'MIDI', parts, part: chosen.id, choosePart: (id) => parseMidi(data, { part: id }) };
 }
 
-const decodeText = (d: Uint8Array) => new TextDecoder().decode(d);
+/** Text as UTF-8, or else as older files write it (Windows' Western European). */
+const decodeText = (d: Uint8Array) => {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(d);
+  } catch {
+    return new TextDecoder('windows-1252').decode(d);
+  }
+};
 
 /**
  * The file's words on the notes (each syllable on the note starting nearest it, within a
@@ -276,9 +289,9 @@ const decodeText = (d: Uint8Array) => new TextDecoder().decode(d);
  * such). A syllable starting with a space (or a line) starts a word; one that doesn't goes on
  * the word before ("Twin-kle").
  */
-function placeMidiWords(events: TabEvent[], lyrics: { tick: number; text: string }[], texts: { tick: number; text: string; track: string }[], tracks: RawTrack[], division: number, warnings: string[]) {
+function placeMidiWords(events: TabEvent[], origin: number, lyrics: { tick: number; text: string }[], texts: { tick: number; text: string; track: string }[], tracks: RawTrack[], division: number, warnings: string[]) {
   const heads: { at: number; ev: NoteEvent | RestEvent }[] = [];
-  let at = 0;
+  let at = origin;
   for (const e of events) {
     if (e.kind === 'bar') continue;
     if (e.kind === 'note' && !e.tied) heads.push({ at, ev: e });
@@ -298,10 +311,15 @@ function placeMidiWords(events: TabEvent[], lyrics: { tick: number; text: string
     const ev = nearest(t.tick, false);
     if (ev && !ev.chord) ev.chord = sym;
   }
-  const kar = !lyrics.length && texts.some((t) => /^[/\\@]/.test(t.text) || /words|lyric|karaoke/i.test(tracks[Number(t.track)]?.name ?? ''));
-  const words = (lyrics.length ? lyrics : kar ? texts.filter((t) => !t.text.startsWith('@') && !isChordSymbol(t.text.trim())) : [])
-    .filter((w) => w.text.replace(/[\s/\\]/g, ''))
-    .sort((a, b) => a.tick - b.tick);
+  // A karaoke file's words: the texts of its words track (named so, or with lines started by "/" or "\").
+  const wordTracks = new Set(texts.filter((t) => /^[/\\]/.test(t.text) || /words|lyric|karaoke/i.test(tracks[Number(t.track)]?.name ?? '')).map((t) => t.track));
+  const all = (lyrics.length ? lyrics : texts.filter((t) => wordTracks.has(t.track) && !t.text.startsWith('@') && !isChordSymbol(t.text.trim()))).sort((a, b) => a.tick - b.tick);
+  // (An event that only breaks the line ends the word before it.)
+  const words: { tick: number; text: string }[] = [];
+  for (const w of all) {
+    if (w.text.replace(/[\s/\\]/g, '')) words.push(w);
+    else if (words.length) words[words.length - 1] = { ...words[words.length - 1], text: `${words[words.length - 1].text.trimEnd()} ` };
+  }
   if (!words.length) return;
   // (Some files mark no word breaks at all: each syllable is then a word.)
   const marked = words.some((w) => /^[\s/\\]|\s$|-$/.test(w.text));
@@ -321,7 +339,8 @@ function placeMidiWords(events: TabEvent[], lyrics: { tick: number; text: string
     ev.lyric = ev.lyric ? `${ev.lyric.replace(/-$/, '')}${syl}` : syl;
     placed++;
   });
-  if (placed) warnings.push(`Put the file’s words on the notes (${placed} syllable${placed === 1 ? '' : 's'}${missed ? `; ${missed} with no note under ${missed === 1 ? 'it' : 'them'} left out` : ''}).`);
+  if (!placed) warnings.push(`The file’s words (${missed} syllable${missed === 1 ? '' : 's'}) didn’t line up with this part’s notes: left out.`);
+  else warnings.push(`Put the file’s words on the notes (${placed} syllable${placed === 1 ? '' : 's'}${missed ? `; ${missed} with no note under ${missed === 1 ? 'it' : 'them'} left out` : ''}).`);
 }
 
 // ---- Writing --------------------------------------------------------------------

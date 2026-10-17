@@ -73,7 +73,7 @@ export function parseMuseScore(xml: string, opts: { part?: string } = {}): Impor
     for (const v of [...voices].sort()) options.push({ id: `${id}:${v}`, label: base + (voices.size > 1 ? ` · voice ${v + 1}` : ''), staff, voice: v, name: info?.name ?? '' });
   }
   if (!options.length) throw new Error('No notes found in this MuseScore file.');
-  const read = (o: (typeof options)[number]) => readStaff(score, o.staff, o.voice);
+  const read = (o: (typeof options)[number]) => readStaff(score, o.staff, o.voice, staves[0]);
   let chosen = options.find((o) => o.id === opts.part);
   let result = chosen ? read(chosen) : null;
   if (!chosen || !result) {
@@ -100,8 +100,11 @@ export function parseMuseScore(xml: string, opts: { part?: string } = {}): Impor
 
 const isGrace = (chord: Element) => kids(chord).some((c) => /^(acciaccatura|appoggiatura|grace\d+(after)?)$/.test(c.nodeName));
 
-/** One staff's one voice, as a document. */
-function readStaff(score: Element, staff: Element, voiceNo: number): Imported {
+/**
+ * One staff's one voice, as a document. (Repeats, endings, tempo, rehearsal marks and line
+ * breaks are the whole score's: MuseScore keeps them on the top staff.)
+ */
+function readStaff(score: Element, staff: Element, voiceNo: number, top: Element): Imported {
   const warnings: string[] = [];
   const warned = new Set<string>();
   const warnOnce = (w: string) => {
@@ -138,14 +141,24 @@ function readStaff(score: Element, staff: Element, voiceNo: number): Imported {
   const holding = new Map<number, number>();
   let lastNote: NoteEvent | null = null;
 
-  for (const measure of kids(staff, 'Measure')) {
+  const topMeasures = kids(top, 'Measure');
+  kids(staff, 'Measure').forEach((measure, mi) => {
     const len = fraction(measure.getAttribute('len') ?? undefined);
     const voices = kids(measure, 'voice');
     const voice = voices.length ? voices[voiceNo] : voiceNo === 0 ? measure : undefined;
-    // Settings and marks are on the first voice (and the measure).
+    // Settings and marks are on the first voice (and the measure); the score's on the top staff's.
     const first = voices[0] ?? measure;
-    if (kid(measure, 'LayoutBreak') && val(kid(measure, 'LayoutBreak')!, 'subtype') === 'line') explicitBreaks = true;
-    for (const el of kids(first)) {
+    const sysMeasure = topMeasures[mi] ?? measure;
+    const sysFirst = kids(sysMeasure, 'voice')[0] ?? sysMeasure;
+    // (Looked for on this staff too, for files that keep them there.)
+    const sys = sysMeasure === measure ? [measure] : [sysMeasure, measure];
+    const sysVoices = sysFirst === first ? [first] : [sysFirst, first];
+    const sysKid = (name: string) => sys.map((m) => kid(m, name)).find(Boolean);
+    const layoutBreak = sysKid('LayoutBreak');
+    if (layoutBreak && val(layoutBreak, 'subtype') === 'line') explicitBreaks = true;
+    // (The time and key from this staff; tempo and rehearsal marks from the top one too.)
+    const marks = [...kids(first), ...(sysFirst === first ? [] : kids(sysFirst).filter((e) => e.nodeName === 'Tempo' || e.nodeName === 'RehearsalMark'))];
+    for (const el of marks) {
       if (el.nodeName === 'TimeSig') {
         const t = `${val(el, 'sigN')}/${val(el, 'sigD')}`;
         if (!timeSet) {
@@ -173,13 +186,13 @@ function readStaff(score: Element, staff: Element, voiceNo: number): Imported {
       pendingSection = undefined;
     }
     const events: TabEvent[] = [];
-    if (kid(measure, 'startRepeat')) events.push({ kind: 'bar', style: 'repeat-start' });
+    if (sysKid('startRepeat')) events.push({ kind: 'bar', style: 'repeat-start' });
     let pos = 0;
     let tuplet = 1;
     let pendingChord: string | undefined;
     let pendingEnding: number[] | undefined;
     // (The ending started in this measure, read from its spanner.)
-    for (const sp of [...first.getElementsByTagName('Spanner')].filter((s) => s.getAttribute('type') === 'Volta' && kid(s, 'Volta'))) {
+    for (const sp of sysVoices.flatMap((v) => [...v.getElementsByTagName('Spanner')]).filter((s) => s.getAttribute('type') === 'Volta' && kid(s, 'Volta'))) {
       const v = kid(sp, 'Volta')!;
       const nums = (val(v, 'endings') ?? val(v, 'text') ?? '').split(/[^\d]+/).filter(Boolean).map(Number);
       // (On the bar it starts: an ending runs on to its repeat sign, as the tab reads it.)
@@ -233,7 +246,8 @@ function readStaff(score: Element, staff: Element, voiceNo: number): Imported {
             // The words, a verse each (numbered from 0); a syllable held on over the notes after it.
             const held = new Set<number>();
             for (const [v, left] of holding) {
-              if (left > 1e-6) {
+              // (Held over each note starting before the syllable's end — or right at it: the last note held.)
+              if (left > -1e-6) {
                 setHeld(ev, v, true);
                 held.add(v);
                 holding.set(v, left - beats);
@@ -247,8 +261,10 @@ function readStaff(score: Element, staff: Element, voiceNo: number): Imported {
               if (!syl) continue;
               setLyricOf(ev, v, syl);
               if (held.has(v)) setHeld(ev, v, false);
-              const ticks = Number(val(ly, 'ticks') ?? '0') || (fraction(val(ly, 'ticks_f')) ?? 0) * (division / 4);
-              if (ticks > 0) holding.set(v, ticks / division - beats);
+              // (How long it's held: in ticks, or as a fraction of a whole note — MuseScore 4.)
+              const ticks = Number(val(ly, 'ticks') ?? '0');
+              const hold = ticks > 0 ? ticks / division : (fraction(val(ly, 'ticks_f')) ?? 0);
+              if (hold > 0) holding.set(v, hold - beats);
             }
             lastNote = ev;
           }
@@ -276,7 +292,7 @@ function readStaff(score: Element, staff: Element, voiceNo: number): Imported {
       if (pendingEnding && !events.some((e) => e.kind !== 'bar')) rest.ending = pendingEnding;
       events.push(rest);
     }
-    const endRepeat = kid(measure, 'endRepeat');
+    const endRepeat = sysKid('endRepeat');
     const barSub = [...first.getElementsByTagName('BarLine')].map((b) => val(b, 'subtype')).find(Boolean);
     let style: BarStyle = 'single';
     if (endRepeat) style = 'repeat-end';
@@ -286,10 +302,10 @@ function readStaff(score: Element, staff: Element, voiceNo: number): Imported {
     events.push({ kind: 'bar', style, ...(style === 'repeat-end' && times > 2 ? { times } : {}) });
     line.push(...events);
     barsInLine++;
-    const breakHere = kid(measure, 'LayoutBreak') ? val(kid(measure, 'LayoutBreak')!, 'subtype') === 'line' || val(kid(measure, 'LayoutBreak')!, 'subtype') === 'page' : false;
+    const breakHere = layoutBreak ? val(layoutBreak, 'subtype') === 'line' || val(layoutBreak, 'subtype') === 'page' : false;
     if (breakHere || (!explicitBreaks && barsInLine >= 4)) closeLine();
     at += full;
-  }
+  });
   closeLine();
   // One tempo: the one played longest.
   if (tempos.length) {

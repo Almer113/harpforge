@@ -109,7 +109,7 @@ export function parseGp345(bytes: Uint8Array, opts: { part?: string } = {}): Imp
   const head = r.byteText(30);
   const m = /PRO [vL](\d)\.(\d\d)/.exec(head);
   const ver = m ? Number(m[1]) * 100 + Number(m[2]) : 0;
-  if (!head.startsWith('FICHIER GUITAR PRO') || ver < 300 || ver >= 600) throw new Error(/GUITARE/.test(head) ? 'Guitar Pro 1–2 files aren’t read: save the song from a newer Guitar Pro, or export it as MusicXML.' : BROKEN);
+  if (!head.startsWith('FICHIER GUITAR PRO') || ver < 300 || ver >= 600) throw new Error(/GUITARE|PRO v[12]\./.test(head) ? 'Guitar Pro 1–2 files aren’t read: save the song from a newer Guitar Pro, or export it as MusicXML.' : BROKEN);
 
   // The song.
   const title = r.intByteText();

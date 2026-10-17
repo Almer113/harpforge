@@ -205,14 +205,12 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 - **Phase 18:** the Contour view.
 - **Phase 19:** chord sheets — what each chord becomes on the harmonica, and fully playable
   chords to play instead.
+- **Phase 20:** file formats — picking the part, tune or voice with the melody (ABC,
+  MusicXML, MIDI, MuseScore, Guitar Pro); ABC `W:` verses; MIDI words, tempo changes, and
+  export with repeats played out and the backing; ChordPro `{chorus}`; every verse in the
+  ChordPro, numbered-notation and plain-text exports; MuseScore 3–4 and Guitar Pro 3–8 import.
 
-**Planned**
-
-20. File formats: ABC `W:` verses and voice choice; MusicXML part choice and timewise
-    files; MIDI lyrics, track choice, tempo changes (the longest-lasting tempo kept, with a
-    warning), export with repeats played out and the backing; ChordPro `{chorus}`; every
-    verse in ChordPro, numbered notation and plain text; chords in numbered notation;
-    MuseScore and Guitar Pro (7–8, 3–5) import.
+Nothing more is planned for now.
 
 **Deferred** (for later, by choice): set lists; folders and tags; a bend trainer; phone
 and tablet layouts; HTTPS for other devices (microphone and clipboard there); starting the

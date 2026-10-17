@@ -62,37 +62,59 @@ export function parseGuitarPro(xml: string, opts: { part?: string } = {}): Impor
   const bars = g.byId('Bars', 'Bar');
   const voices = g.byId('Voices', 'Voice');
   const beats = g.byId('Beats', 'Beat');
-  // Each track, and each of its voices with notes in it.
+  // Each track's staves (a master bar lists a bar for each staff, track by track), and each
+  // staff's voices with notes in it; not the drums.
   const options: GpOption[] = [];
+  let staffAt = 0;
   tracks.forEach((track, ti) => {
+    const staves = Math.max(1, kids(kid(track, 'Staves'), 'Staff').length);
+    const first = staffAt;
+    staffAt += staves;
+    if (isDrums(track)) return;
     const name = val(track, 'Name') ?? '';
-    const used = new Set<number>();
-    for (const mb of masterBars) {
-      const bar = bars.get(String(ids(val(mb, 'Bars'))[ti]));
-      ids(val(bar, 'Voices')).forEach((vid, k) => {
-        if (vid < 0) return;
-        if (ids(val(voices.get(String(vid)), 'Beats')).some((b) => kid(beats.get(String(b)), 'Notes'))) used.add(k);
-      });
-    }
-    const label = name || `Track ${ti + 1}`;
-    for (const v of [...used].sort()) {
-      options.push({ id: `${ti}:${v}`, label: label + (used.size > 1 ? ` · voice ${v + 1}` : ''), name, read: () => songToDoc(readTrack(g, ti, v), 'Guitar Pro') });
+    for (let st = 0; st < staves; st++) {
+      const used = new Set<number>();
+      for (const mb of masterBars) {
+        const bar = bars.get(String(ids(val(mb, 'Bars'))[first + st]));
+        ids(val(bar, 'Voices')).forEach((vid, k) => {
+          if (vid < 0) return;
+          if (ids(val(voices.get(String(vid)), 'Beats')).some((b) => kid(beats.get(String(b)), 'Notes'))) used.add(k);
+        });
+      }
+      const label = (name || `Track ${ti + 1}`) + (staves > 1 ? ` · staff ${st + 1}` : '');
+      for (const v of [...used].sort()) {
+        const id = staves > 1 ? `${ti}.${st}:${v}` : `${ti}:${v}`;
+        options.push({ id, label: label + (used.size > 1 ? ` · voice ${v + 1}` : ''), name, read: () => songToDoc(readTrack(g, ti, st, first + st, v), 'Guitar Pro') });
+      }
     }
   });
   return pickPart(options, opts.part, (id) => parseGuitarPro(xml, { part: id }));
 }
 
-/** One track's one voice. */
-function readTrack(g: Gpif, ti: number, voiceNo: number): GpSong {
+/** A drum kit's track (its notes are drums, not pitches). */
+const isDrums = (track: Element) => val(kid(track, 'InstrumentSet'), 'Type') === 'drumKit' || val(kid(track, 'MidiConnection'), 'PrimaryChannel') === '9';
+
+/** A tempo automation's beats a minute, in quarter notes ("60 3": 60 dotted quarters). */
+const BEAT_UNIT = [1, 0.5, 1, 1.5, 2, 3];
+const quarterBpm = (value: string) => {
+  const [bpm, unit] = value.split(/\s+/).map(Number);
+  return Math.round(bpm * (BEAT_UNIT[unit] ?? 1));
+};
+
+/** One staff's one voice (`st` the track's staff, `bi` its place in the master bars' lists). */
+function readTrack(g: Gpif, ti: number, st: number, bi: number, voiceNo: number): GpSong {
   const score = kid(g.root, 'Score');
   const track = kids(kid(g.root, 'Tracks'), 'Track')[ti];
-  // The track's tuning (lowest string first) and capo: for notes stored as string and fret.
-  const staff = kid(kid(track, 'Staves'), 'Staff') ?? track;
+  // The staff's tuning (lowest string first) and capo: for notes stored as string and fret.
+  const staff = kids(kid(track, 'Staves'), 'Staff')[st] ?? track;
   const tuning = ids((prop(staff, 'Tuning') ?? prop(track, 'Tuning'))?.getElementsByTagName('Pitches')[0]?.textContent ?? undefined);
   const capo = Number((prop(staff, 'CapoFret') ?? prop(track, 'CapoFret'))?.textContent?.trim() || 0) || 0;
   // Chord names by id (the track's chord diagrams).
   const chordNames = new Map<string, string>();
-  for (const item of track.getElementsByTagName('Item')) if (item.getAttribute('name')) chordNames.set(item.getAttribute('id') ?? '', item.getAttribute('name')!);
+  for (const p of [...kids(kid(track, 'Properties'), 'Property'), ...kids(kid(staff, 'Properties'), 'Property')]) {
+    if (!/^(Diagram|Chord)Collection$/.test(p.getAttribute('name') ?? '')) continue;
+    for (const item of p.getElementsByTagName('Item')) if (item.getAttribute('name')) chordNames.set(item.getAttribute('id') ?? '', item.getAttribute('name')!);
+  }
 
   const masterBars = kids(kid(g.root, 'MasterBars'), 'MasterBar');
   const bars = g.byId('Bars', 'Bar');
@@ -124,7 +146,8 @@ function readTrack(g: Gpif, ti: number, voiceNo: number): GpSong {
     key: key ? { accidentals: Number(val(key, 'AccidentalCount') ?? '0'), minor: val(key, 'Mode') === 'Minor' } : undefined,
     tempos: kids(kid(kid(g.root, 'MasterTrack'), 'Automations'), 'Automation')
       .filter((a) => val(a, 'Type') === 'Tempo')
-      .map((a) => ({ bar: Number(val(a, 'Bar') ?? '0'), bpm: Math.round(Number((val(a, 'Value') ?? '').split(/\s+/)[0])) })),
+      .map((a) => ({ bar: Number(val(a, 'Bar') ?? '0'), bpm: quarterBpm(val(a, 'Value') ?? '') })),
+    pickup: !!kid(kid(g.root, 'MasterTrack'), 'Anacrusis'),
     bars: [],
     // (As Guitar Pro's lyrics editor keeps them.)
     lyrics: kids(kid(track, 'Lyrics'), 'Line').map((line) => ({ from: Number(val(line, 'Offset') ?? '0') || 0, text: val(line, 'Text') ?? '' })),
@@ -139,7 +162,7 @@ function readTrack(g: Gpif, ti: number, voiceNo: number): GpSong {
       section: val(kid(mb, 'Section'), 'Text') || val(kid(mb, 'Section'), 'Letter'),
       beats: [],
     };
-    const vid = ids(val(bars.get(String(ids(val(mb, 'Bars'))[ti])), 'Voices'))[voiceNo];
+    const vid = ids(val(bars.get(String(ids(val(mb, 'Bars'))[bi])), 'Voices'))[voiceNo];
     for (const bid of vid !== undefined && vid >= 0 ? ids(val(voices.get(String(vid)), 'Beats')) : []) {
       const beat = beatEls.get(String(bid));
       if (!beat || kid(beat, 'GraceNotes')) continue;

@@ -47,7 +47,10 @@ export function parseAbc(text: string, opts: { part?: string } = {}): Imported {
   if (!chosen || !result) {
     // (A file of several tunes starts on its first; of a tune's voices, the melody's.)
     let best = -Infinity;
-    for (const o of options.filter((x) => x.first)) {
+    // (Or, when the first tune has no notes — an index, say — every tune's.)
+    const first = options.filter((x) => x.first);
+    const some = first.some((o) => melodyScore(read(o).doc, o.name) > -Infinity) ? first : options;
+    for (const o of some) {
       const r = read(o);
       const score = melodyScore(r.doc, o.name);
       if (!result || score > best) {
@@ -286,6 +289,8 @@ function parseTune(src: string, tune: string, wanted: string | null): Imported {
       if (f === 'K' && !inBody) {
         setField(f, v);
         inBody = true;
+        // (Voices defined in the header don't say whose the first music is.)
+        currentVoice = null;
         continue;
       }
       if (f === 'V' && inBody) {
@@ -297,6 +302,9 @@ function parseTune(src: string, tune: string, wanted: string | null): Imported {
     }
     if (!inBody) continue;
     lastField = '';
+    // ("[V:2] …" at the start says whose the line is.)
+    const leading = /^\[V:([^\]]*)\]/.exec(trimmed);
+    if (leading) setField('V', leading[1]);
     if (!inVoice()) continue;
 
     // Music line. A "w:" line belongs to the music line just before it, so notes of a line

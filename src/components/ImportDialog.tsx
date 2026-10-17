@@ -116,15 +116,17 @@ function ImportBody() {
   // (Leaving the page with pasted text not opened yet asks first, as closing the dialog does.)
   useDraft(pasteMode && paste.trim() !== '' && paste !== (draft.pasteText ?? ''));
 
-  // The part picked from pasted text (several tunes or voices in it), while it's pasted.
-  const [pastePart, setPastePart] = useState<string | null>(null);
+  // The part picked from pasted text (several tunes or voices in it), while it's pasted: kept
+  // while the text is edited, but not for other text with other parts.
+  const [pastePart, setPastePart] = useState<{ id: string; parts: string } | null>(null);
+  const partsKey = (parts: Imported['parts']) => (parts ?? []).map((p) => `${p.id}=${p.label}`).join('|');
   const imported = useMemo<(Imported & { kind?: string }) | null>(() => {
     if (draft.imported) return draft.imported;
     if (!pasteMode || !pasteSettled.trim()) return null;
     try {
       const kind = sniffText(pasteSettled);
       const read = importText(pasteSettled, kind);
-      return { ...(pastePart && read.choosePart && read.parts?.some((p) => p.id === pastePart) ? read.choosePart(pastePart) : read), kind };
+      return { ...(pastePart && read.choosePart && partsKey(read.parts) === pastePart.parts ? read.choosePart(pastePart.id) : read), kind };
     } catch {
       return null;
     }
@@ -344,6 +346,29 @@ function ImportBody() {
         : FORMAT_NAMES[imported.kind as keyof typeof FORMAT_NAMES]
     : null;
 
+  // The part to import, when the file holds several.
+  const partPicker = imported?.parts && imported.choosePart && (
+    <label className="import-part">
+      <span>Part</span>
+      <select
+        value={imported.part}
+        onChange={(e) => {
+          setPicked(null);
+          setShifts({});
+          // (Pasted text is read again with it; a file's import is replaced.)
+          if (!draft.imported) return setPastePart({ id: e.target.value, parts: partsKey(imported.parts) });
+          const next = imported.choosePart!(e.target.value);
+          useApp.setState({ importDraft: { ...draft, imported: { ...next, kind: draft.imported.kind } } });
+        }}
+        title="The file holds several parts: pick the one with the melody"
+      >
+        {imported.parts.map((p) => (
+          <option key={p.id} value={p.id}>{p.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+
   return (
     <>
       <div className="modal-head">
@@ -386,6 +411,13 @@ function ImportBody() {
         </div>
       )}
 
+      {/* A part with nothing to show still lets another be picked. */}
+      {imported && !analysis && partPicker && (
+        <div className="import-info">
+          <p className="hint">No notes or chords in this part.</p>
+          {partPicker}
+        </div>
+      )}
       {imported && analysis && (
         <div className="import-grid">
           <div className="import-info">
@@ -401,27 +433,7 @@ function ImportBody() {
               )}
             </div>
             {analysis.chordSheet && <p className="hint">A chord sheet: the chords are played as harmonica chords. Record or type the melody afterwards if you like.</p>}
-            {imported.parts && imported.choosePart && (
-              <label className="import-part">
-                <span>Part</span>
-                <select
-                  value={imported.part}
-                  onChange={(e) => {
-                    setPicked(null);
-                    setShifts({});
-                    // (Pasted text is read again with it; a file's import is replaced.)
-                    if (!draft.imported) return setPastePart(e.target.value);
-                    const next = imported.choosePart!(e.target.value);
-                    useApp.setState({ importDraft: { ...draft, imported: { ...next, kind: draft.imported.kind } } });
-                  }}
-                  title="The file holds several parts: pick the one with the melody"
-                >
-                  {imported.parts.map((p) => (
-                    <option key={p.id} value={p.id}>{p.label}</option>
-                  ))}
-                </select>
-              </label>
-            )}
+            {partPicker}
             {imported.warnings.length > 0 && (
               <div className="issues">
                 {imported.warnings.slice(0, 5).map((w, i) => (

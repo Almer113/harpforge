@@ -31,9 +31,14 @@ export function parseChordPro(text: string): Imported {
   // The chorus ({soc} … {eoc}): its lines, for {chorus} to bring back.
   let chorusFrom: number | null = null;
   let chorus: TabLine[] = [];
+  // (And, before the song's first chord, its lyric lines.)
+  let lyricChorusFrom: number | null = null;
+  let lyricChorus: { text: string; section?: string }[] = [];
   const endChorus = () => {
     if (chorusFrom !== null) chorus = lines.slice(chorusFrom).map((l) => ({ ...l, events: l.events.map((e) => ({ ...e })) }));
+    if (lyricChorusFrom !== null) lyricChorus = lyricLines.slice(lyricChorusFrom);
     chorusFrom = null;
+    lyricChorusFrom = null;
   };
   const bars = () => beatsPerBar(meta);
 
@@ -83,12 +88,18 @@ export function parseChordPro(text: string): Imported {
       else if (name === 'soc' || name === 'start_of_chorus') {
         endChorus();
         chorusFrom = lines.length;
+        if (!seenChord) lyricChorusFrom = lyricLines.length;
         pendingSection = value || 'Chorus';
       } else if (name === 'eoc' || name === 'end_of_chorus') endChorus();
       else if (name === 'chorus') {
         // {chorus}: the last chorus again, here.
         endChorus();
-        if (!chorus.length) warnings.push('“{chorus}” with no chorus ({soc} … {eoc}) before it: left out.');
+        if (!seenChord && lyricChorus.length && !chorus.length) {
+          lyricChorus.forEach((l, k) => {
+            lyricLines.push({ text: l.text, section: k === 0 ? value || l.section || 'Chorus' : undefined });
+            orphanLyric = `${orphanLyric} ${l.text}`.trim();
+          });
+        } else if (!chorus.length) warnings.push('“{chorus}” with no chorus ({soc} … {eoc}) before it: left out.');
         else
           chorus.forEach((l, k) => {
             const copy: TabLine = { ...l, events: l.events.map((e) => ({ ...e })) };

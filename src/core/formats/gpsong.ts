@@ -36,6 +36,8 @@ export interface GpSong {
   /** The tempo from each bar where it changes (the first at bar 0). */
   tempos: { bar: number; bpm: number }[];
   bars: GpBar[];
+  /** The first bar a pickup (only as long as its notes). */
+  pickup?: boolean;
   /** Words typed as text, a line a verse — syllables split by "-", words by spaces — from bar `from` (0-based) on. */
   lyrics?: { from: number; text: string }[];
 }
@@ -104,7 +106,7 @@ export function songToDoc(song: GpSong, format: string): Imported {
       pos += b.beats;
     }
     const full = beatsPerBar(meta);
-    if (pos < full - 1e-6) {
+    if (pos < full - 1e-6 && !(bi === 0 && song.pickup && pos > 0)) {
       const rest: RestEvent = { kind: 'rest', beats: full - pos };
       if (endingHere && pos === 0) rest.ending = endingHere;
       events.push(rest);

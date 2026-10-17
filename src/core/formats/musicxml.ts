@@ -207,7 +207,10 @@ function parsePart(dom: Document, part: Element, wanted: string | null): Importe
       ? [...new Set((endingEl.getAttribute('number') ?? '').split(/[,\s]+/).map(Number).filter((n) => Number.isInteger(n) && n >= 1))].sort((a, b) => a - b)
       : [];
     const measureFrom = events.length;
+    // (How long the measure is: as far as any voice in it goes.)
+    let measureLen = 0;
     for (const el of measure.children) {
+      measureLen = Math.max(measureLen, pos);
       switch (el.nodeName) {
         case 'attributes': {
           const div = text(el, 'divisions');
@@ -236,7 +239,8 @@ function parsePart(dom: Document, part: Element, wanted: string | null): Importe
           const beats = parseFloat(text(el, 'duration') ?? '0') / divisions;
           const v = text(el, 'voice');
           if ((!v || v === voice) && pos >= end - 1e-6 && beats > 0) {
-            events.push({ kind: 'rest', beats });
+            // (From where our voice had got to.)
+            events.push({ kind: 'rest', beats: pos + beats - end });
             last = null;
             end = pos + beats;
           }
@@ -298,6 +302,11 @@ function parsePart(dom: Document, part: Element, wanted: string | null): Importe
             warnOnce('Only the top line of music was imported (the part has several layers).');
             break;
           }
+          // Ahead of where our voice has got to (it waits while another plays): a rest until here.
+          if (!isChord && at > end + 1e-6) {
+            events.push({ kind: 'rest', beats: at - end });
+            last = null;
+          }
           if (!isChord) end = Math.max(end, pos);
           const pitchEl = child(el, 'pitch');
           let midi: number | null = null;
@@ -346,6 +355,12 @@ function parsePart(dom: Document, part: Element, wanted: string | null): Importe
           break;
         }
       }
+    }
+    // Our voice stopping before the measure's end (or not in it at all): a rest to its end.
+    measureLen = Math.max(measureLen, pos);
+    if (measureLen > end + 1e-6) {
+      events.push({ kind: 'rest', beats: measureLen - end });
+      last = null;
     }
     // A chord symbol after the last note of a measure marks the end of that measure.
     if (pendingChord) {
