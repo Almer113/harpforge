@@ -198,3 +198,26 @@
 .account-avatar { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--brass); color: var(--bg); font-weight: 800; font-size: 12px; flex: none; }
 .account-avatar.guest { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border-2); }
 @media (max-width: 760px) { .account-name { display: none; } }
+
+/* ---------- Import: chords on this harmonica (Phase 19a) ---------- */
+.chord-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.chord-list .field-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.chord-list .field-label .muted { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.chord-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow-y: auto; }
+.chord-list button {
+  display: grid; grid-template-columns: 16px minmax(38px, auto) 30px minmax(70px, auto) 1fr; grid-template-rows: auto auto; column-gap: 6px;
+  width: 100%; align-items: baseline; text-align: left; padding: 5px 8px; border: 1px solid transparent; border-radius: 8px;
+  background: transparent; color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.chord-list button:hover:not(:disabled) { background: var(--panel-2); border-color: var(--border); }
+.chord-list button:disabled { cursor: default; }
+.cl-mark { font-weight: 800; text-align: center; }
+.cl-symbol { font-weight: 800; color: var(--brass-2); }
+.cl-count { color: var(--faint); font-size: 11.5px; }
+.cl-holes { font-family: var(--mono); font-weight: 700; }
+.cl-notes { color: var(--muted); font-family: var(--mono); font-size: 11.5px; }
+.cl-missing { grid-column: 2 / -1; color: var(--muted); font-size: 12px; }
+.cl-full .cl-mark { color: var(--ok); }
+.cl-mild .cl-mark { color: var(--faint); }
+.cl-thin .cl-mark, .cl-thin .cl-missing { color: var(--warn); }
+.cl-none .cl-mark, .cl-none .cl-missing, .cl-unknown .cl-mark { color: var(--danger); }

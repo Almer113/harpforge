@@ -25,6 +25,9 @@ import { useSuggestions } from '../state/useSuggestions';
 import { useDraft } from '../state/leaveGuard';
 import { Dialog } from './Dialog';
 import { TabView } from './TabView';
+import { ChordList } from './ChordList';
+import type { ChordLine } from '../core/chordReport';
+import { soundPitch } from '../core/instruments';
 
 const MINE = 'mine';
 
@@ -77,8 +80,12 @@ function techniqueTags(s: Pick<Suggestion, 'stats'>) {
   const t = s.stats;
   const tags: { text: string; cls?: string }[] = [];
   const n = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
-  if (t.unplayable > 0) tags.push({ text: `${t.unplayable} missing`, cls: 'bad' });
-  if (t.reducedChords > 0) tags.push({ text: n(t.reducedChords, 'partial chord', 'partial chords') });
+  if (t.thinChords !== undefined) {
+    // A chord sheet: its chords, counted once each (not every time they're played).
+    if (t.unplayableChords) tags.push({ text: `${n(t.unplayableChords, 'chord', 'chords')} can’t be played`, cls: 'bad' });
+    if (t.thinChords > 0) tags.push({ text: `${t.thinChords} missing root or 3rd` });
+  } else if (t.unplayable > 0) tags.push({ text: `${t.unplayable} missing`, cls: 'bad' });
+  if (t.thinChords === undefined && t.reducedChords > 0) tags.push({ text: n(t.reducedChords, 'partial chord', 'partial chords') });
   if (t.bends > 0) tags.push({ text: n(t.bends, 'bend', 'bends') });
   if (t.overblows > 0) tags.push({ text: n(t.overblows, 'overblow', 'overblows') });
   if (t.slides > 0) tags.push({ text: n(t.slides, 'slide note', 'slide notes') });
@@ -234,6 +241,23 @@ function ImportBody() {
       },
     });
     setPlaying(true);
+  };
+
+  // A chord in the list: heard on the chosen harmonica, and marked where it comes in the preview.
+  const chosenHarp = useMemo(() => (choice ? getHarmonica(choice.spec) : null), [choice]);
+  const hearChord = (line: ChordLine) => {
+    if (!chosenHarp || !result) return;
+    if (playing) stopPreview();
+    const midis = line.sounds.map((x) => soundPitch(chosenHarp, x)).filter((m): m is number => m !== null);
+    void engine.ensureAudio().then(() => {
+      engine.setVoicing(chosenHarp.voicing);
+      engine.previewMidis(midis, 1);
+      setTimeout(restoreVoicing, 1300);
+    });
+    const uses = result.parsed.score.events.filter((x) => x.chord === line.symbol).map((x) => x.index);
+    setActive(uses);
+    setTimeout(() => setActive((a) => (a === uses ? [] : a)), 1600);
+    document.querySelector(`.import-preview [data-index="${uses[0]}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   };
 
   const open = (page: 'play' | 'editor') => {
@@ -443,6 +467,7 @@ function ImportBody() {
                 </select>
               </label>
             )}
+            {analysis.chordSheet && chosenHarp && <ChordList doc={analysis.doc} harp={chosenHarp} onPick={hearChord} />}
           </div>
 
           <div className="import-preview sheet">

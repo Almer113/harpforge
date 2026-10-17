@@ -16,6 +16,7 @@ import {
 } from './instruments';
 import { keyUsesFlats, midiToName, mod12, parseKey, parsePitchClass, transposeKey } from './pitch';
 import { findHarmonicaChord, isNoChord, parseChord, transposeChord } from './chords';
+import { missingTones } from './chordReport';
 import { holeSoundText } from './htab/serializer';
 import type { NoteEvent, RestEvent, TabDoc, TabEvent, TabMeta } from './htab/types';
 import type { Breath, HoleSound, Sound } from './types';
@@ -27,6 +28,10 @@ export interface ConvertStats {
   slides: number;
   unplayable: number;
   reducedChords: number;
+  /** Chord sheets: chord symbols played without their root or 3rd (each counted once). */
+  thinChords?: number;
+  /** Chord sheets: chord symbols with no way to play them (each counted once). */
+  unplayableChords?: number;
   cost: number;
 }
 
@@ -477,8 +482,9 @@ export function chordSheetToTab(doc: TabDoc, harp: Harmonica, pattern: StrumPatt
     }
     return cache.get(sym)!;
   };
-  const stats: ConvertStats = { notes: 0, bends: 0, overblows: 0, slides: 0, unplayable: 0, reducedChords: 0, cost: 0 };
+  const stats: ConvertStats = { notes: 0, bends: 0, overblows: 0, slides: 0, unplayable: 0, reducedChords: 0, thinChords: 0, cost: 0 };
   const missing = new Set<string>();
+  const thin = new Set<string>();
   let previous: ReturnType<typeof findHarmonicaChord> = null;
   const lines = doc.lines.map((l) => {
     const events: TabEvent[] = [];
@@ -513,6 +519,8 @@ export function chordSheetToTab(doc: TabDoc, harp: Harmonica, pattern: StrumPatt
       }
       stats.cost += found.cost;
       if (found.sounds.length === 1) stats.reducedChords++;
+      const info = parseChord(e.chord);
+      if (info && !thin.has(e.chord) && missingTones(harp, info, found.sounds).some((m) => m.strong)) thin.add(e.chord);
       if (found.sounds.some((s) => s.slide)) stats.slides++;
       patternBeats(e.beats, pattern).forEach((beats, k) => {
         events.push({
@@ -533,6 +541,8 @@ export function chordSheetToTab(doc: TabDoc, harp: Harmonica, pattern: StrumPatt
   meta.harmonica = harp.spec.family;
   meta.tuning = harp.spec.tuning;
   meta.harpKey = harp.spec.key;
+  stats.thinChords = thin.size;
+  stats.unplayableChords = missing.size;
   const warnings = [...missing].map((c) => `No way to play ${c} on ${harp.name}`);
   return { doc: { meta, lines }, warnings, stats, missingChords: [...missing] };
 }
