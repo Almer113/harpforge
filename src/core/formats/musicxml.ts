@@ -1,4 +1,5 @@
-// MusicXML (partwise) import & export. Import reads the first part and first voice.
+// MusicXML import & export. Import reads one part's one voice — the most melody-like, or the
+// one picked under Part — from partwise files and (rearranged to that) timewise ones.
 
 import { hasWords, isHeld, lineVerses, lyricOf, setHeld, setLyricOf } from '../verses';
 import { strFromU8, unzipSync } from 'fflate';
@@ -8,7 +9,7 @@ import { holeSoundText } from '../htab/serializer';
 import { beatsPerBar, type BarStyle, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine } from '../htab/types';
 import { keyFromSignature, parseKey } from '../pitch';
 import type { HoleSound } from '../types';
-import { eventMidis, keyFifths, notesMeta, spell, type Imported } from './common';
+import { eventMidis, keyFifths, melodyScore, notesMeta, partWarning, spell, type Imported, type PartChoice } from './common';
 
 const STEP_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 
@@ -36,20 +37,87 @@ export function unzipMxl(data: Uint8Array): string {
 const child = (el: Element, name: string) => el.getElementsByTagName(name)[0] as Element | undefined;
 const text = (el: Element | undefined, name: string) => (el ? child(el, name)?.textContent?.trim() : undefined);
 
-export function parseMusicXml(xml: string): Imported {
-  const warnings: string[] = [];
-  const dom = new DOMParser().parseFromString(xml, 'application/xml');
+/**
+ * A MusicXML score: the part and voice asked for (`part`: "2:1", the third part's voice 1), or
+ * else the most melody-like of them all; the others are offered under Part.
+ */
+export function parseMusicXml(xml: string, opts: { part?: string } = {}): Imported {
+  let dom = new DOMParser().parseFromString(xml, 'application/xml');
   if (dom.getElementsByTagName('parsererror').length) throw new Error('This MusicXML file could not be read.');
-  if (dom.documentElement.nodeName === 'score-timewise') throw new Error('Timewise MusicXML is not supported yet — export as partwise.');
+  if (dom.documentElement.nodeName === 'score-timewise') dom = partwise(dom);
+  const parts = [...dom.getElementsByTagName('part')];
+  if (!parts.length) throw new Error('No parts found in this MusicXML file.');
+  // Each part's name (from the part list) and the voices its notes are in.
+  const names = new Map([...dom.getElementsByTagName('score-part')].map((sp) => [sp.getAttribute('id') ?? '', text(sp, 'part-name') ?? '']));
+  const options: (PartChoice & { pi: number; voice: string | null; name: string })[] = [];
+  parts.forEach((part, pi) => {
+    const name = names.get(part.getAttribute('id') ?? '')?.trim() ?? '';
+    const voices = [...new Set([...part.getElementsByTagName('note')].filter((n) => !child(n, 'grace') && !child(n, 'cue')).map((n) => text(n, 'voice') ?? '1'))];
+    const label = name || `Part ${pi + 1}`;
+    if (voices.length <= 1) options.push({ id: `${pi}`, label, pi, voice: null, name });
+    else for (const v of voices) options.push({ id: `${pi}:${v}`, label: `${label} · voice ${v}`, pi, voice: v, name });
+  });
+  const read = (o: (typeof options)[number]) => parsePart(dom, parts[o.pi], o.voice);
+  let chosen = options.find((o) => o.id === opts.part);
+  let result = chosen ? read(chosen) : null;
+  if (!chosen || !result) {
+    let best = -Infinity;
+    for (const o of options) {
+      const r = read(o);
+      const score = melodyScore(r.doc, o.name);
+      if (!result || score > best) {
+        best = score;
+        result = r;
+        chosen = o;
+      }
+    }
+  }
+  if (options.length < 2) return result!;
+  return {
+    ...result!,
+    warnings: [partWarning(chosen!.label, options.length), ...result!.warnings],
+    parts: options.map((o) => ({ id: o.id, label: o.label })),
+    part: chosen!.id,
+    choosePart: (id) => parseMusicXml(xml, { part: id }),
+  };
+}
+
+/**
+ * A timewise score (measure by measure, each holding every part's bit) as a partwise one (part
+ * by part, each holding its measures): the same music, the way the rest of the import reads it.
+ */
+function partwise(dom: Document): Document {
+  const src = dom.documentElement;
+  const out = dom.implementation.createDocument(null, 'score-partwise', null);
+  const root = out.documentElement;
+  for (const a of src.attributes) root.setAttribute(a.name, a.value);
+  const measures = [...src.children].filter((c) => c.nodeName === 'measure');
+  for (const c of src.children) if (c.nodeName !== 'measure') root.appendChild(out.importNode(c, true));
+  const ids: string[] = [];
+  for (const m of measures) for (const p of m.children) if (p.nodeName === 'part' && !ids.includes(p.getAttribute('id') ?? '')) ids.push(p.getAttribute('id') ?? '');
+  for (const id of ids) {
+    const part = out.createElement('part');
+    part.setAttribute('id', id);
+    for (const m of measures) {
+      const mine = [...m.children].find((p) => p.nodeName === 'part' && p.getAttribute('id') === id);
+      const measure = out.createElement('measure');
+      for (const a of m.attributes) measure.setAttribute(a.name, a.value);
+      if (mine) for (const c of mine.childNodes) measure.appendChild(out.importNode(c, true));
+      part.appendChild(measure);
+    }
+    root.appendChild(part);
+  }
+  return out;
+}
+
+/** One part of a score, one voice of it (the first if `wanted` is null). */
+function parsePart(dom: Document, part: Element, wanted: string | null): Imported {
+  const warnings: string[] = [];
   const meta = notesMeta({ tempo: 100 });
   meta.title = text(dom.documentElement, 'work-title') || text(dom.documentElement, 'movement-title') || undefined;
   const creator = [...dom.getElementsByTagName('creator')].find((c) => c.getAttribute('type') === 'composer') ?? dom.getElementsByTagName('creator')[0];
   if (creator?.textContent?.trim()) meta.artist = creator.textContent.trim();
 
-  const parts = dom.getElementsByTagName('part');
-  if (!parts.length) throw new Error('No parts found in this MusicXML file.');
-  if (parts.length > 1) warnings.push(`Imported the first of ${parts.length} parts.`);
-  const part = parts[0];
   // Its lyric lines (numbered 1, 2…, or named), in order: verse 1, 2…
   const numbers = [...new Set([...part.getElementsByTagName('lyric')].filter((l) => l.getAttribute('name') !== 'tab').map((l) => l.getAttribute('number') ?? '1'))];
   // (Numbered: verse n is number n, an empty verse 1 included; named: in order of appearance.)
@@ -93,7 +161,7 @@ export function parseMusicXml(xml: string): Imported {
   };
 
   let divisions = 1;
-  let voice: string | null = null;
+  let voice: string | null = wanted;
   const lines: TabLine[] = [];
   let events: TabEvent[] = [];
   let pendingChord: string | undefined;
