@@ -107,6 +107,8 @@ export interface VisualState {
   verse: number;
   /** Lyrics mode: the note whose syllable is being typed. */
   lyricAt?: import('../core/edit/model').Pos;
+  /** The bar whose section heading is being named (the box in place of the heading). */
+  naming?: number;
   /** A rest block being made in empty space, for words (lyrics mode) or a chord. */
   restDraft?: { pos: import('../core/edit/model').Pos; dur: number; field: 'lyric' | 'chord' };
 }

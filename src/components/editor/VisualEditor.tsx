@@ -61,6 +61,7 @@ import { Glyph, NoteGlyph } from '../TabView';
 import { ReadAsSwitch } from '../Sheet';
 import { holeSoundText } from '../../core/htab/serializer';
 import { Inspector } from './Inspector';
+import { moveSectionAt, sectionAtCaret, SectionGroup, SectionHeading } from './SectionTools';
 import { isTyping, keysTaken, overlayOpen } from '../../live/focus';
 import { copyText, pasteText } from '../../core/edit/clipboard';
 import { openShortcuts } from '../Shortcuts';
@@ -316,7 +317,13 @@ export function VisualEditor() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (keysTaken(e)) return;
-      // Alt+arrows belong to the browser (Back / Forward).
+      // Alt+↑ / Alt+↓ move the section at the caret; Alt+← / → belong to the browser (Back / Forward).
+      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        e.preventDefault();
+        const song = fromDoc(getParsed(useApp.getState().text).doc);
+        if (!moveSectionAt(sectionAtCaret(song), e.key === 'ArrowUp' ? -1 : 1)) useApp.getState().notify(e.key === 'ArrowUp' ? 'It can’t move up: it’s the first (the bars before the first heading stay at the top)' : 'It can’t move down: it’s the last section');
+        return;
+      }
       if (e.altKey && e.key.startsWith('Arrow')) return;
       const st = useApp.getState();
       const v = st.ve;
@@ -664,6 +671,7 @@ function Toolbar({ song }: { song: Song }) {
               <button className="menu-item" onClick={run(() => moveLyrics(song, -1))}>
                 <span className="mi-name">Move the lyrics a note earlier</span>
               </button>
+              <SectionGroup close={close} />
               <div className="mi-label">Measures</div>
               <button className="menu-item" onClick={run(() => apply(insertMeasure(song, song.measures.length), { caret: { m: song.measures.length, start: 0 }, measure: song.measures.length }))}>
                 <span className="mi-name">+ Measure at the end</span>
@@ -1305,7 +1313,7 @@ const MeasureView = memo(function MeasureView(p: MeasureProps) {
           <button className="ve-mnum" title="Select this measure (Shift: up to here)" onClick={(e) => handlers.numClick(e, mi)}>
             {mi + 1}
           </button>
-          {meas.section !== undefined && <span className="ve-section">{meas.section}</span>}
+          {meas.section !== undefined && <SectionHeading m={mi} name={meas.section} />}
           {fit && meas.lineBreak && mi > 0 && meas.section === undefined && (
             <span className="ve-linemark" title="Starts a new line in the tab">↵</span>
           )}

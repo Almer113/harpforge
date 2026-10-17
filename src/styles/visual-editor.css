@@ -50,6 +50,21 @@
 .ve-mnum { color: var(--faint); font-weight: 700; font-variant-numeric: tabular-nums; }
 .ve-measure.current .ve-mnum { color: var(--brass-2); }
 .ve-section { color: var(--brass); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+/* Phase 17a: the heading opens its section's menu; renaming puts a box in its place. */
+button.ve-section { font: inherit; font-weight: 800; border: 1px solid transparent; background: transparent; border-radius: 5px; padding: 0 4px; margin-left: -4px; cursor: pointer; }
+button.ve-section:hover, button.ve-section[aria-expanded='true'] { border-color: var(--border-2); background: var(--panel-2); }
+button.ve-section > span { color: inherit; opacity: 0.75; font-size: 11px; letter-spacing: 0; margin-left: 1px; }
+.ve-section-name { font: inherit; font-weight: 800; letter-spacing: 0.04em; color: var(--brass); background: var(--bg); border: 1px solid var(--brass); border-radius: 5px; padding: 0 5px; height: 18px; }
+.sec-menu { min-width: 270px; text-transform: none; letter-spacing: normal; font-size: 13px; font-weight: 400; }
+.menu-item:disabled { opacity: 0.45; cursor: default; }
+.menu-item:disabled:hover { background: transparent; }
+.menu-item.danger .mi-name { color: var(--danger); }
+.mi-row { display: flex; align-items: center; gap: 4px; padding: 4px 10px; }
+.mi-row > .mi-name { margin-right: auto; }
+.mi-row .menu-item { flex: none; padding: 3px 8px; border: 1px solid var(--border); font-size: 12px; }
+.mi-row .menu-item.checked { border-color: var(--brass); color: var(--brass-2); background: color-mix(in srgb, var(--brass) 12%, transparent); }
+.mi-row .menu-item[role='menuitemradio'] { padding-left: 8px; }
+.mi-row .menu-item[role='menuitemradio'].checked::before { content: none; }
 .ve-barflag { color: var(--muted); font-size: 15px; }
 .ve-barflag.end { margin-left: auto; }
 /* 1st/2nd endings: a bracket along the measure heads, "1." at its start, a hook where it goes back. */

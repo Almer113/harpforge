@@ -102,6 +102,9 @@ old one. No server answering: guest only (the account menu offers **Try again**)
   drag to move or resize, step entry from the harmonica, an inspector for notes, measures
   and the song, insert/overwrite, copy and paste, transpose and "make easier"), **Text**
   (the `.htab` text with highlighting and warnings) and **Split**. Undo/redo covers it all.
+- **Section tools** (a heading's ▾ menu, or ⋯ More tools): rename, duplicate, move up and
+  down (Alt+↑/↓), repeat it ×2–×4, loop it, select its notes, delete (with Undo), new
+  section, a section from the selection. A section's comments and lyrics move with it.
 - **Lyrics:** type them onto the notes (Ctrl+L), fill them from pasted text with syllable
   suggestions for English and Indonesian (your corrections remembered), several verses
   per line, sung rests and held syllables ("Oh___").
@@ -141,7 +144,7 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `src/core/playAlong.ts`, `report.ts`, `passage.ts` | Play-along marking, the practice report, passages |
 | `src/core/formats` | ABC, ChordPro / chord sheets, guitar tab, MusicXML, MIDI, numbered notation, plain text |
 | `src/core/formats/pdf*.ts` | PDF text layer / OCR → positioned words → column-aligned chord sheet |
-| `src/core/edit` | The visual editor's measure model, lyrics typing, clipboard |
+| `src/core/edit` | The visual editor's measure model, lyrics typing, clipboard, section tools |
 | `src/audio/engine.ts` | What the app calls for sound; loads `engineImpl.ts` in the background |
 | `src/audio/engineImpl.ts`, `voices.ts`, `backingVoices.ts` | Playback (Tone.js), harmonica voices, backing and drone |
 | `src/audio/pitch.ts` | Pitch detection (YIN) for the microphone |
