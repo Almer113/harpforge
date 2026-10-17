@@ -64,11 +64,28 @@ export function parseChord(symbol: string): ChordInfo | null {
     }
   }
   if (!intervals) {
-    // Unknown extension ("maj7(#11)", "7sus4add9"): fall back on the triad implied by its
-    // start — but only if it's made of chord vocabulary, so words like "Chorus" aren't chords.
+    // Unknown extension ("maj7(#11)", "7sus4add9", "m7(b5)") — but only if it's made of chord
+    // vocabulary, so words like "Chorus" aren't chords: the longest known type it starts with
+    // (maj7, m7, 7…), with its sus and altered 5th; added and altered colour notes left aside.
     const vocabulary = suffix.replace(/maj|min|dim|aug|sus|add|alt|no|omit|[mM°øΔ+\-#b♯♭0-9()/,.]/g, '');
     if (vocabulary.length) return null;
-    intervals = /^(m(?!aj)|min|-)/.test(suffix) ? [0, 3, 7] : [0, 4, 7];
+    let base: number[] | null = null;
+    let length = -1;
+    for (const [names, ivs] of QUALITIES)
+      for (const n of names)
+        if (n && suffix.startsWith(n) && n.length > length) {
+          base = ivs;
+          length = n.length;
+        }
+    let ivs = [...(base ?? (/^(m(?!aj)|min|-)/.test(suffix) ? [0, 3, 7] : [0, 4, 7]))];
+    const rest = suffix.slice(Math.max(0, length));
+    // "sus4" / "sus2" later on ("9sus4", "7sus2"): the 4th or 2nd in place of the 3rd.
+    const sus = /sus(2|4)?/.exec(rest);
+    if (sus) ivs = ivs.filter((iv) => iv !== 3 && iv !== 4).concat(sus[1] === '2' ? 2 : 5);
+    // An altered 5th ("(b5)", "#5", "+5"): in place of the 5th.
+    if (/[b♭]5/.test(rest)) ivs = ivs.map((iv) => (iv === 7 ? 6 : iv));
+    else if (/(#|♯|\+)5/.test(rest)) ivs = ivs.map((iv) => (iv === 7 ? 8 : iv));
+    intervals = [...new Set(ivs)].sort((a, b) => a - b);
   }
   const bass = m[3] ? parsePitchClass(m[3].replace('♯', '#').replace('♭', 'b')) ?? undefined : undefined;
   return { symbol: s, root, intervals, tones: intervals.map((i) => mod12(root + i)), bass };

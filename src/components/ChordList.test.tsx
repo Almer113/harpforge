@@ -31,7 +31,13 @@ async function draw(onHear = vi.fn()) {
   await act(async () => render());
   return { picks: () => picks };
 }
-const rows = () => [...host.querySelectorAll('li')].map((li) => li.querySelector('button')!.textContent);
+/** Each row as it reads on screen (without the words only a screen reader hears). */
+const rows = () =>
+  [...host.querySelectorAll('li')].map((li) => {
+    const b = li.querySelector('button')!.cloneNode(true) as HTMLElement;
+    b.querySelectorAll('.sr-only').forEach((x) => x.remove());
+    return b.textContent;
+  });
 const button = (t: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === t);
 
 describe('the chord list', () => {
@@ -46,6 +52,10 @@ describe('the chord list', () => {
     await act(async () => button('Use the suggestions')!.click());
     expect(Object.fromEntries(Object.entries(picks()).map(([k, v]) => [k, v.symbol]))).toEqual({ Am: 'C', Bb: 'Dm' });
     expect(rows()[0]).toMatch(/^↪Am×14 5 6 7C E G Cas C: has Am’s C and E/);
+    // (The marks are said in words to a screen reader.)
+    expect(host.querySelector('li .sr-only')!.textContent).toMatch(/^Played as C/);
+    // (Each choice says how it's related.)
+    expect([...host.querySelectorAll<HTMLOptionElement>('select[aria-label="Play Am as"] option')].map((o) => o.textContent)).toContain('C — all of it: 4 5 6 7 (its relative major)');
     expect(button('Use the suggestions')).toBeUndefined();
     await act(async () => button('Back to as written')!.click());
     expect(picks()).toEqual({});

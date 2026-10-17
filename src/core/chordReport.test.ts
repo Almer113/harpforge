@@ -84,6 +84,51 @@ describe('the chords on a harmonica', () => {
     expect(note.kind === 'note' && [note.chord, note.sounds.map((s) => (s.type === 'hole' ? s.hole : 0))]).toEqual(['Am', [4, 5, 6, 7]]);
   });
 
+  it('review: never major for minor or the other way (it changes the chord), and “simpler” only when it adds nothing', () => {
+    const H = (key: string) => getHarmonica({ family: 'diatonic', tuning: 'richter', key });
+    const subs = (sym: string, harp = C()) => substitutes(harp, parseChord(sym)!).map((s) => s.symbol);
+    expect(subs('Cm')).not.toContain('C');
+    expect(subs('D')).not.toContain('Dm');
+    expect(subs('A7')).not.toContain('Am');
+    expect(subs('Em7', H('A'))).not.toContain('E7');
+    expect(subs('Dm7', H('G'))).not.toContain('D7');
+    // (Nor C for Csus4: its E grates against the F that takes the 3rd's place.)
+    expect(subs('Csus4', H('G'))).not.toContain('C');
+    expect(subs('C9sus4')).not.toContain('C');
+    const simpler = substitutes(C(), parseChord('Cmaj7')!)[0];
+    expect(simpler.relation).toBe('the same chord, simpler');
+  });
+
+  it('review: the same holes offered once, under one name', () => {
+    const paddy = getHarmonica({ family: 'diatonic', tuning: 'paddy-richter', key: 'C' });
+    const all = fullChords(paddy);
+    const windows = all.map((c) => holes(c));
+    expect(new Set(windows).size).toBe(windows.length);
+    // (Blow 3–6 is A C E G: Am7 — its root is its lowest note — not C6 as well.)
+    expect(all.filter((c) => holes(c) === '3 4 5 6').map((c) => c.symbol)).toEqual(['Am7']);
+    expect(all.some((c) => c.symbol === 'C6')).toBe(false);
+  });
+
+  it('review: a sus chord without its 4th, or one note for a chord of more, isn’t “recognisably itself”', () => {
+    const G = getHarmonica({ family: 'diatonic', tuning: 'richter', key: 'G' });
+    const report = chordReport(sheet('[Csus4] . . . . | [C5] . . . . |'), G);
+    expect(report.map((l) => [l.symbol, l.sounds.length, l.level])).toEqual([
+      ['Csus4', 1, 'thin'],
+      ['C5', 1, 'thin'],
+    ]);
+  });
+
+  it('review: chord symbols read in part — their type, their sus, their altered 5th (not a plain triad)', () => {
+    const ivs = (sym: string) => parseChord(sym)!.intervals.filter((iv) => iv <= 12);
+    expect(ivs('Cmaj7(#11)')).toEqual([0, 4, 7, 11]);
+    expect(ivs('C7(b9)')).toEqual([0, 4, 7, 10]);
+    expect(ivs('C9sus4')).toEqual([0, 5, 7, 10]);
+    expect(ivs('Csus4add9')).toEqual([0, 5, 7]);
+    expect(ivs('Bm7(b5)')).toEqual([0, 3, 6, 10]);
+    // (So Cmaj7(#11) on a C harp isn't "all of it" on C E G C.)
+    expect(chordReport(sheet('[Cmaj7(#11)] . . . . |'), C())[0].level).not.toBe('full');
+  });
+
   it('the harmonica list counts each chord once: missing its root or 3rd, or not playable at all', () => {
     const { stats } = chordSheetToTab(doc, C());
     expect([stats.thinChords, stats.unplayableChords]).toEqual([1, 1]);

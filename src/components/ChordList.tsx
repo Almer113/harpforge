@@ -40,8 +40,15 @@ export function ChordList({ doc, harp, picks, onPicks, onHear }: Props) {
     return new Map(chordReport(doc, harp).map((l) => [l.symbol, l.level === 'full' || !l.info ? [] : substitutes(harp, l.info, flats).filter((o) => holes(o) !== holes(l))]));
   }, [doc, harp, flats]);
   if (!lines.length) return null;
-  const worth = lines.filter((l) => !picks[l.symbol] && (l.level === 'thin' || l.level === 'none') && subs.get(l.symbol)?.length);
-  const toLook = lines.filter((l) => !picks[l.symbol] && (l.level === 'thin' || l.level === 'none')).length;
+  // (Picks for chords this text still has, among what's offered for them now.)
+  const holes = (list: { sounds: Parameters<typeof holeSoundText>[0][] }) => list.sounds.map((x) => holeSoundText(x)).join(' ');
+  const pickOf = (symbol: string) => {
+    const p = picks[symbol];
+    return p && subs.get(symbol)?.find((o) => holes(o) === holes(p));
+  };
+  const anyPicked = lines.some((l) => pickOf(l.symbol));
+  const worth = lines.filter((l) => !pickOf(l.symbol) && (l.level === 'thin' || l.level === 'none') && subs.get(l.symbol)?.length);
+  const toLook = lines.filter((l) => !pickOf(l.symbol) && (l.level === 'thin' || l.level === 'none')).length;
   const pick = (symbol: string, sub: Substitute | undefined) => {
     const next = { ...picks };
     if (sub) next[symbol] = sub;
@@ -60,7 +67,7 @@ export function ChordList({ doc, harp, picks, onPicks, onHear }: Props) {
             Use the suggestions
           </button>
         )}
-        {Object.keys(picks).length > 0 && (
+        {anyPicked && (
           <button type="button" className="btn small ghost" onClick={() => onPicks({})} title="Every chord played as written again (as much of it as this harmonica has)">
             Back to as written
           </button>
@@ -69,14 +76,15 @@ export function ChordList({ doc, harp, picks, onPicks, onHear }: Props) {
       <ul>
         {lines.map((l) => {
           const options = subs.get(l.symbol) ?? [];
-          const picked = picks[l.symbol];
+          const picked = pickOf(l.symbol);
           const mark = picked ? { icon: '↪', title: `Played as ${picked.symbol}, which this harmonica has all of` } : MARK[l.level];
           return (
             <li key={l.symbol} className={picked ? 'cl-sub' : `cl-${l.level}`}>
               <button type="button" onClick={() => onHear(l)} disabled={!l.sounds.length} title={l.sounds.length ? 'Hear it, and see where it comes' : mark.title}>
-                <span className="cl-mark" title={mark.title} aria-label={mark.title}>
+                <span className="cl-mark" title={mark.title} aria-hidden>
                   {mark.icon}
                 </span>
+                <span className="sr-only">{mark.title}.</span>
                 <b className="cl-symbol">{l.symbol}</b>
                 <span className="cl-count">×{l.count}</span>
                 <span className="cl-holes">{l.sounds.length ? l.sounds.map((s) => holeSoundText(s)).join(' ') : '—'}</span>
@@ -93,6 +101,7 @@ export function ChordList({ doc, harp, picks, onPicks, onHear }: Props) {
                     {options.map((o) => (
                       <option key={o.symbol} value={o.symbol} title={o.reason}>
                         {o.symbol} — all of it: {o.sounds.map((s) => holeSoundText(s)).join(' ')}
+                        {o.relation ? ` (${o.relation})` : ''}
                       </option>
                     ))}
                   </select>

@@ -189,9 +189,11 @@ function ImportBody() {
     return { id: specId(s.spec), spec: s.spec, shift: s.shift, position: s.position };
   }, [suggestions, picked, mine, owned.length]);
 
-  // Chords picked to stand in for ones this harmonica can't play in full (for this harmonica).
-  const [picks, setPicks] = useState<{ harp: string; picks: Picks }>({ harp: '', picks: {} });
-  const standIns = useMemo(() => (choice && picks.harp === choice.id ? picks.picks : {}), [choice, picks]);
+  // Chords picked to stand in for ones a harmonica can't play in full, for each harmonica (the
+  // same one in "Your harmonicas" and the suggestions shares them).
+  const [picks, setPicks] = useState<Record<string, Picks>>({});
+  const harpKey = choice ? specId(choice.spec) : '';
+  const standIns = useMemo(() => picks[harpKey] ?? {}, [picks, harpKey]);
   const voicings = useMemo(() => Object.fromEntries(Object.entries(standIns).map(([sym, p]) => [sym, p.sounds])), [standIns]);
 
   const result = useMemo(() => {
@@ -208,7 +210,14 @@ function ImportBody() {
   const [active, setActive] = useState<number[]>([]);
   // The engine's sound follows the open tab's harmonica again afterwards.
   const restoreVoicing = () => engine.setVoicing(getParsed(useApp.getState().text).harp.voicing);
+  // (Hearing a chord: the timers that put the sound back and take its marks away.)
+  const hearing = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const stopHearing = () => {
+    hearing.current.forEach(clearTimeout);
+    hearing.current = [];
+  };
   const stopPreview = () => {
+    stopHearing();
     engine.stopPlayback();
     restoreVoicing();
     setPlaying(false);
@@ -234,6 +243,8 @@ function ImportBody() {
   const togglePreview = async () => {
     if (playing || !result) return stopPreview();
     stop();
+    stopHearing();
+    setActive([]);
     await engine.ensureAudio();
     engine.setVoicing(result.parsed.harp.voicing);
     engine.playScore(result.parsed.score, {
@@ -253,15 +264,23 @@ function ImportBody() {
   const hearChord = (line: ChordLine) => {
     if (!chosenHarp || !result) return;
     if (playing) stopPreview();
+    stop();
+    stopHearing();
     const midis = line.sounds.map((x) => soundPitch(chosenHarp, x)).filter((m): m is number => m !== null);
     void engine.ensureAudio().then(() => {
       engine.setVoicing(chosenHarp.voicing);
       engine.previewMidis(midis, 1);
-      setTimeout(restoreVoicing, 1300);
+      hearing.current.push(setTimeout(restoreVoicing, 1300));
     });
-    const uses = result.parsed.score.events.filter((x) => x.chord === line.symbol).map((x) => x.index);
+    // Every time it's played: from its symbol to the next chord (each strum of the rhythm).
+    const uses: number[] = [];
+    let now: string | undefined;
+    for (const x of result.parsed.score.events) {
+      if (x.chord) now = x.chord;
+      if (now === line.symbol && !x.rest) uses.push(x.index);
+    }
     setActive(uses);
-    setTimeout(() => setActive((a) => (a === uses ? [] : a)), 1600);
+    hearing.current.push(setTimeout(() => setActive([]), 1600));
     document.querySelector(`.import-preview [data-index="${uses[0]}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   };
 
@@ -472,7 +491,17 @@ function ImportBody() {
                 </select>
               </label>
             )}
-            {analysis.chordSheet && chosenHarp && choice && <ChordList doc={analysis.doc} harp={chosenHarp} picks={standIns} onPicks={(p) => setPicks({ harp: choice.id, picks: p })} onHear={hearChord} />}
+            {analysis.chordSheet && chosenHarp && choice && <ChordList
+                doc={analysis.doc}
+                harp={chosenHarp}
+                picks={standIns}
+                onPicks={(p) => {
+                  setPicks((all) => ({ ...all, [harpKey]: p }));
+                  // (A pick holds the harmonica chosen: it doesn't move under you as suggestions come.)
+                  setPicked(choice.id);
+                }}
+                onHear={hearChord}
+              />}
           </div>
 
           <div className="import-preview sheet">
