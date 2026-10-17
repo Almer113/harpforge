@@ -115,7 +115,8 @@ old one. No server answering: guest only (the account menu offers **Try again**)
 
 **Files**
 - **Import** (top bar → Import, drag & drop, or paste): HarpTab, ABC, MusicXML
-  (`.musicxml`/`.xml`/`.mxl`), MIDI, ChordPro, "chords over lyrics" sheets (with capo and
+  (`.musicxml`/`.xml`/`.mxl`), MuseScore 3–4 (`.mscz`/`.mscx`), MIDI (with its words),
+  ChordPro, "chords over lyrics" sheets (with capo and
   `x4`), ASCII guitar tab, numbered notation, typed notes (`C4 D4 E4~`), and **PDF** —
   image-only PDFs through OCR with chord-aware corrections. Each import ranks the
   harmonicas and positions that play it best and previews the tab with sound; chord sheets
