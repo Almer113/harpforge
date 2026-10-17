@@ -22,7 +22,7 @@
 .issue.info { border-color: var(--border-2); background: transparent; color: var(--muted); }
 
 /* Library: storage couldn't be read. */
-.lib-error { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 18px; margin-bottom: 16px; border: 1px solid var(--danger); border-radius: var(--radius); background: rgba(239, 106, 90, 0.08); }
+.lib-error { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 18px; margin-bottom: 16px; border: 1px solid var(--danger); border-radius: var(--radius); background: color-mix(in srgb, var(--danger) 8%, transparent); }
 .lib-error p { margin: 0; flex: 1 1 320px; }
 
 /* The editor header stacks the transport above the toolbar, so the harmonica popover (inside the
@@ -32,16 +32,16 @@
 /* ---------- Slim harmonica (Play's Slim size, the editor's dock) ---------- */
 .harp-slim { display: flex; gap: 8px; align-items: stretch; touch-action: none; user-select: none; -webkit-user-select: none; }
 .harp-slim .harp-holes { flex: 1; display: grid; gap: 4px; min-width: 0; }
-.slim-hole { display: grid; grid-template-rows: 1fr 1fr; min-width: 0; border: 1px solid #5b5249; border-radius: 8px; overflow: hidden; background: #0f0d0b; cursor: pointer; }
+.slim-hole { display: grid; grid-template-rows: 1fr 1fr; min-width: 0; border: 1px solid var(--slim-edge); border-radius: 8px; overflow: hidden; background: var(--sunk); cursor: pointer; }
 .slim-hole > span { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3px 0; font-family: var(--mono); line-height: 1.1; white-space: nowrap; overflow: hidden; }
 .slim-hole b { font-size: 12.5px; }
 .slim-hole small { font-size: 9.5px; opacity: 0.72; }
-.slim-hole .sh-blow { color: var(--blow); border-bottom: 1px solid #2a241e; }
+.slim-hole .sh-blow { color: var(--blow); border-bottom: 1px solid var(--panel-2); }
 .slim-hole .sh-draw { color: var(--draw); }
-.slim-hole:hover > span { background: rgba(255, 255, 255, 0.04); }
-.slim-hole.blow-on .sh-blow { background: var(--blow); color: #22160a; }
-.slim-hole.draw-on .sh-draw { background: var(--draw); color: #0c1d26; }
+.slim-hole:hover > span { background: color-mix(in srgb, var(--contrast) 4%, transparent); }
+.slim-hole.blow-on .sh-blow { background: var(--blow); color: var(--on-blow); }
+.slim-hole.draw-on .sh-draw { background: var(--draw); color: var(--on-draw); }
 .slim-hole.blow-target .sh-blow, .slim-hole.draw-target .sh-draw { box-shadow: inset 0 0 0 2px var(--ok); }
 .slim-slide { flex: none; width: 46px; border: 1px solid var(--border-2); border-radius: 8px; background: var(--panel-2); color: var(--muted); font-size: 11px; font-weight: 700; }
-.slim-slide.on { border-color: var(--brass); color: var(--brass-2); background: rgba(227, 169, 72, 0.12); }
+.slim-slide.on { border-color: var(--brass); color: var(--brass-2); background: color-mix(in srgb, var(--brass) 12%, transparent); }
 .slim-note { margin: 6px 0 0; }

@@ -6,7 +6,7 @@
   position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; gap: 24px;
   padding: 10px 24px;
-  background: rgba(19, 17, 15, 0.86);
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
 }
@@ -32,14 +32,14 @@ main { flex: 1; }
   border: 1px solid var(--border-2); background: var(--panel-2); padding: 7px 14px; border-radius: 9px; cursor: pointer; font-weight: 600;
   transition: background 0.12s, border-color 0.12s;
 }
-.btn:hover:not(:disabled) { background: #332c25; border-color: #5d5144; }
+.btn:hover:not(:disabled) { background: var(--hover); border-color: var(--hover-edge); }
 .btn:disabled { opacity: 0.45; cursor: default; }
-.btn.primary { background: var(--brass); border-color: var(--brass); color: #22190d; }
+.btn.primary { background: var(--brass); border-color: var(--brass); color: var(--on-brass); }
 .btn.primary:hover:not(:disabled) { background: var(--brass-2); border-color: var(--brass-2); }
 .btn.ghost { background: transparent; }
 .btn.ghost.on { background: var(--panel-2); color: var(--brass-2); }
-.btn.danger { background: transparent; color: var(--danger); border-color: rgba(239, 106, 90, 0.4); }
-.btn.danger:hover { background: rgba(239, 106, 90, 0.12) !important; border-color: var(--danger) !important; }
+.btn.danger { background: transparent; color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.btn.danger:hover { background: color-mix(in srgb, var(--danger) 12%, transparent) !important; border-color: var(--danger) !important; }
 .btn.small { padding: 4px 10px; font-size: 12.5px; border-radius: 7px; }
 select, input[type='text'], .search {
   background: var(--panel-2); border: 1px solid var(--border-2); border-radius: 8px; padding: 6px 10px; outline: none;
@@ -53,7 +53,7 @@ select:focus, .search:focus { border-color: var(--brass); }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .chip {
   display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
-  background: rgba(227, 169, 72, 0.14); color: var(--brass-2); border: 1px solid rgba(227, 169, 72, 0.3);
+  background: color-mix(in srgb, var(--brass) 14%, transparent); color: var(--brass-2); border: 1px solid color-mix(in srgb, var(--brass) 30%, transparent);
 }
 .chip.plain { background: var(--panel-2); color: var(--muted); border-color: var(--border); }
 
@@ -73,17 +73,17 @@ select:focus, .search:focus { border-color: var(--brass); }
   min-width: 36px; height: 36px; padding: 0 10px; border-radius: 9px; cursor: pointer;
   border: 1px solid var(--border-2); background: var(--panel-2); color: var(--text);
 }
-.t-btn:hover:not(:disabled) { border-color: #5d5144; background: #332c25; }
+.t-btn:hover:not(:disabled) { border-color: var(--hover-edge); background: var(--hover); }
 .t-btn:disabled { opacity: 0.4; cursor: default; }
-.t-btn.primary { background: var(--brass); border-color: var(--brass); color: #22190d; width: 44px; }
+.t-btn.primary { background: var(--brass); border-color: var(--brass); color: var(--on-brass); width: 44px; }
 .t-btn.primary:hover:not(:disabled) { background: var(--brass-2); }
 .t-btn.toggle { color: var(--faint); }
-.t-btn.toggle.on { color: var(--brass-2); border-color: rgba(227, 169, 72, 0.55); background: rgba(227, 169, 72, 0.12); }
+.t-btn.toggle.on { color: var(--brass-2); border-color: color-mix(in srgb, var(--brass) 55%, transparent); background: color-mix(in srgb, var(--brass) 12%, transparent); }
 .t-label { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
 .t-value { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 110px; font-size: 12.5px; }
 .speed input[type='range'] { accent-color: var(--brass); width: 130px; }
 .t-group.rec { margin-left: auto; }
 .rec-btn { color: var(--danger); font-weight: 700; }
 .rec-btn.ghost { background: transparent; }
-.rec-btn.live { background: var(--danger); color: #fff; border-color: var(--danger); animation: pulse-rec 1.2s ease-in-out infinite; }
-@keyframes pulse-rec { 50% { box-shadow: 0 0 0 6px rgba(239, 106, 90, 0.2); } }
+.rec-btn.live { background: var(--danger); color: var(--on-danger); border-color: var(--danger); animation: pulse-rec 1.2s ease-in-out infinite; }
+@keyframes pulse-rec { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--danger) 20%, transparent); } }

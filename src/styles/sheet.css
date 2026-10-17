@@ -43,8 +43,8 @@
 }
 .card:hover { background: var(--panel-2); border-color: var(--border); }
 .card.selected { border-color: var(--brass); }
-.card.active { background: rgba(227, 169, 72, 0.16); border-color: var(--brass-2); transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35); }
-.card.bad { border-color: rgba(239, 106, 90, 0.7); background: rgba(239, 106, 90, 0.08); }
+.card.active { background: color-mix(in srgb, var(--brass) 16%, transparent); border-color: var(--brass-2); transform: translateY(-2px); box-shadow: 0 6px 16px color-mix(in srgb, var(--shadow) 35%, transparent); }
+.card.bad { border-color: color-mix(in srgb, var(--danger) 70%, transparent); background: color-mix(in srgb, var(--danger) 8%, transparent); }
 .card.marker { min-width: 0; padding: 2px 0; cursor: default; }
 .card-chord { font-weight: 800; font-size: 12.5px; color: var(--brass-2); white-space: nowrap; justify-self: start; }
 .card-body { display: flex; align-items: center; }
@@ -70,9 +70,9 @@
 .glyph.pitch { color: var(--pitch); font-size: 16px; }
 .card.short .glyph { font-size: 17px; }
 .g-sign { font-size: 0.8em; margin-right: 1px; }
-.g-bend { color: #fff; font-size: 0.9em; margin-left: 1px; letter-spacing: -0.1em; }
-.g-over { font-size: 0.6em; color: #fff; border: 1.5px solid currentColor; border-radius: 50%; width: 1.25em; height: 1.25em; display: inline-flex; align-items: center; justify-content: center; margin-left: 2px; align-self: center; }
-.g-slide { font-size: 0.8em; color: #fff; margin-right: 1px; }
+.g-bend { color: var(--ink-strong); font-size: 0.9em; margin-left: 1px; letter-spacing: -0.1em; }
+.g-over { font-size: 0.6em; color: var(--ink-strong); border: 1.5px solid currentColor; border-radius: 50%; width: 1.25em; height: 1.25em; display: inline-flex; align-items: center; justify-content: center; margin-left: 2px; align-self: center; }
+.g-slide { font-size: 0.8em; color: var(--ink-strong); margin-right: 1px; }
 .tab-empty { text-align: center; padding: 30px; color: var(--text); }
 .tab-empty p { margin: 4px 0; }
 
@@ -87,29 +87,29 @@
 /* (A larger target than the number itself.) */
 .bar-num::before { content: ''; position: absolute; inset: -5px -6px; }
 /* The chosen passage: a light wash; the looped one: a brass line under its notes. */
-.card.in-passage, :is(.st-note, .ly-note, .ly-text).in-passage { background: rgba(255, 244, 226, 0.07); border-color: rgba(255, 244, 226, 0.22); }
-.card.in-loop, :is(.st-note, .ly-note, .ly-text).in-loop { background-color: rgba(227, 169, 72, 0.06); box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6); }
-.card.in-loop.active { box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6), 0 6px 16px rgba(0, 0, 0, 0.35); }
+.card.in-passage, :is(.st-note, .ly-note, .ly-text).in-passage { background: color-mix(in srgb, var(--hilite) 7%, transparent); border-color: color-mix(in srgb, var(--hilite) 22%, transparent); }
+.card.in-loop, :is(.st-note, .ly-note, .ly-text).in-loop { background-color: color-mix(in srgb, var(--brass) 6%, transparent); box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--brass) 60%, transparent); }
+.card.in-loop.active { box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--brass) 60%, transparent), 0 6px 16px color-mix(in srgb, var(--shadow) 35%, transparent); }
 .card.selected.in-passage { border-color: var(--brass); }
 /* "Looping bars 5–8 ✕" next to the loop button. */
 .loop-chip {
   display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 3px 0 10px; border-radius: 999px; white-space: nowrap;
-  border: 1px solid rgba(227, 169, 72, 0.45); background: rgba(227, 169, 72, 0.1); color: var(--brass-2); font-size: 12px; font-weight: 600;
+  border: 1px solid color-mix(in srgb, var(--brass) 45%, transparent); background: color-mix(in srgb, var(--brass) 10%, transparent); color: var(--brass-2); font-size: 12px; font-weight: 600;
 }
 .loop-chip-x { width: 24px; height: 24px; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; font-size: 11px; }
-.loop-chip-x:hover { background: rgba(227, 169, 72, 0.2); }
+.loop-chip-x:hover { background: color-mix(in srgb, var(--brass) 20%, transparent); }
 /* The tempo trainer's chip and menu. */
 .loop-chip-x svg { display: block; margin: auto; }
-.loop-chip-x.on { background: rgba(227, 169, 72, 0.25); }
+.loop-chip-x.on { background: color-mix(in srgb, var(--brass) 25%, transparent); }
 .trainer-menu { min-width: 260px; }
 .trainer-intro { margin: 2px 10px 6px; font-size: 12.5px; color: var(--muted); }
 .trainer-menu .pb-row > span:first-child { min-width: 84px; }
 .trainer-actions { justify-content: flex-end; }
 /* Play along: green in time (✓), purple early (◂) or late (▸), red missed (✕, dashed). The
    last pass's marks are faded. A shape as well as a colour, so it isn't colour alone. */
-.card.mark-hit, :is(.st-note, .ly-note, .ly-text).mark-hit { border-color: var(--ok); background: rgba(124, 207, 138, 0.1); }
-.card.mark-early, .card.mark-late, :is(.st-note, .ly-note, .ly-text).mark-early, :is(.st-note, .ly-note, .ly-text).mark-late { border-color: var(--pitch); background: rgba(199, 155, 242, 0.1); }
-.card.mark-missed, :is(.st-note, .ly-note, .ly-text).mark-missed { border-color: var(--danger); border-style: dashed; background: rgba(239, 106, 90, 0.12); }
+.card.mark-hit, :is(.st-note, .ly-note, .ly-text).mark-hit { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.card.mark-early, .card.mark-late, :is(.st-note, .ly-note, .ly-text).mark-early, :is(.st-note, .ly-note, .ly-text).mark-late { border-color: var(--pitch); background: color-mix(in srgb, var(--pitch) 10%, transparent); }
+.card.mark-missed, :is(.st-note, .ly-note, .ly-text).mark-missed { border-color: var(--danger); border-style: dashed; background: color-mix(in srgb, var(--danger) 12%, transparent); }
 .card.mark-faded, :is(.st-note, .ly-note, .ly-text).mark-faded { opacity: 0.55; }
 :is(.card, .st-note, .ly-note, .ly-text):is(.mark-hit, .mark-early, .mark-late, .mark-missed) { position: relative; }
 :is(.card, .st-note, .ly-note, .ly-text):is(.mark-hit, .mark-early, .mark-late, .mark-missed)::after {
@@ -122,7 +122,7 @@
 /* When states meet on one note: playing > selected > mark > loop > passage. */
 :is(.card, .st-note, .ly-note, .ly-text).selected:is(.in-passage, .in-loop, .mark-hit, .mark-early, .mark-late, .mark-missed) { border-color: var(--brass); border-style: solid; }
 .card.active:is(.in-passage, .in-loop, .mark-hit, .mark-early, .mark-late, .mark-missed),
-:is(.st-note, .ly-note, .ly-text).active:is(.in-passage, .in-loop, .mark-hit, .mark-early, .mark-late, .mark-missed) { background: rgba(227, 169, 72, 0.16); border-color: var(--brass-2); border-style: solid; opacity: 1; }
+:is(.st-note, .ly-note, .ly-text).active:is(.in-passage, .in-loop, .mark-hit, .mark-early, .mark-late, .mark-missed) { background: color-mix(in srgb, var(--brass) 16%, transparent); border-color: var(--brass-2); border-style: solid; opacity: 1; }
 .input-card.along { gap: 10px; flex-wrap: wrap; }
 .along-status { max-width: 320px; }
 .along-warn { flex-basis: 100%; }
@@ -149,7 +149,7 @@
 /* Chips: steady widths (numbers don't jitter); short forms in a narrower editor bar. */
 .loop-chip { font-variant-numeric: tabular-nums; }
 .trainer-chip.idle { opacity: 0.7; }
-.passage-chip { border-style: dashed; background: rgba(255, 244, 226, 0.05); color: var(--text); border-color: rgba(255, 244, 226, 0.3); }
+.passage-chip { border-style: dashed; background: color-mix(in srgb, var(--hilite) 5%, transparent); color: var(--text); border-color: color-mix(in srgb, var(--hilite) 30%, transparent); }
 /* The editor bar has no room for them up to 1300px wide: the buttons light up instead (their
    tooltips say what's looping and how the trainer is doing; the speed is on the ♫ button). */
 @media (max-width: 1300px) {
@@ -175,7 +175,7 @@
 .ly-note.draw { color: var(--draw); }
 .ly-note:hover { background: var(--panel-2); }
 .ly-note.selected { border-color: var(--brass); }
-.ly-note.active { background: rgba(227, 169, 72, 0.18); border-color: var(--brass-2); }
+.ly-note.active { background: color-mix(in srgb, var(--brass) 18%, transparent); border-color: var(--brass-2); }
 .ly-rest { cursor: default; }
 .ly-rest:hover { background: transparent; }
 .ly-chord { font-family: var(--sans, inherit); font-size: 13px; font-weight: 800; color: var(--brass-2); min-height: 1.3em; white-space: nowrap; }
@@ -187,7 +187,7 @@
 /* Play-along marks on a note: above it, clear of the hole number. */
 :is(.ly-note, .ly-text):is(.mark-hit, .mark-early, .mark-late, .mark-missed)::after { top: -0.95em; right: -3px; font-size: 10px; }
 .ly-text:hover { background: var(--panel-2); }
-.ly-syl.active .ly-text { color: var(--brass-2); background: rgba(227, 169, 72, 0.12); }
+.ly-syl.active .ly-text { color: var(--brass-2); background: color-mix(in srgb, var(--brass) 12%, transparent); }
 /* A word stretched by its notes: a faint line joins its syllables ("Twin — kle"). */
 .ly-syl.joined .ly-text { display: flex; align-items: center; gap: 0; padding-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .ly-syl.joined + .ly-syl .ly-text { padding-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }

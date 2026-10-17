@@ -1,38 +1,16 @@
-/* Colours, fonts and base elements. */
+/* Fonts and base elements (the colours are in themes.css). */
 
 :root {
-  --bg: #13110f;
-  --bg-2: #1a1714;
-  --panel: #1f1b17;
-  --panel-2: #29241e;
-  --border: #3a3229;
-  --border-2: #4a4035;
-  --text: #f4ede4;
-  --muted: #a99b8b;
-  --brass: #e3a948;
-  --brass-2: #f5c46c;
-  --blow: #f39a3d;
-  --blow-soft: rgba(243, 154, 61, 0.16);
-  --draw: #45b4e0;
-  --draw-soft: rgba(69, 180, 224, 0.16);
-  --pitch: #c79bf2;
-  --danger: #ef6a5a;
-  --ok: #7ccf8a;
   --radius: 12px;
-  --staff-ink: #e9e1d6;
   --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
-  color-scheme: dark;
   --topbar-h: 57px;
-  --faint: #8b7e6e;
-  /* Keyboard focus: a light ring, unlike the brass of "selected". */
-  --focus: #fff4e2;
 }
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
 body {
   margin: 0;
-  background: radial-gradient(1200px 600px at 50% -200px, #2a2018 0%, var(--bg) 60%) fixed, var(--bg);
+  background: radial-gradient(1200px 600px at 50% -200px, var(--bg-glow) 0%, var(--bg) 60%) fixed, var(--bg);
   color: var(--text);
   font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 14px;

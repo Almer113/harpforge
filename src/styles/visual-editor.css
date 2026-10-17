@@ -21,14 +21,14 @@
   display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px; padding: 0 8px;
   border-radius: 8px; border: 1px solid var(--border-2); background: var(--panel-2); color: var(--text); cursor: pointer;
 }
-.icon-btn:hover:not(:disabled) { border-color: #5d5144; }
+.icon-btn:hover:not(:disabled) { border-color: var(--hover-edge); }
 .icon-btn:disabled { opacity: 0.35; cursor: default; }
 
 /* Visual editor */
 .ve { display: flex; flex-direction: column; gap: 12px; }
 .ve-toolbar {
   position: sticky; top: 57px; z-index: 15; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  padding: 8px 12px; background: rgba(31, 27, 23, 0.96); backdrop-filter: blur(6px);
+  padding: 8px 12px; background: color-mix(in srgb, var(--panel) 96%, transparent); backdrop-filter: blur(6px);
   border: 1px solid var(--border); border-radius: var(--radius);
 }
 .durations { gap: 3px; }
@@ -36,10 +36,10 @@
 .dur-sym { transform: translateY(-1px); }
 .step-btn { display: inline-flex; align-items: center; gap: 6px; }
 .step-btn .rec-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); }
-.step-btn.on { border-color: var(--danger); color: #fff; background: rgba(239, 106, 90, 0.22); }
+.step-btn.on { border-color: var(--danger); color: var(--on-danger); background: color-mix(in srgb, var(--danger) 22%, transparent); }
 .step-btn.on .rec-dot { background: var(--danger); box-shadow: 0 0 8px var(--danger); animation: pulse-rec 1.2s infinite; }
 .ve-toolbar input[type='range'] { width: 90px; accent-color: var(--brass); }
-.ve-notice { padding: 8px 12px; border-radius: 10px; background: rgba(232, 197, 71, 0.08); border-left: 3px solid #e8c547; color: var(--muted); font-size: 13px; }
+.ve-notice { padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--warn) 8%, transparent); border-left: 3px solid var(--warn); color: var(--muted); font-size: 13px; }
 
 .ve-main { display: grid; gap: 14px; align-items: start; grid-template-columns: minmax(0, 1fr) 280px; }
 .ve-score { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 14px 10px; overflow-x: auto; }
@@ -58,15 +58,15 @@
 .ve-measure.ending-end.ending-closed > .ve-mhead { border-right: 1.5px solid var(--muted); }
 .ve-ending { color: var(--text); font-weight: 700; }
 .ve-warn { color: var(--danger); font-weight: 700; margin-left: auto; }
-.ve-measure.overfull .ve-lane { box-shadow: inset 0 0 0 1px rgba(239, 106, 90, 0.6); }
+.ve-measure.overfull .ve-lane { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 60%, transparent); }
 .ve-lane {
   position: relative; height: 108px; border-radius: 8px; cursor: crosshair;
-  background-color: #171411;
+  background-color: var(--sunk-2);
   background-image:
-    linear-gradient(to right, rgba(255, 236, 214, 0.13) 1px, transparent 1px),
-    linear-gradient(to right, rgba(255, 236, 214, 0.045) 1px, transparent 1px);
+    linear-gradient(to right, color-mix(in srgb, var(--grid) 13%, transparent) 1px, transparent 1px),
+    linear-gradient(to right, color-mix(in srgb, var(--grid) 4.5%, transparent) 1px, transparent 1px);
 }
-.ve-measure.current .ve-lane { background-color: #1b1713; }
+.ve-measure.current .ve-lane { background-color: var(--lane-now); }
 .ve-item {
   position: absolute;
   top: 4px;
@@ -85,12 +85,12 @@
   transition: box-shadow 0.1s, opacity 0.1s;
   overflow: visible;
 }
-.ve-item.blow { background: linear-gradient(180deg, rgba(243, 154, 61, 0.14), rgba(243, 154, 61, 0.05)); border-color: rgba(243, 154, 61, 0.45); }
-.ve-item.draw { background: linear-gradient(180deg, rgba(69, 180, 224, 0.14), rgba(69, 180, 224, 0.05)); border-color: rgba(69, 180, 224, 0.45); }
+.ve-item.blow { background: linear-gradient(180deg, color-mix(in srgb, var(--blow) 14%, transparent), color-mix(in srgb, var(--blow) 5%, transparent)); border-color: color-mix(in srgb, var(--blow) 45%, transparent); }
+.ve-item.draw { background: linear-gradient(180deg, color-mix(in srgb, var(--draw) 14%, transparent), color-mix(in srgb, var(--draw) 5%, transparent)); border-color: color-mix(in srgb, var(--draw) 45%, transparent); }
 .ve-item.rest { background: transparent; border-style: dashed; }
 .ve-item.marker { width: 22px !important; padding: 0; }
-.ve-item.selected { box-shadow: 0 0 0 2px var(--brass-2), 0 6px 16px rgba(0, 0, 0, 0.4); z-index: 2; }
-.ve-item.playing { box-shadow: 0 0 0 2px var(--ok), 0 0 18px rgba(124, 207, 138, 0.45); }
+.ve-item.selected { box-shadow: 0 0 0 2px var(--brass-2), 0 6px 16px color-mix(in srgb, var(--shadow) 40%, transparent); z-index: 2; }
+.ve-item.playing { box-shadow: 0 0 0 2px var(--ok), 0 0 18px color-mix(in srgb, var(--ok) 45%, transparent); }
 .ve-item.dragging { opacity: 0.3; }
 .ve-item.bad { border-color: var(--danger); }
 .ve-item:active { cursor: grabbing; }
@@ -103,13 +103,13 @@
 .ve-name { font-family: var(--mono); font-size: 9.5px; color: var(--faint); white-space: nowrap; }
 .ve-lyric { font-size: 11px; color: var(--muted); font-style: italic; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .ve-resize { position: absolute; right: 0; top: 0; bottom: 0; width: 8px; cursor: ew-resize; border-radius: 0 9px 9px 0; }
-.ve-item:hover .ve-resize, .ve-item.selected .ve-resize { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18)); }
-.ve-resize-ghost { position: absolute; top: 4px; bottom: 4px; border: 2px dashed var(--brass-2); border-radius: 9px; pointer-events: none; z-index: 3; background: rgba(227, 169, 72, 0.08); }
+.ve-item:hover .ve-resize, .ve-item.selected .ve-resize { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--contrast) 18%, transparent)); }
+.ve-resize-ghost { position: absolute; top: 4px; bottom: 4px; border: 2px dashed var(--brass-2); border-radius: 9px; pointer-events: none; z-index: 3; background: color-mix(in srgb, var(--brass) 8%, transparent); }
 .ve-ghost {
   position: absolute; top: 4px; bottom: 4px; border-radius: 9px; pointer-events: none; z-index: 3;
-  border: 2px dashed var(--brass-2); background: rgba(227, 169, 72, 0.12);
+  border: 2px dashed var(--brass-2); background: color-mix(in srgb, var(--brass) 12%, transparent);
 }
-.ve-ghost.copy { border-color: var(--ok); background: rgba(124, 207, 138, 0.12); }
+.ve-ghost.copy { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
 .ve-caret { position: absolute; top: 3px; bottom: 3px; width: 2px; margin-left: -1px; background: var(--brass-2); border-radius: 2px; pointer-events: none; animation: blink 1.05s steps(1) infinite; z-index: 4; }
 @keyframes blink { 50% { opacity: 0.2; } }
 .ve-add-measure {
@@ -184,15 +184,15 @@
 .st-note.other { color: var(--text); }
 .st-note:hover { background: var(--panel-2); }
 .st-note.selected { border-color: var(--brass); }
-.st-note.active { background: rgba(227, 169, 72, 0.18); border-color: var(--brass-2); }
+.st-note.active { background: color-mix(in srgb, var(--brass) 18%, transparent); border-color: var(--brass-2); }
 /* Two-digit holes (10, 11, 12 …) are underlined so runs of holes stay readable. */
 .st-two { display: inline-block; line-height: 1.15; border-bottom: 2px solid currentColor; margin: 0 1px; }
 
 /* Short bars (pickups): the part of the lane past the bar's real length */
 .ve-short {
   position: absolute; top: 0; bottom: 0; right: 0; pointer-events: none; z-index: 0;
-  background: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.28) 0 6px, transparent 6px 12px);
-  border-left: 1px dashed var(--line-2, rgba(255, 255, 255, 0.18));
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--shadow) 28%, transparent) 0 6px, transparent 6px 12px);
+  border-left: 1px dashed color-mix(in srgb, var(--contrast) 18%, transparent);
 }
 .insp-note { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 0 10px; }
 .lib-backup { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -4px 0 14px; }
@@ -204,7 +204,7 @@
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 50; width: 300px;
   display: flex; flex-direction: column; gap: 8px; padding: 12px;
   background: var(--panel); border: 1px solid var(--brass); border-radius: var(--radius);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--shadow) 45%, transparent);
 }
 .kc-option {
   display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 8px 10px;
@@ -215,9 +215,9 @@
 .kc-desc { font-size: 12px; color: var(--muted); line-height: 1.35; }
 .key-choice > .btn { align-self: flex-end; }
 /* Notes in the looped passage: a brass line under them, as on the Play page. */
-.ve-item.in-loop { box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6); }
-.ve-item.in-loop.selected { box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6), 0 0 0 2px var(--brass-2), 0 6px 16px rgba(0, 0, 0, 0.4); }
-.ve-item.in-loop.playing { box-shadow: inset 0 -3px 0 rgba(227, 169, 72, 0.6), 0 0 0 2px var(--ok), 0 0 18px rgba(124, 207, 138, 0.45); }
+.ve-item.in-loop { box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--brass) 60%, transparent); }
+.ve-item.in-loop.selected { box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--brass) 60%, transparent), 0 0 0 2px var(--brass-2), 0 6px 16px color-mix(in srgb, var(--shadow) 40%, transparent); }
+.ve-item.in-loop.playing { box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--brass) 60%, transparent), 0 0 0 2px var(--ok), 0 0 18px color-mix(in srgb, var(--ok) 45%, transparent); }
 
 /* ---------- Lyrics mode: a box on the note's lyric ---------- */
 /* (The lyric row takes clicks even when empty: a click there types the syllable.) */
@@ -229,7 +229,7 @@
   position: absolute; left: 1px; bottom: 1px; z-index: 6; width: auto; min-width: 56px;
   padding: 0 4px; border: 1px solid var(--brass-2); border-radius: 4px; outline: none;
   background: var(--bg); color: var(--text); font: italic 12px/16px Inter, system-ui, sans-serif;
-  box-shadow: 0 0 0 3px rgba(227, 169, 72, 0.25);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brass) 25%, transparent);
 }
 .lyrics-btn svg { display: block; margin: auto; }
 .verse-select { max-width: 120px; font-size: 12px; padding: 1px 4px; }
@@ -248,7 +248,7 @@
 .fill-letter-wrap { display: inline-flex; align-items: center; }
 /* The space between two letters: click for a break (shown as a hyphen). */
 .fill-gap { width: 9px; height: 22px; padding: 0; border: 0; border-radius: 3px; background: transparent; cursor: pointer; position: relative; }
-.fill-gap:hover { background: rgba(227, 169, 72, 0.25); }
+.fill-gap:hover { background: color-mix(in srgb, var(--brass) 25%, transparent); }
 .fill-gap.on { width: 11px; }
 .fill-gap.on::after { content: '-'; position: absolute; inset: 0; color: var(--brass-2); font-weight: 800; line-height: 20px; text-align: center; }
 .fill-preview { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -268,11 +268,11 @@
 .ve-lane[data-hint]::after {
   content: attr(data-hint); position: absolute; left: var(--hint-x); width: var(--hint-w); height: 15px; z-index: 1; pointer-events: none;
   display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap;
-  border: 1px dashed rgba(227, 169, 72, 0.6); border-radius: 4px; color: var(--brass-2); font-size: 10px; font-weight: 600;
+  border: 1px dashed color-mix(in srgb, var(--brass) 60%, transparent); border-radius: 4px; color: var(--brass-2); font-size: 10px; font-weight: 600;
 }
 .ve-lane[data-hint-row='lyric']::after { bottom: 4px; }
 .ve-lane[data-hint-row='chord']::after { top: 4px; }
 .ve-lane[data-hint] { cursor: text; }
 /* The rest block being made: dashed, until it has its words or chord. */
-.ve-item.ghost-rest { border-style: dashed; border-color: var(--brass-2); background: rgba(227, 169, 72, 0.06); z-index: 3; }
+.ve-item.ghost-rest { border-style: dashed; border-color: var(--brass-2); background: color-mix(in srgb, var(--brass) 6%, transparent); z-index: 3; }
 .ve-chord-input { top: 1px; bottom: auto; font-style: normal; font-weight: 700; }

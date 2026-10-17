@@ -14,7 +14,7 @@
 .pal-btn:hover:not(:disabled) { background: var(--panel-2); color: var(--text); }
 .pal-btn:disabled { opacity: 0.35; cursor: default; }
 .pal-btn.mod { font-size: 14px; font-weight: 800; }
-.pal-btn.on { border-color: var(--brass); color: var(--brass-2); background: rgba(227, 169, 72, 0.12); }
+.pal-btn.on { border-color: var(--brass); color: var(--brass-2); background: color-mix(in srgb, var(--brass) 12%, transparent); }
 /* In step entry the palette shows the next note's length: a dashed outline. */
 .pal-btn.next { border: 1px dashed var(--brass); color: var(--brass-2); }
 .more-btn { font-size: 16px; letter-spacing: 1px; }
@@ -29,7 +29,7 @@
 .mix-row input[type='range'] { width: auto; flex: 1; min-width: 60px; }
 .mix-row .t-value { min-width: 34px; font-variant-numeric: tabular-nums; }
 .mix-on { min-width: 58px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border-2); background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-align: left; }
-.mix-on.on { border-color: rgba(227, 169, 72, 0.55); background: rgba(227, 169, 72, 0.12); color: var(--brass-2); }
+.mix-on.on { border-color: color-mix(in srgb, var(--brass) 55%, transparent); background: color-mix(in srgb, var(--brass) 12%, transparent); color: var(--brass-2); }
 .mix-row.off input[type='range'] { opacity: 0.4; }
 .transport.compact { display: flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; box-shadow: none; position: static; }
 .transport.compact .t-btn { width: 34px; height: 32px; }
@@ -51,15 +51,15 @@
 .insp-empty { margin: 4px 2px; }
 
 /* The note step entry just wrote: outlined, not selected. */
-.ve-item.just { box-shadow: 0 0 0 1px rgba(245, 196, 108, 0.65); }
+.ve-item.just { box-shadow: 0 0 0 1px color-mix(in srgb, var(--brass-2) 65%, transparent); }
 .ve-add-measure { position: relative; }
 .ve-add-measure.caret-here { border-color: var(--brass); color: var(--brass-2); }
 
 /* Docked harmonica + status line */
 .ve-dock {
   position: sticky; bottom: 0; z-index: 12; margin: 0 -24px; padding: 0 24px;
-  background: linear-gradient(180deg, rgba(29, 25, 21, 0.98), #171410); border-top: 1px solid var(--border-2);
-  box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.35);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--dock) 98%, transparent), var(--dock-2)); border-top: 1px solid var(--border-2);
+  box-shadow: 0 -10px 24px color-mix(in srgb, var(--shadow) 35%, transparent);
 }
 .dock-head { display: flex; align-items: center; gap: 8px; padding: 6px 0; flex-wrap: wrap; font-size: 12px; }
 .dock-head > b { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); }
@@ -84,14 +84,14 @@
 .stage-head .now-playing { flex: 1; height: 30px; justify-content: flex-start; min-width: 0; }
 .stage-head .np-chip { padding: 2px 9px; }
 .stage-head .np-chip b { font-size: 14px; }
-.practice-start { background: var(--brass); border-color: var(--brass); color: #22190d; font-weight: 700; }
+.practice-start { background: var(--brass); border-color: var(--brass); color: var(--on-brass); font-weight: 700; }
 .practice-start:hover:not(:disabled) { background: var(--brass-2); }
 .pb-hint { padding: 0 10px 6px 34px; }
 
 /* ---------- Focus, cards, printing from the browser ---------- */
 
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.card:focus-visible, .st-note:focus-visible, .pal-btn:focus-visible, .seg button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: 0 0 0 5px rgba(0, 0, 0, 0.55); }
+.card:focus-visible, .st-note:focus-visible, .pal-btn:focus-visible, .seg button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: 0 0 0 5px color-mix(in srgb, var(--shadow) 55%, transparent); }
 
 /* Library cards: the title's button covers the card; the actions sit above it. */
 .lib-main { position: relative; padding: 14px 16px 10px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
@@ -109,12 +109,7 @@
 
 /* Printing from the browser's menu (not the print view): ink on paper, without the controls. */
 @media print {
-  html:not(.printing) {
-    --bg: #fff; --bg-2: #f6f2ec; --panel: transparent; --panel-2: #f1ece5; --border: #cfc6ba; --border-2: #a99e90;
-    --text: #1a1714; --muted: #4f463c; --faint: #6d6357; --brass: #8a5a12; --brass-2: #8a5a12;
-    --blow: #b8570a; --draw: #11638c; --pitch: #6b3fa0; --staff-ink: #111111; color-scheme: light;
-  }
-  html:not(.printing) body { background: #fff !important; color: var(--text); }
+  html:not(.printing) body { background: var(--paper) !important; color: var(--text); }
   html:not(.printing) :is(.topbar, .transport, .stage, .edit-sticky, .ve-dock, .ve-inspector, .sheet-head .tb-group, .lib-backup, .lib-actions, .toast, .modal-backdrop) { display: none !important; }
   html:not(.printing) .page { max-width: none; padding: 0; }
   html:not(.printing) .sheet, html:not(.printing) .lib-card { box-shadow: none; }
@@ -130,8 +125,8 @@ html { scrollbar-gutter: stable; }
 /* The docked harmonica floats at the bottom, a card like the toolbar at the top. */
 .ve-dock {
   position: sticky; bottom: 8px; z-index: 12; margin: 0; padding: 4px 12px 0;
-  background: rgba(26, 23, 20, 0.97); border: 1px solid var(--border); border-radius: var(--radius);
-  box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.35);
+  background: color-mix(in srgb, var(--bg-2) 97%, transparent); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 -8px 18px color-mix(in srgb, var(--shadow) 35%, transparent);
 }
 .ve-status { border-top: 1px solid var(--border); }
 /* The text editor fills the window under the bar. */
@@ -140,7 +135,7 @@ html { scrollbar-gutter: stable; }
 .doc-status.hidden-here { visibility: hidden; }
 
 /* The Play page's transport looks like the editor's bar: same card, same buttons. */
-.play-page .transport { padding: 6px 10px; gap: 8px; background: rgba(26, 23, 20, 0.97); }
+.play-page .transport { padding: 6px 10px; gap: 8px; background: color-mix(in srgb, var(--bg-2) 97%, transparent); }
 .play-page .transport .t-btn { min-width: 34px; height: 32px; padding: 0 8px; }
 .play-page .transport .t-btn.primary { width: 34px; }
 /* Play and Edit share width and spacing, so the song line and the bar sit in the same place. */
@@ -159,7 +154,7 @@ html { scrollbar-gutter: stable; }
 .transport .t-btn.primary, .editor-bar .play-stop .t-btn { padding: 0; }
 .t-btn svg { flex: none; }
 /* Step entry on: the dock is outlined in the record red. */
-.ve-dock.stepping { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger), 0 -8px 18px rgba(0, 0, 0, 0.35); }
+.ve-dock.stepping { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger), 0 -8px 18px color-mix(in srgb, var(--shadow) 35%, transparent); }
 
 /* A window up to 1300px wide: the editor bar stays one row (closer buttons, no separators, the
    position in the harmonica chip's tooltip, Step as its dot), and the status line drops its hint. */

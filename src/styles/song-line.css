@@ -27,8 +27,8 @@
 .sl-field.unset { color: var(--muted); font-weight: 400; }
 .sl-unit { color: var(--muted); font-weight: 400; }
 .song-line.editable .sl-field { border-color: var(--border-2); background: var(--bg); cursor: pointer; }
-.song-line.editable .sl-field:hover { border-color: #6a5c4c; background: var(--panel-2); }
-.song-line.editable .sl-field:focus-within { border-color: var(--brass); box-shadow: 0 0 0 2px rgba(227, 169, 72, 0.25); }
+.song-line.editable .sl-field:hover { border-color: var(--field-hover-edge); background: var(--panel-2); }
+.song-line.editable .sl-field:focus-within { border-color: var(--brass); box-shadow: 0 0 0 2px color-mix(in srgb, var(--brass) 25%, transparent); }
 .sl-field select, .sl-field input {
   appearance: none; -moz-appearance: textfield; field-sizing: content; box-sizing: border-box;
   margin: 0; padding: 0; border: 0; background: transparent; outline: none;
@@ -63,12 +63,12 @@
 /* Chords and lyrics run on past their card (to the next chord or lyric), above the cards after it. */
 .ve-item > .ve-chord, .ve-item > .ve-lyric {
   justify-self: start; min-width: 100%; text-align: center; position: relative; z-index: 1;
-  text-overflow: ellipsis; text-shadow: 0 0 3px #171411, 0 0 3px #171411;
+  text-overflow: ellipsis; text-shadow: 0 0 3px var(--sunk-2), 0 0 3px var(--sunk-2);
 }
 /* A narrow card's instant label (hover, or the one selected note). */
 .ve-item[data-peek]:is(:hover, .solo)::after {
   content: attr(data-peek); position: absolute; bottom: calc(100% + 5px); left: 50%; transform: translateX(-50%); z-index: 6;
-  padding: 3px 8px; border-radius: 6px; background: #2a241e; border: 1px solid var(--border-2); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  padding: 3px 8px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--border-2); box-shadow: 0 4px 12px color-mix(in srgb, var(--shadow) 45%, transparent);
   font: 600 12px/1.3 var(--mono); color: var(--text); white-space: pre; pointer-events: none;
 }
 .ve-item.dragging[data-peek]::after { display: none; }

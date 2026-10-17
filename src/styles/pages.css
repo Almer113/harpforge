@@ -7,21 +7,21 @@
 .tab-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 .save-split { display: inline-flex; }
 .save-split > .btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.save-split .menu-wrap .btn { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid rgba(34, 25, 13, 0.35); padding-left: 7px; padding-right: 7px; }
+.save-split .menu-wrap .btn { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid color-mix(in srgb, var(--on-brass) 35%, transparent); padding-left: 7px; padding-right: 7px; }
 .menu.left { right: auto; left: 0; }
-.transport { position: sticky; top: calc(var(--topbar-h) + 6px); z-index: 15; box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35); }
+.transport { position: sticky; top: calc(var(--topbar-h) + 6px); z-index: 15; box-shadow: 0 8px 18px color-mix(in srgb, var(--shadow) 35%, transparent); }
 .t-harp { margin-left: auto; }
 .harp-chip-wrap { position: relative; }
 .harp-chip {
   display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 9px; cursor: pointer; font-weight: 600;
-  border: 1px solid rgba(227, 169, 72, 0.4); background: rgba(227, 169, 72, 0.1); color: var(--brass-2);
+  border: 1px solid color-mix(in srgb, var(--brass) 40%, transparent); background: color-mix(in srgb, var(--brass) 10%, transparent); color: var(--brass-2);
 }
-.harp-chip:hover, .harp-chip.on { background: rgba(227, 169, 72, 0.18); border-color: var(--brass); }
+.harp-chip:hover, .harp-chip.on { background: color-mix(in srgb, var(--brass) 18%, transparent); border-color: var(--brass); }
 .harp-chip .muted { color: var(--muted); font-weight: 500; }
 .harp-pop {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 40; width: 340px;
   display: flex; flex-direction: column; gap: 10px; padding: 14px;
-  background: var(--panel); border: 1px solid var(--border-2); border-radius: var(--radius); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  background: var(--panel); border: 1px solid var(--border-2); border-radius: var(--radius); box-shadow: 0 16px 40px color-mix(in srgb, var(--shadow) 50%, transparent);
 }
 .harp-pop .picker { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .harp-pop .picker select { width: 100%; }
@@ -47,17 +47,17 @@
 .keys-wrap .keyhelp {
   position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: 300px;
   flex-direction: column; gap: 8px; align-items: flex-start; padding: 12px;
-  background: var(--panel); border: 1px solid var(--border-2); border-radius: var(--radius); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  background: var(--panel); border: 1px solid var(--border-2); border-radius: var(--radius); box-shadow: 0 16px 40px color-mix(in srgb, var(--shadow) 50%, transparent);
 }
 .rec-dot-icon { color: var(--danger); display: inline-flex; }
-.input-card.rec { border-color: rgba(239, 106, 90, 0.6); }
+.input-card.rec { border-color: color-mix(in srgb, var(--danger) 60%, transparent); }
 .transport { gap: 12px; padding: 8px 12px; }
 .transport .speed input[type='range'] { width: 110px; }
 .transport select { max-width: 150px; }
 
 /* Code editor: wrapped lines, numbers beside each line */
 .code-editor { display: block; position: relative; }
-.code-area { position: absolute; inset: 0; background: linear-gradient(90deg, #171411 0 46px, var(--border) 46px 47px, transparent 47px); }
+.code-area { position: absolute; inset: 0; background: linear-gradient(90deg, var(--sunk-2) 0 46px, var(--border) 46px 47px, transparent 47px); }
 .code-mirror, .code-area textarea {
   padding: 10px 12px 10px 58px;
   white-space: pre-wrap;
@@ -72,7 +72,7 @@
 
 .edit-sticky {
   position: sticky; top: calc(var(--topbar-h) + 6px); z-index: 15; display: flex; flex-direction: column; gap: 6px;
-  padding: 8px; background: rgba(26, 23, 20, 0.97); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+  padding: 8px; background: color-mix(in srgb, var(--bg-2) 97%, transparent); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 18px color-mix(in srgb, var(--shadow) 35%, transparent);
 }
 .edit-sticky .transport { position: static; box-shadow: none; border: 0; padding: 0 4px; background: transparent; }
 .edit-sticky .editor-bar { justify-content: flex-start; padding-top: 6px; border-top: 1px solid var(--border); }
@@ -134,7 +134,7 @@
 .lib-empty { padding: 22px 24px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
 .lib-empty p { margin: 0; max-width: 560px; }
 /* Tabs that survived in the working copies after the browser cleared the library. */
-.lib-recover { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; align-self: stretch; padding: 14px 18px; margin-bottom: 10px; border: 1px solid rgba(227, 169, 72, 0.45); border-radius: var(--radius); background: rgba(227, 169, 72, 0.08); }
+.lib-recover { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; align-self: stretch; padding: 14px 18px; margin-bottom: 10px; border: 1px solid color-mix(in srgb, var(--brass) 45%, transparent); border-radius: var(--radius); background: color-mix(in srgb, var(--brass) 8%, transparent); }
 .lib-empty .lib-recover p { flex: 1 1 320px; max-width: none; }
 .lib-backup { margin: 6px 0 0; padding-top: 12px; border-top: 1px solid var(--border); }
 
@@ -171,7 +171,7 @@ html { scroll-padding-top: calc(var(--topbar-h) + var(--edit-head-h, 64px) + 14p
 .lib-new-part svg { width: 16px; height: 16px; color: var(--faint); transition: color 0.12s; }
 .lib-new-part.main { gap: 5px; font-size: 16px; }
 .lib-new-part.main svg { width: 28px; height: 28px; }
-.lib-new-part:hover { background: rgba(227, 169, 72, 0.12); color: var(--brass-2); }
+.lib-new-part:hover { background: color-mix(in srgb, var(--brass) 12%, transparent); color: var(--brass-2); }
 .lib-new-part:hover svg { color: var(--brass-2); }
 .lib-new-part:focus-visible { outline: 2px solid var(--focus); outline-offset: -5px; border-radius: 10px; }
 /* The empty library: its words, and the same card beside them (the recovery notice above both). */

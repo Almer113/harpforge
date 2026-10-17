@@ -4,10 +4,10 @@
 .stage {
   display: flex; flex-direction: column; align-items: center; gap: 14px;
   padding: 18px 16px 16px; border-radius: 18px;
-  background: radial-gradient(800px 260px at 50% 40%, rgba(227, 169, 72, 0.09), transparent 70%), var(--bg-2);
+  background: radial-gradient(800px 260px at 50% 40%, color-mix(in srgb, var(--brass) 9%, transparent), transparent 70%), var(--bg-2);
   border: 1px solid var(--border);
 }
-.stage.is-recording { border-color: rgba(239, 106, 90, 0.6); box-shadow: 0 0 0 3px rgba(239, 106, 90, 0.12); }
+.stage.is-recording { border-color: color-mix(in srgb, var(--danger) 60%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 12%, transparent); }
 .harp-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; container-type: inline-size; }
 .now-playing { height: 36px; flex: none; overflow: hidden; display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: nowrap; }
 
@@ -17,72 +17,72 @@
 }
 .np-chip b { font-size: 17px; }
 .np-chip span { color: var(--muted); font-size: 12px; }
-.np-chip.blow { color: var(--blow); border-color: rgba(243, 154, 61, 0.5); background: var(--blow-soft); }
-.np-chip.draw { color: var(--draw); border-color: rgba(69, 180, 224, 0.5); background: var(--draw-soft); }
+.np-chip.blow { color: var(--blow); border-color: color-mix(in srgb, var(--blow) 50%, transparent); background: var(--blow-soft); }
+.np-chip.draw { color: var(--draw); border-color: color-mix(in srgb, var(--draw) 50%, transparent); background: var(--draw-soft); }
 
 .harp {
   position: relative; user-select: none; touch-action: none; cursor: pointer;
   border-radius: 16px; padding: 0 14px;
-  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.55));
+  filter: drop-shadow(0 18px 24px color-mix(in srgb, var(--shadow) 55%, transparent));
 }
 .harp-plate {
   position: relative;
   background:
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 3px),
-    linear-gradient(180deg, #f1f4f7 0%, #c7ced6 38%, #9aa3ad 62%, #c4cbd2 100%);
-  border: 1px solid #6b737c;
-  color: #2b3138;
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--metal-sheen) 5%, transparent) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, var(--metal-1) 0%, var(--metal-2) 38%, var(--metal-3) 62%, var(--metal-4) 100%);
+  border: 1px solid var(--metal-edge);
+  color: var(--metal-ink);
 }
 .harp-plate.top { border-radius: 14px 14px 4px 4px; padding: 6px 10px 6px; }
 .harp-plate.bottom { border-radius: 4px 4px 14px 14px; padding: 6px 10px 8px; }
 .harp-engraving {
   display: block; text-align: center; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
-  font-weight: 700; color: rgba(40, 46, 54, 0.55); margin-bottom: 2px; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+  font-weight: 700; color: color-mix(in srgb, var(--metal-ink-3) 55%, transparent); margin-bottom: 2px; text-shadow: 0 1px 0 color-mix(in srgb, var(--metal-sheen) 60%, transparent);
 }
 .harp-labels { display: flex; }
 .harp-label {
   width: var(--hole-w); display: flex; flex-direction: column; align-items: center; gap: 2px;
   font-size: 11px; font-weight: 700;
 }
-.harp-label .note { font-family: var(--mono); color: #39414a; }
-.harp-label kbd { background: rgba(255, 255, 255, 0.55); color: #2b3138; border-color: rgba(0, 0, 0, 0.25); }
+.harp-label .note { font-family: var(--mono); color: var(--metal-ink-2); }
+.harp-label kbd { background: color-mix(in srgb, var(--metal-sheen) 55%, transparent); color: var(--metal-ink); border-color: color-mix(in srgb, var(--hole-shade) 25%, transparent); }
 .harp-comb {
-  background: linear-gradient(180deg, #2c241d, #3b3027 50%, #2c241d);
-  padding: 7px 10px; border-left: 1px solid #1c1712; border-right: 1px solid #1c1712;
+  background: linear-gradient(180deg, var(--comb-1), var(--comb-2) 50%, var(--comb-1));
+  padding: 7px 10px; border-left: 1px solid var(--comb-edge); border-right: 1px solid var(--comb-edge);
 }
 .harp-holes { display: flex; }
 .hole { width: var(--hole-w); display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative; }
-.hole-num { position: absolute; top: 50%; transform: translateY(-50%); font-weight: 800; font-size: 13px; color: rgba(255, 235, 210, 0.42); z-index: 2; pointer-events: none; }
+.hole-num { position: absolute; top: 50%; transform: translateY(-50%); font-weight: 800; font-size: 13px; color: color-mix(in srgb, var(--comb-ink) 42%, transparent); z-index: 2; pointer-events: none; }
 .hole-slot {
   position: relative; width: calc(var(--hole-w) - 16px); height: 46px; border-radius: 7px; overflow: hidden;
-  background: #0b0907; box-shadow: inset 0 4px 10px rgba(0, 0, 0, 0.9), 0 1px 0 rgba(255, 255, 255, 0.08);
+  background: var(--hole); box-shadow: inset 0 4px 10px color-mix(in srgb, var(--hole-shade) 90%, transparent), 0 1px 0 color-mix(in srgb, var(--metal-sheen) 8%, transparent);
 }
 .reed { position: absolute; left: 0; right: 0; height: 50%; transition: background 0.08s, box-shadow 0.08s; }
 .reed.blow { top: 0; }
 .reed.draw { bottom: 0; }
-.hole:hover .reed.blow { background: rgba(243, 154, 61, 0.1); }
-.hole:hover .reed.draw { background: rgba(69, 180, 224, 0.1); }
-.hole.blow-on .reed.blow { background: linear-gradient(180deg, var(--blow), rgba(243, 154, 61, 0.35)); box-shadow: 0 0 18px var(--blow); animation: reed 0.09s linear infinite; }
-.hole.draw-on .reed.draw { background: linear-gradient(0deg, var(--draw), rgba(69, 180, 224, 0.35)); box-shadow: 0 0 18px var(--draw); animation: reed 0.09s linear infinite; }
-.hole.blow-on .hole-num, .hole.draw-on .hole-num { color: #fff; text-shadow: 0 0 6px rgba(0, 0, 0, 0.8); }
+.hole:hover .reed.blow { background: color-mix(in srgb, var(--blow) 10%, transparent); }
+.hole:hover .reed.draw { background: color-mix(in srgb, var(--draw) 10%, transparent); }
+.hole.blow-on .reed.blow { background: linear-gradient(180deg, var(--blow), color-mix(in srgb, var(--blow) 35%, transparent)); box-shadow: 0 0 18px var(--blow); animation: reed 0.09s linear infinite; }
+.hole.draw-on .reed.draw { background: linear-gradient(0deg, var(--draw), color-mix(in srgb, var(--draw) 35%, transparent)); box-shadow: 0 0 18px var(--draw); animation: reed 0.09s linear infinite; }
+.hole.blow-on .hole-num, .hole.draw-on .hole-num { color: var(--metal-sheen); text-shadow: 0 0 6px color-mix(in srgb, var(--hole-shade) 80%, transparent); }
 @keyframes reed { 50% { opacity: 0.82; } }
 /* Double-reed harmonicas: show the two rows of reeds in each hole. */
 .harp.voicing-tremolo .hole-slot::before, .harp.voicing-octave .hole-slot::before {
   content: ''; position: absolute; left: 4px; right: 4px; top: 50%; height: 2px; margin-top: -1px;
-  background: #3b3027; z-index: 1;
+  background: var(--comb-2); z-index: 1;
 }
 .hole-tech {
   position: absolute; right: 2px; bottom: 2px; font-size: 10px; font-weight: 800; font-family: var(--mono);
-  color: #fff; background: rgba(0, 0, 0, 0.55); border-radius: 4px; padding: 0 3px; z-index: 3;
+  color: var(--metal-sheen); background: color-mix(in srgb, var(--hole-shade) 55%, transparent); border-radius: 4px; padding: 0 3px; z-index: 3;
 }
 .slide-button {
   position: absolute; right: -40px; top: 50%; transform: translateY(-50%);
   width: 46px; height: 34px; border-radius: 0 10px 10px 0; cursor: pointer;
-  border: 1px solid #6b737c; background: linear-gradient(180deg, #e8ecf0, #a3acb5);
-  color: #2b3138; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+  border: 1px solid var(--metal-edge); background: linear-gradient(180deg, var(--metal-btn-1), var(--metal-btn-2));
+  color: var(--metal-ink); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
   transition: right 0.12s;
 }
-.slide-button.on { right: -28px; background: linear-gradient(180deg, var(--brass-2), var(--brass)); color: #22190d; }
+.slide-button.on { right: -28px; background: linear-gradient(180deg, var(--brass-2), var(--brass)); color: var(--on-brass); }
 
 .keyhelp { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; color: var(--muted); font-size: 12.5px; }
 .keyhelp span { display: inline-flex; align-items: center; gap: 4px; }

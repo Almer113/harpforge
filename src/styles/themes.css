@@ -1,0 +1,99 @@
+/* Colours. Every colour the app shows is named here; the other stylesheets use the names
+   (a tint is a name mixed with transparent: color-mix(in srgb, var(--brass) 12%, transparent)).
+   The themes set the same names; a test keeps colours from being written anywhere else. */
+
+/* ---------- Dark (the usual) ---------- */
+:root {
+  color-scheme: dark;
+  /* Surfaces, from the page down into wells. */
+  --bg: #13110f;
+  --bg-2: #1a1714;
+  --bg-glow: #2a2018;
+  --panel: #1f1b17;
+  --panel-2: #29241e;
+  --menu: #241f1a;
+  --toast: #2f2821;
+  --sunk: #100e0c;
+  --sunk-2: #171411;
+  --lane-now: #1b1713;
+  --dock: #1d1915;
+  --dock-2: #171410;
+  --backdrop: #080605;
+  --hover: #332c25;
+  /* Lines. */
+  --border: #3a3229;
+  --border-2: #4a4035;
+  --hover-edge: #5d5144;
+  --field-hover-edge: #6a5c4c;
+  --slim-edge: #5b5249;
+  --grid: #ffecd6;
+  /* Text. */
+  --text: #f4ede4;
+  --muted: #a99b8b;
+  --faint: #8b7e6e;
+  --ink-strong: #fff;
+  --staff-ink: #e9e1d6;
+  --hl-value: #e9d7b6;
+  --hl-lyric: #b7a99a;
+  --hl-group: #d7c5f0;
+  /* Meaning. */
+  --brass: #e3a948;
+  --brass-2: #f5c46c;
+  --blow: #f39a3d;
+  --draw: #45b4e0;
+  --pitch: #c79bf2;
+  --danger: #ef6a5a;
+  --ok: #7ccf8a;
+  --warn: #e8c547;
+  --on-brass: #22190d;
+  --on-blow: #22160a;
+  --on-draw: #0c1d26;
+  --on-danger: #fff;
+  --blow-soft: color-mix(in srgb, var(--blow) 16%, transparent);
+  --draw-soft: color-mix(in srgb, var(--draw) 16%, transparent);
+  /* Keyboard focus: a light ring, unlike the brass of "selected". */
+  --focus: #fff4e2;
+  /* A chosen passage's light wash; overlays that lighten (dark themes) or darken. */
+  --hilite: #fff4e2;
+  --contrast: #fff;
+  --shadow: #000;
+  /* Paper (the print view's page). */
+  --paper: #fff;
+
+  /* The harmonica keeps its own look in every theme: metal plates, a wooden comb. */
+  --metal-1: #f1f4f7;
+  --metal-2: #c7ced6;
+  --metal-3: #9aa3ad;
+  --metal-4: #c4cbd2;
+  --metal-edge: #6b737c;
+  --metal-ink: #2b3138;
+  --metal-ink-2: #39414a;
+  --metal-ink-3: #282e36;
+  --metal-btn-1: #e8ecf0;
+  --metal-btn-2: #a3acb5;
+  --metal-sheen: #fff;
+  --comb-1: #2c241d;
+  --comb-2: #3b3027;
+  --comb-edge: #1c1712;
+  --comb-ink: #ffebd2;
+  --hole: #0b0907;
+  --hole-shade: #000;
+}
+
+/* ---------- Paper: ink on white (the print view; the sheet views draw with these) ---------- */
+.paper {
+  --text: #1a1714; --muted: #4f463c; --faint: #6d6357; --border: #cfc6ba; --border-2: #a99e90;
+  --panel: transparent; --panel-2: #f1ece5; --bg-2: #f6f2ec; --brass: #8a5a12; --brass-2: #8a5a12;
+  --blow: #b8570a; --draw: #11638c; --pitch: #6b3fa0; --staff-ink: #111111;
+  --ink-strong: #1a1714; --hilite: #1a1714; --contrast: #000;
+}
+
+/* Printing from the browser's menu (not the print view): the same ink on paper. */
+@media print {
+  html:not(.printing) {
+    --bg: #fff; --bg-2: #f6f2ec; --panel: transparent; --panel-2: #f1ece5; --border: #cfc6ba; --border-2: #a99e90;
+    --text: #1a1714; --muted: #4f463c; --faint: #6d6357; --brass: #8a5a12; --brass-2: #8a5a12;
+    --blow: #b8570a; --draw: #11638c; --pitch: #6b3fa0; --staff-ink: #111111; color-scheme: light;
+    --ink-strong: #1a1714; --hilite: #1a1714; --contrast: #000;
+  }
+}
