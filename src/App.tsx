@@ -14,6 +14,8 @@ import { exportAs, importFile, importFromFile, newTab, openPasteImport, saveCurr
 import { startRouter } from './state/router';
 import { openHistory } from './state/history';
 import { checkOpenTab } from './state/trash';
+// (Asks before closing the page when work would be lost.)
+import './state/leaveGuard';
 import { copyShareLink } from './state/share';
 import { isDirty, libraryInUse, useApp, useParsed, type Page } from './state/store';
 import { seedDemos } from './storage/library';

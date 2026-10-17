@@ -22,6 +22,21 @@ const writes = new Map<string, number>();
 /** Changes on their way: a re-read of the whole doesn't land over them. */
 let sending = 0;
 
+/** Told whenever changes are waiting to reach the account, or have all reached it. */
+const watchers = new Set<() => void>();
+const changed = () => watchers.forEach((w) => w());
+
+/** How many changes haven't reached the account yet (waiting, or on their way). */
+export function unsentChanges(): number {
+  return unsent.size + sending;
+}
+
+/** Calls `fn` when that number changes; returns a way to stop. */
+export function watchUnsent(fn: () => void): () => void {
+  watchers.add(fn);
+  return () => void watchers.delete(fn);
+}
+
 export function readData(key: string): string | null {
   if (account) return account.get(key) ?? null;
   try {
@@ -63,6 +78,7 @@ function keepUnsent(key: string, change: string, keep: boolean) {
   const had = unsent.get(slot);
   // (Word by word: what's waiting and this, together. A whole value: this one, the latest.)
   unsent.set(slot, { key, keep, change: had && BY_WORD.has(key) ? combine(had.change, change) : change });
+  changed();
 }
 
 async function send(key: string, change: string, keep: boolean) {
@@ -72,6 +88,7 @@ async function send(key: string, change: string, keep: boolean) {
   const n = (writes.get(key) ?? 0) + 1;
   writes.set(key, n);
   sending++;
+  changed();
   try {
     const res = await fetch(`/api/library/data/${name}`, {
       method: 'PUT',
@@ -90,6 +107,7 @@ async function send(key: string, change: string, keep: boolean) {
     if (account === map) keepUnsent(key, change, keep);
   } finally {
     sending--;
+    changed();
   }
 }
 
@@ -97,6 +115,7 @@ async function send(key: string, change: string, keep: boolean) {
 function resend() {
   const waiting = [...unsent.values()];
   unsent.clear();
+  changed();
   for (const u of waiting) void send(u.key, u.change, u.keep);
 }
 
@@ -148,6 +167,7 @@ export async function accountData(name: string, same = false): Promise<void> {
   if (local && fresh) for (const u of pending) if (!BY_WORD.has(u.key) && local.has(u.key)) account.set(u.key, local.get(u.key)!);
   unsent.clear();
   writes.clear();
+  changed();
   for (const u of pending) keepUnsent(u.key, u.change, u.keep);
   if (unsent.size) resend();
 }
@@ -158,6 +178,7 @@ export function browserData() {
   accountName = null;
   unsent.clear();
   writes.clear();
+  changed();
 }
 
 /** This browser's practice history and syllable fixes, merged into the account's (the account's own fixes stay). */

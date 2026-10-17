@@ -308,6 +308,8 @@ export interface AppState {
   ownedHarps: import('../core/instruments').HarmonicaSpec[];
   /** The library tab whose History dialog is open. */
   historyFor: string | null;
+  /** Saves to the library still on their way (closing the page now would lose them). */
+  savesPending: number;
   /** Whose library the open song's docId is in ("browser", or "account:<name>"): kept with the working copy. */
   libraryOwner: string;
   /** Who's signed in here: the library is theirs (on the server), or this browser's (a guest). */
@@ -515,6 +517,7 @@ export const useApp = create<AppState>((set) => ({
   docId: initial.docId,
   savedText: initial.savedText,
   libraryOwner: initial.owner ?? 'browser',
+  savesPending: 0,
   play: 'stopped',
   activeEvents: [],
   selectedEvent: null,

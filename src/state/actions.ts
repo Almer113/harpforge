@@ -145,7 +145,9 @@ export function saveCurrent(asCopy = false): Promise<void> {
   // whatever happens meanwhile; if that changes before it's done, it's not this song's any more.
   const job = { text: s.text, seq: s.loadSeq, docId: s.docId, asCopy };
   const into = libraryNow();
-  const run = saveQueue.then(async () => saveNow({ ...job, into: await into }));
+  // (Counted until it's done: closing the page meanwhile asks first.)
+  useApp.setState((st) => ({ savesPending: st.savesPending + 1 }));
+  const run = saveQueue.then(async () => saveNow({ ...job, into: await into })).finally(() => useApp.setState((st) => ({ savesPending: st.savesPending - 1 })));
   saveQueue = run.catch(() => undefined);
   return run;
 }
