@@ -4,7 +4,7 @@
 // playing note, the selection, a passage, a loop and play-along marks as in the other views.
 
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { contourLayout, semitoneHeight, wrapRow, type ContourLayout, type ContourRow } from '../core/contourLayout';
+import { contourLayout, namedLanes, semitoneHeight, wrapRow, type ContourLayout, type ContourRow } from '../core/contourLayout';
 import { endingLabel, ordinal } from '../core/endings';
 import { holeSoundText } from '../core/htab/serializer';
 import type { NoteEvent, RestEvent } from '../core/htab/types';
@@ -48,6 +48,8 @@ const GUTTER = 66;
 const MAX_BEAT = 46;
 // (Narrower than this, a row is broken at its bar lines instead, as the Tab view wraps.)
 const MIN_BEAT = 24;
+/** As wide as a beat gets so the shorter notes have room for their holes ("-3'"). */
+const LABEL_BEAT = 72;
 /** A note bar's height, and the rows above and below the lanes. */
 const BAR = 16;
 const CHORDS = 18;
@@ -71,7 +73,14 @@ export function ContourView({ parsed, activeEvents, selectedEvent, onSelect, pas
     return () => ro.disconnect();
   }, []);
   const room = Math.max(120, width - GUTTER - 10);
-  const beat = Math.max(MIN_BEAT, Math.min(MAX_BEAT, room / layout.maxBeats));
+  // The longest line fits the width if it can; but nearly every note (all but the shortest
+  // tenth) gets room for its hole on it — a quick bent note is the one most worth labelling —
+  // the rows broken at bar lines to fit.
+  const short = useMemo(() => {
+    const ws = layout.rows.flatMap((r) => r.bars.map((b) => b.w)).sort((a, b) => a - b);
+    return ws.length ? ws[Math.floor(ws.length / 10)] : 1;
+  }, [layout]);
+  const beat = Math.min(room / 2, Math.max(MIN_BEAT, Math.min(MAX_BEAT, room / layout.maxBeats), Math.min(LABEL_BEAT, 28 / short)));
   const parts = useMemo(() => layout.rows.flatMap((row) => wrapRow(row, room / beat).map((part, k) => ({ part, key: `${row.li}.${k}` }))), [layout, room, beat]);
 
   useEffect(() => {
@@ -81,8 +90,13 @@ export function ContourView({ parsed, activeEvents, selectedEvent, onSelect, pas
     followTo(note?.closest('.ct-row') ?? note);
   }, [activeEvents]);
 
+  // A note selected elsewhere (the editor's caret, an issue clicked): into view.
+  useEffect(() => {
+    if (selectedEvent === null || !root.current) return;
+    root.current.querySelector(`[data-index="${selectedEvent}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selectedEvent]);
+
   if (!layout.rows.length) return <div className="tab-empty"><p>This tab is empty.</p></div>;
-  if (!layout.lanes.length) return <div className="tab-empty"><p>No notes to draw yet: the contour shows the tune’s notes by pitch.</p></div>;
 
   const activeByLine = indexesByLine(score, activeEvents);
   const passageByLine = indexesByLine(score, passage ? eventsIn(score, passage) : []);
@@ -157,13 +171,25 @@ const ContourLine = memo(function ContourLine({ parsed, layout, row, beat, flats
   const top = (row.endings.length ? ENDINGS : 0) + (chords && row.chords.length ? CHORDS : 0) + 4;
   const plot = (hi - lo) * step + BAR;
   const shownVerses = lineShown(line, versesKey.split(',').map(Number));
+  const X = (b: number) => GUTTER + b * beat;
+  // (A note not on this harmonica has no pitch: its "?" sits at the top.)
+  const Y = (midi: number) => top + (Number.isNaN(midi) ? 0 : (hi - midi) * step);
   // A row of words for each verse shown that has words on this line.
   const sung = (v: number) => row.slots.some((s) => !!lyricOf(line.events[s.ei] as NoteEvent | RestEvent, v)?.trim() || isHeld(line.events[s.ei] as NoteEvent | RestEvent, v));
-  const wordRows = lyrics ? shownVerses.filter(sung) : [];
+  const wordRows = (lyrics ? shownVerses.filter(sung) : []).map((v) => ({
+    v,
+    words: placeWords(
+      row.slots.flatMap((s) => {
+        const e = line.events[s.ei] as NoteEvent | RestEvent;
+        const word = lyricOf(e, v)?.trim();
+        return word || isHeld(e, v) ? [{ ei: s.ei, x: X(s.x) + 2, text: word || '—', held: isHeld(e, v) }] : [];
+      }),
+    ),
+  }));
   const height = top + plot + wordRows.length * WORDS + 6;
-  const width = GUTTER + row.beats * beat + 8;
-  const X = (b: number) => GUTTER + b * beat;
-  const Y = (midi: number) => top + (hi - midi) * step;
+  // (As wide as its music, or its words where they run on past it.)
+  const width = Math.max(GUTTER + row.beats * beat + 8, ...wordRows.flatMap((r) => r.words.map((w) => w.x + wordWidth(w.text))));
+  const named = namedLanes(lanes, step);
   const on = { active: set(active), passage: set(inPassage), loop: set(inLoop) };
   const marked = markMap(marks);
   const ev = (index: number) => {
@@ -173,7 +199,7 @@ const ContourLine = memo(function ContourLine({ parsed, layout, row, beat, flats
   // The outline: from each note (a chord's top one) to the next.
   const path = joined
     ? row.bars
-        .filter((b, _, all) => !all.some((o) => o.index === b.index && o.midi > b.midi))
+        .filter((b, _, all) => !b.off && !all.some((o) => o.index === b.index && o.midi > b.midi))
         .map((b, k) => `${k ? 'L' : 'M'}${X(b.x) + 3},${Y(b.midi) + BAR / 2} L${X(b.x + b.w) - 3},${Y(b.midi) + BAR / 2}`)
         .join(' ')
     : '';
@@ -181,16 +207,19 @@ const ContourLine = memo(function ContourLine({ parsed, layout, row, beat, flats
   return (
     <div className="ct-row">
       {row.section !== undefined && <h3 className="ct-section">{row.section}</h3>}
-      {row.bars.length > 0 && (
+      {(row.bars.length > 0 || row.slots.length > 0 || row.chords.length > 0) && (
         <svg className="ct-svg" width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="group" aria-label={row.section ? `${row.section}: the tune’s shape` : 'The tune’s shape'}>
           {/* Lanes: the pitches the song uses, named with their holes. */}
           {lanes.map((l) => (
             <g key={l.midi} className="ct-lane">
               <line x1={GUTTER - 4} x2={width - 4} y1={Y(l.midi) + BAR / 2} y2={Y(l.midi) + BAR / 2} />
-              <text x={GUTTER - 8} y={Y(l.midi) + BAR / 2 + 3.5} textAnchor="end">
-                {midiToName(l.midi, flats)}
-                {l.holes[0] !== undefined && <tspan className="ct-lane-hole"> {l.holes.slice(0, 2).join(' ')}</tspan>}
-              </text>
+              {/* (Where lanes crowd each other, the one played more is named.) */}
+              {named.has(l.midi) && (
+                <text x={GUTTER - 8} y={Y(l.midi) + BAR / 2 + 3.5} textAnchor="end">
+                  {midiToName(l.midi, flats)}
+                  {l.holes[0] !== undefined && <tspan className="ct-lane-hole"> {l.holes.slice(0, 2).join(' ')}</tspan>}
+                </text>
+              )}
             </g>
           ))}
           {/* Bar lines and repeat signs. */}
@@ -230,15 +259,18 @@ const ContourLine = memo(function ContourLine({ parsed, layout, row, beat, flats
           {row.bars.map((b, k) => {
             const sound = b.sound;
             const breath = sound.type === 'hole' ? sound.breath : 'pitch';
-            const name = midiToName(b.midi, flats);
-            const hole = sound.type === 'hole' ? holeSoundText(sound) : name;
-            const label = asNotes ? name : hole;
-            const w = Math.max(3, b.w * beat - 2 + (b.tied ? 3 : 0));
-            const x = X(b.x) + 1 - (b.tied ? 3 : 0);
+            const name = b.off ? 'not on this harmonica' : midiToName(b.midi, flats);
+            const hole = sound.type === 'hole' ? holeSoundText(sound) : midiToName(sound.midi, flats);
+            const label = b.off ? '?' : asNotes ? name : hole;
+            // (Tied on from a note before it in this row: joined to it.)
+            const join = b.tied && b.x > 1e-6 ? 3 : 0;
+            const w = Math.max(3, b.w * beat - 2 + join);
+            const x = X(b.x) + 1 - join;
             const mark = markClass(marked.get(b.index));
             const cls = [
               'ct-note',
               breath,
+              b.off ? 'bad' : '',
               b.tied ? 'tied' : '',
               on.active.has(b.index) ? 'active' : '',
               selected === b.index ? 'selected' : '',
@@ -260,7 +292,16 @@ const ContourLine = memo(function ContourLine({ parsed, layout, row, beat, flats
                   const event = ev(b.index);
                   if (event) onSelect(b.index, event, e.shiftKey);
                 }}
+                // Space selects a focused note, as on the other views' cards (Enter plays from it).
+                onKeyDown={(e) => {
+                  if (e.key !== ' ') return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const event = ev(b.index);
+                  if (event) onSelect(b.index, event, e.shiftKey);
+                }}
               >
+                {first && <title>{`${hole === name ? name : `${hole} · ${name}`}`}</title>}
                 <rect className="ct-under" x={x} y={Y(b.midi)} width={w} height={BAR} rx={4} />
                 <rect className="ct-bar" x={x} y={Y(b.midi)} width={w} height={BAR} rx={4} />
                 {holes && w >= label.length * 6.6 + 4 && (
@@ -272,20 +313,14 @@ const ContourLine = memo(function ContourLine({ parsed, layout, row, beat, flats
             );
           })}
           {/* The words, a row per verse shown. */}
-          {wordRows.map((v, r) => (
+          {wordRows.map(({ v, words }, r) => (
             <g key={v} className={`ct-words ${singing >= 0 && singing !== v && wordRows.length > 1 ? 'dim' : ''}`}>
               {wordRows.length > 1 && (
                 <text className="ct-verse" x={GUTTER - 8} y={top + plot + (r + 1) * WORDS} textAnchor="end">
                   {v + 1}.
                 </text>
               )}
-              {placeWords(
-                row.slots.flatMap((s) => {
-                  const e = line.events[s.ei] as NoteEvent | RestEvent;
-                  const word = lyricOf(e, v)?.trim();
-                  return word || isHeld(e, v) ? [{ ei: s.ei, x: X(s.x) + 2, text: word || '—', held: isHeld(e, v) }] : [];
-                }),
-              ).map((w) => (
+              {words.map((w) => (
                 <text key={w.ei} x={w.x} y={top + plot + (r + 1) * WORDS} className={w.held ? 'held' : ''}>
                   {w.text}
                 </text>

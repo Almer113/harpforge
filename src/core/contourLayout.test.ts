@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseHtab } from './htab/parser';
 import { buildScore, eventKey, harmonicaFromMeta } from './score';
-import { contourLayout, semitoneHeight, wrapRow } from './contourLayout';
+import { contourLayout, namedLanes, semitoneHeight, wrapRow } from './contourLayout';
 
 const layoutOf = (body: string, head = 'title: C') => {
   const { doc } = parseHtab(`---\n${head}\n---\n${body}\n`);
@@ -39,8 +39,8 @@ describe('the contour layout', () => {
   it('lanes: the pitches used, high to low, with the holes played on each (most used first)', () => {
     const l = layoutOf('-2 3 3 -4 |');
     expect(l.lanes).toEqual([
-      { midi: 74, holes: ['-4'] },
-      { midi: 67, holes: ['3', '-2'] },
+      { midi: 74, holes: ['-4'], uses: 1 },
+      { midi: 67, holes: ['3', '-2'], uses: 3 },
     ]);
   });
 
@@ -95,6 +95,44 @@ describe('the contour layout', () => {
   it('a line without bar lines: broken between notes', () => {
     const row = layoutOf('4 5 6 7 4 5 6 7').rows[0];
     expect(wrapRow(row, 3).map((p) => p.beats)).toEqual([3, 3, 2]);
+  });
+
+  it('a chord symbol at a line’s end goes on the next line’s first note (as it plays)', () => {
+    const l = layoutOf('4 4 4 [G] |\n5 5 5 5 |');
+    expect(l.rows[0].chords).toEqual([]);
+    expect(l.rows[1].chords).toEqual([{ x: 0, text: 'G' }]);
+  });
+
+  it('a bar wider than the width is broken between notes (it doesn’t run off the side)', () => {
+    const row = layoutOf('4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 | 5 5 |').rows[0];
+    const parts = wrapRow(row, 12.4);
+    expect(parts.every((p) => p.beats <= 12.4)).toBe(true);
+    expect(parts.map((p) => p.beats)).toEqual([12, 6]);
+  });
+
+  it('a tied-over part doesn’t count as playing the hole again (the lane’s holes, most used first)', () => {
+    const l = layoutOf('-2~ | ~ 3 |');
+    expect(l.lanes).toEqual([{ midi: 67, holes: ['-2', '3'], uses: 2 }]);
+    expect(layoutOf('4~ | ~ |').lanes).toEqual([{ midi: 72, holes: ['4'], uses: 1 }]);
+  });
+
+  it('a note not on this harmonica: a bar without a pitch (drawn as "?"), not left out', () => {
+    const l = layoutOf('4 11 |');
+    expect(l.rows[0].bars.map((b) => [b.x, b.off ?? false, Number.isNaN(b.midi)])).toEqual([
+      [0, false, false],
+      [1, true, true],
+    ]);
+    expect(l.lanes.map((x) => x.midi)).toEqual([72]);
+  });
+
+  it('lane names that would crowd each other: the one played more keeps its name', () => {
+    const lanes = [
+      { midi: 77, holes: ['-5'], uses: 1 },
+      { midi: 76, holes: ['5'], uses: 4 },
+      { midi: 72, holes: ['4'], uses: 2 },
+    ];
+    expect([...namedLanes(lanes, 6)]).toEqual([76, 72]);
+    expect([...namedLanes(lanes, 12)]).toEqual([77, 76, 72]);
   });
 
   it('a semitone is tall enough to read, short enough for a wide range', () => {

@@ -21,6 +21,8 @@ export interface ContourBar {
   tied: boolean;
   /** One note of a harmonica chord. */
   chord: boolean;
+  /** Not on this harmonica (no pitch): drawn as a "?" over the lanes (`midi` is then NaN). */
+  off?: boolean;
 }
 
 export interface ContourRow {
@@ -42,8 +44,8 @@ export interface ContourRow {
 
 export interface ContourLayout {
   rows: ContourRow[];
-  /** The pitches the song uses, high to low, with the holes it plays each one on. */
-  lanes: { midi: number; holes: string[] }[];
+  /** The pitches the song uses, high to low, with the holes it plays each one on and how often it's played. */
+  lanes: { midi: number; holes: string[]; uses: number }[];
   /** The range drawn on every row. */
   lo: number;
   hi: number;
@@ -55,6 +57,8 @@ export function contourLayout(doc: TabDoc, score: Score, indexByKey: Map<string,
   const lanes = new Map<number, Map<string, number>>();
   const rows: ContourRow[] = [];
   const spans = lineEndings(doc);
+  // A chord symbol with no note after it on its line goes on the next note (as it's played).
+  let pendingChord: string | undefined;
   doc.lines.forEach((line, li) => {
     if (!line.events.length && line.section === undefined) return;
     const row: ContourRow = { li, section: line.section, beats: 0, bars: [], barLines: [], chords: [], endings: [], slots: [] };
@@ -68,7 +72,13 @@ export function contourLayout(doc: TabDoc, score: Score, indexByKey: Map<string,
       }
       starts.set(ei, t);
       ends.set(ei, t + ev.beats);
-      if (ev.chord) row.chords.push({ x: t, text: ev.chord });
+      if (ev.beats <= 0) {
+        if (ev.chord) pendingChord = ev.chord;
+        return;
+      }
+      const chord = ev.chord ?? pendingChord;
+      pendingChord = undefined;
+      if (chord) row.chords.push({ x: t, text: chord });
       const index = indexByKey.get(eventKey(li, ei));
       if (ev.beats > 0 && index !== undefined) {
         row.slots.push({ ei, index, x: t, w: ev.beats });
@@ -76,14 +86,19 @@ export function contourLayout(doc: TabDoc, score: Score, indexByKey: Map<string,
         if (ev.kind === 'note' && sev) {
           ev.sounds.forEach((sound, k) => {
             const midi = sev.midis[k];
-            if (midi === null || midi === undefined) return;
+            if (midi === null || midi === undefined) {
+              row.bars.push({ index, x: t, w: ev.beats, midi: NaN, sound, tied: !!sev.tied, chord: ev.sounds.length > 1, off: true });
+              return;
+            }
             row.bars.push({ index, x: t, w: ev.beats, midi, sound, tied: !!sev.tied, chord: ev.sounds.length > 1 });
-            if (sound.type === 'hole') {
+            // (A tied-over part isn't played again: it doesn't count as a time the hole is used.)
+            if (sound.type === 'hole' && !sev.tied) {
               const holes = lanes.get(midi) ?? new Map<string, number>();
               const h = holeSoundText(sound);
               holes.set(h, (holes.get(h) ?? 0) + 1);
               lanes.set(midi, holes);
-            } else if (!lanes.has(midi)) lanes.set(midi, new Map());
+            } else if (sound.type !== 'hole' && !lanes.has(midi)) lanes.set(midi, new Map());
+            if (sound.type === 'hole' && !lanes.has(midi)) lanes.set(midi, new Map([[holeSoundText(sound), 1]]));
           });
         }
       }
@@ -101,7 +116,10 @@ export function contourLayout(doc: TabDoc, score: Score, indexByKey: Map<string,
   return {
     rows,
     // (A pitch's holes, the one played most first.)
-    lanes: pitches.map((midi) => ({ midi, holes: [...lanes.get(midi)!].sort((a, b) => b[1] - a[1]).map(([h]) => h) })),
+    lanes: pitches.map((midi) => {
+      const holes = [...lanes.get(midi)!].sort((a, b) => b[1] - a[1]);
+      return { midi, holes: holes.map(([h]) => h), uses: holes.reduce((n, [, c]) => n + c, 0) };
+    }),
     lo: pitches.length ? pitches[pitches.length - 1] : 60,
     hi: pitches.length ? pitches[0] : 72,
     maxBeats: Math.max(1, ...rows.map((r) => r.beats)),
@@ -116,13 +134,15 @@ export function contourLayout(doc: TabDoc, score: Score, indexByKey: Map<string,
 export function wrapRow(row: ContourRow, fit: number): ContourRow[] {
   if (row.beats <= fit + 1e-6) return [row];
   const bars = row.barLines.map((b) => b.x).filter((x) => x > 1e-6 && x < row.beats - 1e-6);
-  const cuts = bars.length ? bars : row.slots.map((s) => s.x).filter((x) => x > 1e-6);
+  const notes = row.slots.map((s) => s.x).filter((x) => x > 1e-6);
   const parts: [number, number][] = [];
   let from = 0;
+  const after = (list: number[]) => list.filter((x) => x > from + 1e-6);
+  const within = (list: number[]) => after(list).filter((x) => x - from <= fit + 1e-6);
   while (row.beats - from > fit + 1e-6) {
-    // The furthest break that fits, else the nearest one (a bar longer than the width).
-    const fits = cuts.filter((x) => x > from + 1e-6 && x - from <= fit + 1e-6);
-    const next = fits.length ? fits[fits.length - 1] : cuts.find((x) => x > from + 1e-6);
+    // The furthest bar line that fits; else (a bar longer than the width) the furthest note
+    // start that does; else the nearest break there is.
+    const next = within(bars).at(-1) ?? within(notes).at(-1) ?? after(bars)[0] ?? after(notes)[0];
     if (next === undefined) break;
     parts.push([from, next]);
     from = next;
@@ -151,6 +171,24 @@ export function wrapRow(row: ContourRow, fit: number): ContourRow[] {
       slots: row.slots.filter((s) => inside(s.x, a, b, false)).map((s) => ({ ...s, x: s.x - a })),
     };
   });
+}
+
+/**
+ * The lanes whose names can be shown `gap` px apart (a semitone `step` px tall): where two would
+ * crowd each other, the one played more keeps its name.
+ */
+export function namedLanes(lanes: ContourLayout['lanes'], step: number, gap = 11): Set<number> {
+  const kept: ContourLayout['lanes'] = [];
+  for (const lane of lanes) {
+    const last = kept[kept.length - 1];
+    if (!last || (last.midi - lane.midi) * step >= gap) kept.push(lane);
+    else if (lane.uses > last.uses) {
+      // (It takes the place of the one above, if that leaves room after the one before.)
+      const before = kept[kept.length - 2];
+      if (!before || (before.midi - lane.midi) * step >= gap) kept[kept.length - 1] = lane;
+    }
+  }
+  return new Set(kept.map((l) => l.midi));
 }
 
 /**

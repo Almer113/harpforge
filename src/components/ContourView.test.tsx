@@ -72,6 +72,28 @@ describe('the contour view', () => {
     expect(rows).toEqual([2, 1]);
   });
 
+  it('Space on a focused note selects it; it says its hole and note when pointed at', async () => {
+    const onSelect = vi.fn();
+    await draw({ onSelect });
+    const g = host.querySelector('.ct-note[data-index="1"]')!;
+    expect(g.querySelector('title')!.textContent).toBe('-4 · D5');
+    await act(async () => g.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })));
+    expect(onSelect).toHaveBeenCalledWith(1, expect.objectContaining({ kind: 'note' }), false);
+  });
+
+  it('a line of only rests and chord symbols is still drawn (its chords and bar lines)', async () => {
+    await act(async () => root.render(<ContourView parsed={getParsed('---\ntitle: R\n---\n[G] . . . . | [C] . . . . |\n4 4 4 4 |\n')} activeEvents={[]} selectedEvent={null} />));
+    const first = host.querySelector('.ct-svg')!;
+    expect([...first.querySelectorAll('.ct-chord')].map((c) => c.textContent)).toEqual(['G', 'C']);
+    expect(first.querySelectorAll('.ct-note')).toHaveLength(0);
+  });
+
+  it('a note not on this harmonica: a dashed "?"', async () => {
+    await act(async () => root.render(<ContourView parsed={getParsed('---\ntitle: R\n---\n4 11 |\n')} activeEvents={[]} selectedEvent={null} />));
+    const bad = host.querySelector('.ct-note.bad')!;
+    expect(bad.getAttribute('aria-label')).toMatch(/not on this harmonica/);
+  });
+
   it('words move right only as far as the word before them needs', () => {
     expect(placeWords([{ x: 0, text: 'Down' }, { x: 10, text: 'by' }, { x: 200, text: 'the' }]).map((w) => w.x)).toEqual([0, 4 * 7.2 + 6, 200]);
   });

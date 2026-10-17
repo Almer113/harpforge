@@ -248,8 +248,8 @@
 .ct-section { margin: 10px 0 0; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--brass); }
 .ct-svg { display: block; overflow: visible; font-family: var(--mono); }
 .ct-lane line { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3; }
-.ct-lane text { fill: var(--faint); font-size: 10px; }
-.ct-lane-hole { fill: var(--muted); font-weight: 700; }
+.ct-lane text { fill: var(--muted); font-size: 10px; }
+.ct-lane-hole { fill: var(--text); font-weight: 700; }
 .ct-barline line { stroke: var(--border-2); stroke-width: 1; }
 .ct-barline line.thick { stroke: var(--muted); stroke-width: 2.5; }
 .ct-barline.final line:first-child, .ct-barline.double line:first-child { stroke: var(--muted); }
@@ -278,9 +278,21 @@
 .ct-note.mark-hit .ct-bar { stroke: var(--ok); stroke-width: 2.5; }
 .ct-note:is(.mark-early, .mark-late) .ct-bar { stroke: var(--warn); stroke-width: 2.5; }
 .ct-note.mark-missed .ct-bar { stroke: var(--danger); stroke-width: 2.5; stroke-dasharray: 3 2; }
-.ct-note.mark-faded .ct-bar { opacity: 0.55; }
+.ct-note.mark-faded .ct-bar { stroke-opacity: 0.55; }
 .ct-words text { fill: var(--text); font-size: 12px; font-family: Inter, system-ui, sans-serif; }
 .ct-words text.held { fill: var(--faint); }
 .ct-words.dim text { opacity: 0.45; }
 .ct-verse { fill: var(--faint) !important; font-size: 11px !important; }
 .paper .ct-note { cursor: default; }
+/* A note this harmonica can't play: a dashed "?" at the top. */
+.ct-note.bad .ct-bar { fill: none; stroke: var(--danger); stroke-dasharray: 3 2; }
+.ct-note.bad text { fill: var(--danger); }
+/* On paper (the print view, printing from the browser): a lighter tint, so the holes on the
+   bars read as well as ink on white. */
+.paper .ct-note:is(.blow, .draw, .pitch) .ct-bar { fill-opacity: 0.4; }
+@media print {
+  .ct-note:is(.blow, .draw, .pitch) .ct-bar { fill-opacity: 0.4; }
+  .contourview { overflow: visible; --ct-ground: var(--paper); }
+  /* (A row drawn for the screen's width shrinks to the paper's.) */
+  .ct-svg { max-width: 100%; height: auto; }
+}
