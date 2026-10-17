@@ -57,6 +57,7 @@ const COLUMNS: Group[][] = [
         ['Alt+Space / Ctrl+→', 'In lyrics: the next beat, even a rest (to sing over it)'],
         ['Click under / above a rest', 'Words or a chord on a rest (empty space)'],
         ['↑ ↓', 'Note up / down (Shift: a semitone)'],
+        ['Alt+↑ ↓', 'Move the section up / down (its heading ▾ has the other section tools)'],
         ['Del', 'Delete the selection'],
         ['Backspace', 'Step entry: take back the last note'],
         ['Ins', 'Insert or overwrite'],
