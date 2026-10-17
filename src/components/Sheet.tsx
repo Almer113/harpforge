@@ -219,7 +219,7 @@ function useShowItems(view: ShowView): { label: string; on: boolean; toggle: (v:
       ? [
           notes
             ? { label: 'Holes', on: show.tab.holes, toggle: (v) => set({ holes: v }), hint: '4, -4… under each note' }
-            : { label: 'Note names', on: names, toggle: (v) => useApp.setState({ showNoteNames: v }), hint: 'C5, E5… under each hole in the tab (the harmonica always shows them)' },
+            : { label: 'Note names', on: names, toggle: (v) => useApp.setState({ showNoteNames: v }), hint: 'C5, E5… under each hole: the tab, the editor and print (the harmonica always shows them)' },
           { label: 'Words', on: show.tab.lyrics, toggle: (v) => set({ lyrics: v }), hint: 'The lyrics under the notes' },
           { label: 'Chords', on: show.tab.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the notes' },
         ]

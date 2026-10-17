@@ -2,6 +2,8 @@
 // Phase 15a: closing the page asks first when work would be lost — unsaved changes, a save on
 // its way, practice not yet in the account — and not otherwise.
 
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../audio/engine', async () => (await import('../test/fakeEngine')).fakeEngine());
@@ -18,7 +20,7 @@ vi.mock('../storage/library', () => ({
 
 import { BLANK } from '../demo/songs';
 import { saveCurrent } from './actions';
-import { wouldLose } from './leaveGuard';
+import { useDraft, wouldLose } from './leaveGuard';
 import { useApp } from './store';
 
 const s = () => useApp.getState();
@@ -72,10 +74,40 @@ describe('leaving the page', () => {
   });
 
   it('moving between the app’s pages doesn’t ask (the song stays open, nothing is left)', () => {
-    s().setText('---\ntitle: A\n---\n7 |\n');
     s().setPage('library');
     s().setPage('editor');
-    expect(s().text).toContain('7 |');
+    expect(asks()).toBe(false);
+  });
+
+  it('a recording under way: asks (its notes go into the song when it stops)', () => {
+    useApp.setState({ recording: { mode: 'free' } as never });
+    expect(asks()).toBe(true);
+    useApp.setState({ recording: null });
+    expect(asks()).toBe(false);
+  });
+
+  it('words typed in “Fill lyrics” and not put on yet: asks', () => {
+    useApp.setState({ fillLyricsOpen: true, fillDraft: 'Twin-kle twin-kle' });
+    expect(asks()).toBe(true);
+    useApp.setState({ fillLyricsOpen: false, fillDraft: '' });
+    expect(asks()).toBe(false);
+  });
+
+  it('a field typed in but not set yet (useDraft): asks while it is', async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const host = document.createElement('div');
+    const root = createRoot(host);
+    const Field = ({ pending }: { pending: boolean }) => {
+      useDraft(pending);
+      return null;
+    };
+    await act(async () => root.render(<Field pending />));
+    expect(asks()).toBe(true);
+    await act(async () => root.render(<Field pending={false} />));
+    expect(asks()).toBe(false);
+    await act(async () => root.render(<Field pending />));
+    await act(async () => root.unmount());
+    expect(asks()).toBe(false);
   });
 });
 

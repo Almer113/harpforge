@@ -2,7 +2,8 @@
 
 import { setLyric } from '../../core/edit/lyrics';
 import { ordinal } from '../../core/endings';
-import { lyricOf } from '../../core/verses';
+import { isHeld, lyricOf } from '../../core/verses';
+import { useDraft } from '../../state/leaveGuard';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   advance,
@@ -142,6 +143,8 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
   const { harp, doc, text } = useParsed();
   const flats = flatsFor(text, doc.meta.key ?? harp.spec.key);
   const [input, setInput] = useState(soundsText(item.sounds));
+  // (Typed but not applied yet: leaving the page asks first.)
+  useDraft(input !== soundsText(item.sounds));
   const [bad, setBad] = useState(false);
   // Another note (or the same one changed elsewhere): its holes replace what was typed.
   const [shownSounds, setShownSounds] = useState(item.sounds);
@@ -299,7 +302,8 @@ function NotePanel({ song, pos, item }: { song: Song; pos: Pos; item: Item }) {
         {!item.tied ? (
           <label className="field">
             <span>Lyric{verse ? ` (verse ${verse + 1})` : ''}</span>
-            <LiveInput value={lyricOf(item, verse) ?? ''} placeholder="syl-" onCommit={(v) => commitSong(setLyric(song, pos, verse, v || undefined), 'typing')} />
+            {/* (A held note shows "_" — the syllable before goes on over it; typing a syllable or clearing it changes that.) */}
+            <LiveInput value={lyricOf(item, verse) ?? (isHeld(item, verse) ? '_' : '')} placeholder="syl-" onCommit={(v) => commitSong(setLyric(song, pos, verse, v || undefined), 'typing')} />
           </label>
         ) : (
           <div className="field">
@@ -339,6 +343,7 @@ function NoteFields({ song, pos, item, flats }: { song: Song; pos: Pos; item: It
   const { harp, doc } = useParsed();
   const names = (sounds: Sound[]) => sounds.map((s) => pitchOf(harp, s)).map((m) => (m === null ? '?' : midiToName(m, flats))).join(' ');
   const [input, setInput] = useState(names(item.sounds));
+  useDraft(input !== names(item.sounds));
   const [bad, setBad] = useState(false);
   // Another note, or another harmonica: the note names replace what was typed.
   const [shown, setShown] = useState({ sounds: item.sounds, harp });

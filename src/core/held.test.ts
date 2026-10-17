@@ -96,3 +96,62 @@ describe('files', () => {
     expect(back.map((e) => lyricOf(e, 0) ?? (isHeld(e, 0) ? '_' : '*'))).toEqual(['Oh', '_', 'la', '*']);
   });
 });
+
+describe('the review’s cases', () => {
+  const throughEditor = (text: string) => serializeHtab(toDoc(fromDoc(parseHtab(text).doc)));
+
+  it('a line whose words are only holds — a word carried over the line break — keeps them', () => {
+    const t = '---\ntitle: C\n---\n4 5 |\nw: Oh\n6 4 |\nw: _ _\n';
+    expect(throughEditor(t)).toContain('6 4 |\nw: _ _');
+  });
+
+  it('holds only in verse 2 on a line are kept, in verse 2', () => {
+    const t = '---\ntitle: V\n---\n4 5 6 |\nw: a b c\nw: d _ _\n';
+    expect(throughEditor(t)).toContain('w: d _ _');
+    const t2 = '---\ntitle: V\n---\n4 5 |\nw: a b\nw: c d\n6 4 |\nw: e f\nw: _ _\n';
+    expect(throughEditor(t2)).toContain('w: e f\nw: _ _');
+  });
+
+  it('a word held over a sung rest: the rest stays sung, the hold kept', () => {
+    const t = '---\ntitle: R\n---\n4 _ 5 |\nw: Oh _ la\n';
+    expect(throughEditor(t)).toContain('4 _ 5 |\nw: Oh _ la');
+  });
+
+  it('MusicXML: an extender left open at a verse’s end doesn’t hold the next part’s notes', () => {
+    const note = (step: string, lyric = '') => `<note><pitch><step>${step}</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type>${lyric}</note>`;
+    const l = (n: number, text: string, extend = '') => `<lyric number="${n}"><syllabic>single</syllabic><text>${text}</text>${extend}</lyric>`;
+    const xml = `<?xml version="1.0"?><score-partwise><part-list><score-part id="P1"><part-name>M</part-name></score-part></part-list><part id="P1"><measure number="1"><attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>${note('C', l(1, 'a') + l(2, 'end', '<extend/>'))}${note('D', l(1, 'b'))}${note('E', l(1, 'c'))}${note('F', l(1, 'd'))}</measure></part></score-partwise>`;
+    const back = parseMusicXml(xml).doc.lines.flatMap((x) => x.events).filter((e): e is NoteEvent => e.kind === 'note');
+    expect(back.map((e) => isHeld(e, 1))).toEqual([false, false, false, false]);
+  });
+
+  it('MusicXML export: a note with no words between keeps it from being a hold', () => {
+    const doc = parseHtab('---\ntitle: S\n---\n4 5 6 4 |\nw: Oh * _ la\n').doc;
+    const back = parseMusicXml(writeMusicXml(doc, harmonicaFromMeta(doc.meta))).doc.lines.flatMap((x) => x.events).filter((e): e is NoteEvent => e.kind === 'note');
+    expect(back.map((e) => lyricOf(e, 0) ?? (isHeld(e, 0) ? '_' : '*'))).toEqual(['Oh', '*', '_', 'la']);
+  });
+
+  it('numbered notation keeps holds', async () => {
+    const { parseJianpu, writeJianpu } = await import('./formats/jianpu');
+    const doc = parseHtab(SONG).doc;
+    const back = parseJianpu(writeJianpu(doc, harmonicaFromMeta(doc.meta))).doc.lines[0].events.filter((e): e is NoteEvent => e.kind === 'note');
+    expect(isHeld(back[1], 0)).toBe(true);
+  });
+
+  it('"Oh__" is "Oh" held over two notes, as ABC reads it', async () => {
+    const { splitLyrics } = await import('./htab/parser');
+    expect(splitLyrics('Oh__ la')).toEqual(['Oh', '_', '_', 'la']);
+    expect(splitLyrics('__')).toEqual(['_', '_']);
+  });
+
+  it('the lyric box shows a hold as "_"; cleared, the note has no words', async () => {
+    const { shownLyric } = await import('./edit/lyrics');
+    const s0 = fromDoc(parseHtab(SONG).doc);
+    const held = { m: 0, start: 1 };
+    expect(shownLyric(s0, held, 0).text).toBe('_');
+    const { song: kept } = typeLyric(s0, held, 0, '_', { text: '_', joined: false }, 'next');
+    expect(isHeld(findItem(kept, held)!, 0)).toBe(true);
+    const { song: cleared } = typeLyric(s0, held, 0, '', { text: '_', joined: false }, 'next');
+    expect(isHeld(findItem(cleared, held)!, 0)).toBe(false);
+  });
+});

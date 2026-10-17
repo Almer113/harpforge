@@ -2,6 +2,7 @@
 // editor's line is editable; the Play page shows the same line, read-only, in the same place.
 
 import { useMemo, useState } from 'react';
+import { useDraft } from '../../state/leaveGuard';
 import { guessTonic } from '../../core/convert';
 import { keyUsesFlats, pitchClassName } from '../../core/pitch';
 import { setTimeSignature } from '../../core/edit/model';
@@ -48,6 +49,8 @@ function TempoInput({ tempo }: { tempo: number }) {
     setShown(tempo);
     setDraft(String(tempo));
   }
+  // (Typed but not set yet: leaving the page asks first.)
+  useDraft(draft !== String(tempo));
   const commit = () => {
     const v = parseFloat(draft);
     if (!(v >= 20 && v <= 400)) {

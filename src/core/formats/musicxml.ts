@@ -1,6 +1,6 @@
 // MusicXML (partwise) import & export. Import reads the first part and first voice.
 
-import { hasLyrics, isHeld, lineVerses, lyricOf, setHeld, setLyricOf } from '../verses';
+import { hasWords, isHeld, lineVerses, lyricOf, setHeld, setLyricOf } from '../verses';
 import { strFromU8, unzipSync } from 'fflate';
 import { isNoChord, parseChord } from '../chords';
 import type { Harmonica } from '../instruments';
@@ -76,7 +76,8 @@ export function parseMusicXml(xml: string): Imported {
         if (!lyricOf(ev, v)) setLyricOf(ev, v, t + (syl === 'begin' || syl === 'middle' ? '-' : ''));
         extending.set(v, goesOn);
         seen.add(v);
-      } else if (extend && ev.kind === 'note') {
+      } else if (extend) {
+        // (Held over a rest too: the rest is sung, the word goes on over it.)
         setHeld(ev, v, true);
         extending.set(v, goesOn);
         seen.add(v);
@@ -84,8 +85,9 @@ export function parseMusicXml(xml: string): Imported {
     }
     for (const [v, on] of extending) {
       if (!on || seen.has(v)) continue;
-      // (A rest ends it; a note with no words in that verse is held.)
-      if (ev.kind === 'rest') extending.set(v, false);
+      // (A rest ends it, and so does a note where another verse has words — an extender left
+      // open at a verse's end doesn't run into the next part; else a note with no words is held.)
+      if (ev.kind === 'rest' || seen.size > 0) extending.set(v, false);
       else setHeld(ev, v, true);
     }
   };
@@ -261,7 +263,7 @@ export function parseMusicXml(xml: string): Imported {
             pendingChord = undefined;
             // Words sung over a rest: a sung rest ("_").
             readLyrics(el, rest);
-            if (hasLyrics(rest)) rest.sung = true;
+            if (hasWords(rest)) rest.sung = true;
             events.push(rest);
             last = null;
             break;
@@ -523,7 +525,11 @@ export function writeMusicXml(doc: TabDoc, harp?: Harmonica): string {
       for (const ev of line.events) {
         if (ev.kind === 'bar') continue;
         if (lyricOf(ev, v)) lastSyllable = ev;
-        else if (isHeld(ev, v) && lastSyllable) holdStarts.set(lastSyllable, (holdStarts.get(lastSyllable) ?? new Set()).add(v));
+        else if (isHeld(ev, v)) {
+          if (lastSyllable) holdStarts.set(lastSyllable, (holdStarts.get(lastSyllable) ?? new Set()).add(v));
+        }
+        // (A note sung with no words — "*" — ends it: a hold after it isn't this syllable's.)
+        else if ((ev.kind === 'note' && !ev.tied) || (ev.kind === 'rest' && ev.sung)) lastSyllable = null;
       }
   }
   // A short first bar is a pickup: numbered 0 and marked implicit, as notation programs expect.

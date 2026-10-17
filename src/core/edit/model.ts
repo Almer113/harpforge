@@ -7,7 +7,7 @@
 // Edits are pure functions Song → Song; the editor converts to and from TabDoc so
 // the .htab text stays the single source of truth.
 
-import { hasLyrics } from '../verses';
+import { hasWords } from '../verses';
 import { beatsPerBar, type BarStyle, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine, type TabMeta } from '../htab/types';
 import type { Sound } from '../types';
 
@@ -146,7 +146,7 @@ export function fromDoc(doc: TabDoc): Song {
       const chord = ev.chord ?? pendingChord;
       pendingChord = undefined;
       const sounds = ev.kind === 'note' ? ev.sounds : [];
-      if (sounds.length || chord || hasLyrics(ev)) {
+      if (sounds.length || chord || hasWords(ev)) {
         const item: Item = { start: t, dur: ev.beats, sounds, chord, lyric: ev.lyric };
         if (ev.verses) item.verses = [...ev.verses];
         if (ev.holds) item.holds = [...ev.holds];

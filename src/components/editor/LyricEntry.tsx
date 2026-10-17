@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { lyricStart, nextBeat, shownLyric, songVerseCount, stepSingable, typeLyric, type LyricKey } from '../../core/edit/lyrics';
+import { useDraft } from '../../state/leaveGuard';
 import { findItem, placeItem, samePos, type Pos, type Song } from '../../core/edit/model';
 import { commitSong, currentSong, toolDuration } from '../../state/editor';
 import { useApp } from '../../state/store';
@@ -69,6 +70,8 @@ export function LyricInput({ pos, verse, draft }: { pos: Pos; verse: number; dra
     return c;
   });
   const [text, setText] = useState(first ?? was.text);
+  // (A syllable typed in the box but not put on the note yet: leaving the page asks first.)
+  useDraft(text !== was.text);
   const box = useRef<HTMLInputElement>(null);
   const live = useRef({ text, was });
   // An input method putting a word together (its Space and Enter choose, they don't move on).

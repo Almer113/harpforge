@@ -167,7 +167,7 @@ function FillBody({ close }: { close: () => void }) {
             />
           </label>
           <p className="mi-hint fill-help">
-            Hyphens split a word into syllables (<code>dar-ling</code>); <code>_</code> leaves a note without words, held from the syllable before. Two words on one note: join them with <code>~</code> (<code>ku~kan</code>);
+            Hyphens split a word into syllables (<code>dar-ling</code>); <code>_</code> holds the syllable before over the next note (<code>Oh _</code>, or <code>Oh_</code>); <code>*</code> leaves a note without words. Two words on one note: join them with <code>~</code> (<code>ku~kan</code>);
             a real hyphen: <code>\-</code>. Lines don’t matter: the words go on note after note.
           </p>
           {blocks.length > 1 && (
@@ -207,10 +207,12 @@ function FillBody({ close }: { close: () => void }) {
           </span>
           {first?.placed.length ? (
             <div className="fill-notes">
-              {first.placed.slice(0, PREVIEW).map(({ pos, syllable }, k) => (
+              {first.placed.slice(0, PREVIEW).map(({ pos, syllable, held }, k) => (
                 <span key={k} className="fill-note">
                   <span className="fill-hole">{noteLabel(pos)}</span>
-                  <span className={`fill-syl ${syllable ? '' : 'none'}`}>{syllable ?? '—'}</span>
+                  <span className={`fill-syl ${syllable ? '' : 'none'}`} title={held ? 'Holds the syllable before' : syllable ? undefined : 'No words'}>
+                    {syllable ?? (held ? '⎯' : '·')}
+                  </span>
                 </span>
               ))}
             </div>

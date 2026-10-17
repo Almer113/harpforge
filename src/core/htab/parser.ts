@@ -385,7 +385,11 @@ export function splitLyrics(text: string): string[] {
       const syl = p.replace(/~/g, ' ').replace(/(?<=.)\u0001$/, '‐').replace(/\u0001/g, '-');
       // (Spaces from "~" at either end join nothing: "a~" is "a", "~" alone is no syllable.)
       const trimmed = syl.replace(/^ +| +(?=-?$)/g, '');
-      out.push(trimmed || '*');
+      // ("Oh__": the syllable, then held over a note per "_", as ABC reads it.)
+      const holds = /^(.*?[^_])(_+)$/.exec(trimmed);
+      if (holds && !holds[1].endsWith('-')) out.push(holds[1], ...holds[2].split(''));
+      else if (/^_{2,}$/.test(trimmed)) out.push(...trimmed.split(''));
+      else out.push(trimmed || '*');
     }
   }
   return out;

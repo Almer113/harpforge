@@ -2,7 +2,7 @@
 // syllable, and what each key does. The keys are MuseScore's: Space goes on to the next note
 // (a new word), "-" goes on joined ("Twin-kle"), "_" holds the syllable over the next note.
 
-import { hasLyrics, isHeld, lyricOf, setHeld, setLyricOf } from '../verses';
+import { hasWords, isHeld, lyricOf, setHeld, setLyricOf } from '../verses';
 import { splitLyrics } from '../htab/parser';
 import { allPositions, cloneSong, EPS, findItem, measureSpan, updateItem, type Pos, type Song } from './model';
 
@@ -14,7 +14,8 @@ export function singable(song: Song): Pos[] {
   return allPositions(song).filter((p) => {
     const it = findItem(song, p);
     if (!it || it.dur <= EPS) return false;
-    return it.sounds.length > 0 ? !it.tied : hasLyrics(it);
+    // (A rest sung over: words on it, or a syllable held over it.)
+    return it.sounds.length > 0 ? !it.tied : hasWords(it);
   });
 }
 
@@ -70,7 +71,8 @@ export function lyricStart(song: Song, pos: Pos | undefined): Pos | null {
 /** A note's syllable in verse `verse`, as shown in the typing box: without its joining "-". */
 export function shownLyric(song: Song, pos: Pos, verse: number): { text: string; joined: boolean } {
   const it = findItem(song, pos);
-  const lyric = it ? (lyricOf(it, verse) ?? '') : '';
+  // (A held note shows "_": deleting it, the note has no words.)
+  const lyric = it ? (lyricOf(it, verse) ?? (isHeld(it, verse) ? HOLD : '')) : '';
   const joined = lyric.length > 1 && lyric.endsWith('-');
   return { text: joined ? lyric.slice(0, -1) : lyric, joined };
 }
@@ -105,9 +107,9 @@ export type LyricKey = 'next' | 'join' | 'hold' | 'prev' | 'done';
 export function typeLyric(song: Song, pos: Pos, verse: number, typed: string, was: { text: string; joined: boolean }, key: LyricKey): { song: Song; next: Pos | null } {
   const text = typed.trim().replace(/\s+/g, ' ');
   const joined = key === 'join' ? true : text === was.text ? was.joined : false;
-  const syllable = text ? text + (joined && text !== '-' ? '-' : '') : undefined;
+  const syllable = text === HOLD ? HOLD : text ? text + (joined && text !== '-' ? '-' : '') : undefined;
   const before = findItem(song, pos);
-  let s = before && lyricOf(before, verse) !== syllable ? setLyric(song, pos, verse, syllable) : song;
+  let s = before && wordsOf(before, verse) !== syllable ? setLyric(song, pos, verse, syllable) : song;
   switch (key) {
     case 'done':
       return { song: s, next: null };
@@ -133,6 +135,7 @@ export function songVerseCount(song: Song): number {
       it.verses?.forEach((x, k) => {
         if (x) n = Math.max(n, k + 2);
       });
+      for (const v of it.holds ?? []) n = Math.max(n, v + 1);
     }
   return n;
 }
@@ -143,11 +146,11 @@ export function songVerseCount(song: Song): number {
  * syllables, "_" or "*" for a note without words. `placed`: each note given a syllable (or
  * none); `extra`: syllables past the last note (left out).
  */
-export function fillLyrics(song: Song, from: Pos | null, verse: number, text: string): { song: Song; placed: { pos: Pos; syllable: string | undefined }[]; extra: string[] } {
+export function fillLyrics(song: Song, from: Pos | null, verse: number, text: string): { song: Song; placed: { pos: Pos; syllable: string | undefined; held?: boolean }[]; extra: string[] } {
   const syllables = splitLyrics(text.replace(/\n/g, ' '));
   const start = lyricStart(song, from ?? undefined);
   const notes = start ? singable(song).filter((p) => p.m > start.m || (p.m === start.m && p.start >= start.start - EPS)) : [];
-  const placed = syllables.slice(0, notes.length).map((syl, k) => ({ pos: notes[k], syllable: syl === '*' || syl === '_' ? undefined : syl }));
+  const placed = syllables.slice(0, notes.length).map((syl, k) => ({ pos: notes[k], syllable: syl === '*' || syl === '_' ? undefined : syl, ...(syl === '_' ? { held: true } : {}) }));
   // ("_": the note holds the syllable before; "*": no words.)
   const s = setLyrics(song, placed.map((p, k) => ({ pos: p.pos, text: syllables[k] === '_' ? HOLD : p.syllable })), verse);
   return { song: s, placed, extra: syllables.slice(notes.length).filter((x) => x !== '*' && x !== '_') };

@@ -77,7 +77,7 @@ old one. No server answering: guest only (the account menu offers **Try again**)
   volume and a level for the tune (M mutes it), backing, drone, clicks and your playing.
 
 **Reading and performing**
-- **Six views of one song:** Simple tab, Tab (cards sized by length, with chords and
+- **Five views of one song:** Simple tab, Tab (cards sized by length, with chords and
   lyrics), Staff (standard notation with the holes and words under it), Numbers (jianpu),
   Lyrics (the words with holes above, like a chord sheet), each following playback.
   **Holes | Notes**: read the holes, or the note names with the holes small.
@@ -111,8 +111,9 @@ old one. No server answering: guest only (the account menu offers **Try again**)
   image-only PDFs through OCR with chord-aware corrections. Each import ranks the
   harmonicas and positions that play it best and previews the tab with sound; chord sheets
   become harmonica chords.
-- **Export:** HarpTab, ABC, MusicXML, MIDI, ChordPro, numbered notation, plain text, and
-  **share links** (the whole tab in the link; nothing goes to a server).
+- **Export:** HarpTab, Notes (the melody as note names, no holes), ABC, MusicXML, MIDI,
+  ChordPro, numbered notation; a **plain-text tab** for posting; and **share links** (the
+  whole tab in the link; nothing goes to a server).
 
 **Library**
 - Search, filter by harmonica, sort; **version history** for every song (compare, bring a
@@ -130,6 +131,8 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `src/core/score.ts` | Timed, pitched view of a tab (what plays) |
 | `src/core/repeats.ts`, `endings.ts` | Repeats, endings and the order bars are played in |
 | `src/core/verses.ts`, `lyricsLayout.ts`, `syllables.ts` | Verses, held syllables, the Lyrics view's layout, syllable suggestions |
+| `src/core/timeline.ts`, `pitch.ts`, `lineDiff.ts` | The editor's one timeline, note names and spelling, comparing versions |
+| `src/core/suggest.worker.ts` | Ranking the harmonicas for an import, in the background |
 | `src/core/convert.ts` | Tab ↔ notes, re-tabbing, chord sheets, harmonica suggestions |
 | `src/core/chords.ts`, `backing.ts` | Chord symbols, the harmonica chord finder, backing chords |
 | `src/core/playAlong.ts`, `report.ts`, `passage.ts` | Play-along marking, the practice report, passages |
@@ -144,6 +147,7 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `src/account` | Signing in and out, whose library is in use |
 | `src/state` | Zustand store (incl. undo history), playback, practice, the trash, actions |
 | `src/pages`, `src/components` | UI |
+| `src/demo/songs.ts` | The demo songs (and their older versions, for updating unchanged copies) |
 | `src/styles/` | Stylesheets by area; `index.css` imports them in cascade order (keep it) |
 | `server/` | The HarpForge server: the built app, accounts, account libraries (run by Node directly) |
 | `scripts/server.mjs` | `npm run deploy` / `undeploy` / `deploy:status` |
@@ -153,28 +157,37 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 ## Roadmap
 
 **Done**
-1. Core model and `.htab`, conversion, a playable harmonica, tab view with autoplay,
-   recording, editor, library.
-2. Tremolo and octave harmonicas; numbered notation.
-3. ABC, ChordPro, MusicXML and MIDI import and export; staff view; app shell and pages.
-4. PDF chord-sheet import; print and PDF; plain text; selecting, copying, insert mode,
-   transpose; your harmonicas; Notes mode.
-5. Microphone, practice mode, MIDI keyboard, share links, sampled sound; no lost work.
-6. The editor in one bar, docked harmonica, Play page, accessibility.
-7. One timeline for the editor; the tab text says what you meant; file round trips.
-8. Fast editing and playback; a safety net (linter, pre-commit checks, smoke tests).
-9. Practice: loops, count-in, tempo trainer, play along, practice report.
-10. Performance mode, reading ahead, the Lyrics view, repeats in playback.
-11. Verses, typing lyrics, filling lyrics from text, verses in ABC and MusicXML.
-11.5. 1st/2nd endings and repeats played more than twice.
-12. Sound: the mix, backing chords, the drone.
-13. Library: version history, trash with Undo, full backups.
-14. Accounts and folder storage: the HarpForge server, deploy, sign-in, two library
-    backends, practice and syllables per account.
-15. Housekeeping: asking before closing with unsaved work, the harmonica's own labels,
-    held syllables, this README and the format guide.
+- **Before the phases:** the core model and `.htab`, conversion, a playable harmonica
+  (diatonic, chromatic, tremolo, octave), tab view with autoplay, recording, the editor,
+  the library; numbered notation; ABC, ChordPro, MusicXML and MIDI; the staff view; PDF
+  chord-sheet import; the microphone, practice mode, MIDI keyboard, share links, sampled
+  sound.
+- **Phase 1:** no lost work (rewritten lines keep what you wrote, backups).
+- **Phase 2:** harmonica suggestions, key changes and positions; import and export
+  fixes; playback timing.
+- **Phase 3:** the app shell and pages; the Edit page; Import and Convert as one flow;
+  the Library.
+- **Phase 4:** print and PDF; plain-text tab; selecting, copy/cut/paste, insert mode;
+  transpose and "make easier"; your harmonicas. **N1–N2:** Notes mode, editing by note.
+- **Phase 5:** rewritten lines keep everything; saving and storage; live input.
+- **Phase 6:** the editor in one bar, docked harmonica, Play page, accessibility.
+- **Phase 7:** one timeline for the editor; the tab text says what you meant; file round
+  trips.
+- **Phase 8:** fast editing and playback; a safety net (linter, pre-commit checks,
+  smoke tests).
+- **Phase 9:** practice — loops, count-in, tempo trainer, play along, practice report.
+- **Phase 10:** performance mode, reading ahead, the Lyrics view, repeats in playback.
+- **Phase 11:** verses, typing lyrics, filling lyrics from text, verses in ABC and
+  MusicXML. **11.5:** 1st/2nd endings and repeats played more than twice.
+- **Phase 12:** sound — the mix, backing chords, the drone.
+- **Phase 13:** library — version history, trash with Undo, full backups.
+- **Phase 14:** accounts and folder storage — the HarpForge server, deploy, sign-in, two
+  library backends, practice and syllable data per account.
+- **Phase 15:** housekeeping — asking before closing with unsaved work, the harmonica's
+  own labels, held syllables, this README and the format guide.
 
 **Planned**
+
 16. Themes: Light, Paper and Match system beside today's Dark, per device.
 17. Editing tools in the editor: section tools (duplicate, move, rename, repeat, delete),
     find and replace holes (Ctrl+H).

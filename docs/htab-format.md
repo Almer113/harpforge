@@ -35,31 +35,35 @@ Defaults: `diatonic`, `richter`, harp key `C`, tempo 100, time 4/4.
 
 Tremolo and octave hole numbers follow Hohner's charts: each number is one
 blow/draw pair of the physical double holes, so `4 -4` reads like a diatonic tab.
-Aliases accepted on import: `instrument` = `harmonica`, `bpm` = `tempo`, `meter` = `time`.
+Aliases accepted on import: `instrument` = `harmonica`, `bpm` = `tempo`, `meter` = `time`,
+`composer` = `artist`, `harpkey` / `harp key` = `harp-key`. `tempo` is kept between 20
+and 400. `notation: notes` marks a melody written as note names only (the "Notes"
+export). A `#` starts a comment in the header except before a digit (`title: Song #2`
+keeps its `#2`); `\#` writes a `#` anywhere. Unknown fields are kept as they are.
 
 ## Body
 
 | Syntax | Meaning |
 | --- | --- |
 | `4` / `-4` | blow / draw hole 4. Import also accepts `+4`, `4B`, `4D`, `4d` |
-| `-3'` `-3''` `-3'''` | bend down ½, 1, 1½ steps. `b` and `"` (=2) also accepted |
+| `-3'` `-3''` `-3'''` | bend down ½, 1, 1½ steps. `b`, `’` and `"` (=2) also accepted |
 | `6o` / `-7o` | overblow / overdraw (`°`, `O` accepted) |
 | `<5` | chromatic: slide button in (`5<`, `5*` accepted) |
 | `C4` `F#5` `Bb3` | a pitch instead of a hole (octave defaults to 4; lowercase `c4` accepted) |
-| `(4 5 6)` | harmonica chord: sounds played together |
+| `(4 5 6)` | harmonica chord: sounds played together (`(4,5,6)` accepted) |
 | `-(1 2 3)` / `+(…)` | chord with a default breath for every hole |
 | `~` | hold: each `~` adds one beat (`4~~` = 3 beats) |
 | `{a b c}` | split one beat between the items, weighted by their `~` (`{4~ 5}` = ⅔ + ⅓) |
 | `{a b}~` | the group lasts 2 beats instead of 1 |
 | `{a}/2`  `{a b~}~~/2` | the group lasts a fraction of a beat: `/2` halves it (`{7}/2` = ½ beat, `{6~ 7}~~/2` = 1½ beats). Used for bars that end on a half beat, as in 7/8 |
-| `.` | rest (one beat, `.~` = two) |
+| `.` | rest (one beat, `.~` = two); `r` and `R` are accepted too |
 | `_` | a **sung rest**: the harp rests while a syllable is sung; the `w:` line gives it a syllable like a note (`[N.C.] _ 4 5` + `w: Oh la la`) |
 | `~` (on its own) | **tie**: the previous note keeps sounding for one beat per `~`, e.g. `6~ \| ~~ 5` |
-| `\|` `\|\|` `\|]` `\|:` `:\|` | bar lines: single, double, final, repeat start/end. Also accepted: `:\|:` (end one repeat, start the next), `\|\|:`, and `:\|` right after a note (`4:\|`). A repeat plays twice; a repeat inside another isn't played as one (a warning says so) |
+| `\|` `\|\|` `\|]` `\|:` `:\|` | bar lines: single, double, final, repeat start/end. Also accepted: `:\|:` (end one repeat, start the next), `\|\|:`, `:\|\|`, `:\|\|:`, and `:\|` right after a note (`4:\|`). A repeat plays twice; a repeat inside another isn't played as one (a warning says so) |
 | `[G7]` | chord symbol shown above the next note or rest (right before a bar line: at the end of that bar) |
-| `w: Twin-kle twin-kle` | lyrics for the tab line above: one syllable per note (and per sung rest `_`); `_` holds the syllable before over this note (`w: Oh _ ri-ver`: "Oh" is sung over two notes, drawn "Oh___"); `*` leaves a note without words; `~` joins words (`Hello~my` is one syllable); `\-` is a real hyphen (`x\-` doesn't join the next syllable). Several `w:` lines under a tab line are its verses 1, 2, 3…; an empty `w:` keeps a verse's place when the line has no words in it |
-| `[1.]` `[2.]` `[1.2.]` | a **1st/2nd ending**, right after a bar line (or at the start of a line): the bar it starts is played only those times through the repeat (see Repeats and endings) |
-| `:\|x3` | a repeat played **three** times through (any number from 2) |
+| `w: Twin-kle twin-kle` | lyrics for the tab line above (`W:` accepted): one syllable per note (and per sung rest `_`); `_` holds the syllable before over this note (`w: Oh _ ri-ver`: "Oh" is sung over two notes, drawn "Oh___"; `Oh_` is the same); `*` leaves a note without words; `~` joins words (`Hello~my` is one syllable); `\-` is a real hyphen (`x\-` doesn't join the next syllable). Several `w:` lines under a tab line are its verses 1, 2, 3…; an empty `w:` keeps a verse's place when the line has no words in it |
+| `[1.]` `[2.]` `[1.2.]` | a **1st/2nd ending**, right after a bar line (or at the start of a line): the bar it starts is played only those times through the repeat (see Repeats and endings). `[1.2]` and `[1. 2.]` are accepted too |
+| `:\|x3` | a repeat played **three** times through (2 to 99) |
 | `@ Chorus` | section heading |
 | `# text` | comment (at line start or after whitespace; in a `w:` line `#` is part of the words, as in `w: Sing #1`) |
 

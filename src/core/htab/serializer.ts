@@ -1,6 +1,6 @@
 // Turns a TabDoc back into .htab text.
 
-import { hasLyrics, isHeld, lineVerses, lyricOf } from '../verses';
+import { hasWords, isHeld, lineVerses, lyricOf } from '../verses';
 import { midiToName, type Spelling } from '../pitch';
 import type { HoleSound, Sound } from '../types';
 import { beatsPerBar, type BarEvent, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine, type TabMeta } from './types';
@@ -36,7 +36,7 @@ function chordText(sounds: Sound[], opts: SerializeOptions): string {
 
 /** A rest that carries a syllable (in any verse): written "_" and counted by the "w:" lines. */
 function isSung(e: NoteEvent | RestEvent): boolean {
-  return e.kind === 'rest' && (hasLyrics(e) || !!e.sung);
+  return e.kind === 'rest' && (hasWords(e) || !!e.sung);
 }
 
 function eventCore(e: NoteEvent | RestEvent, opts: SerializeOptions): string {
@@ -229,7 +229,8 @@ function lyricsText(line: TabLine, verse = 0): string | null {
   const notes = line.events.filter((e): e is NoteEvent | RestEvent => (e.kind === 'note' && !e.tied) || (e.kind === 'rest' && e.beats > EPS && isSung(e)));
   const syllable = (e: NoteEvent | RestEvent) => lyricOf(e, verse);
   const held = (e: NoteEvent | RestEvent) => isHeld(e, verse);
-  if (!notes.some(syllable)) return null;
+  // (Only holds on this line — a word carried on from the line before — still need writing.)
+  if (!notes.some((e) => syllable(e) || held(e))) return null;
   // (Up to the last note with words — or holding them: "Oh _ _" keeps its holds.)
   let last = notes.length - 1;
   while (last >= 0 && !syllable(notes[last]) && !held(notes[last])) last--;

@@ -22,6 +22,7 @@ import { loadTabText } from '../state/actions';
 import { stop } from '../state/playback';
 import { getParsed, makeParsed, useApp, useParsed } from '../state/store';
 import { useSuggestions } from '../state/useSuggestions';
+import { useDraft } from '../state/leaveGuard';
 import { Dialog } from './Dialog';
 import { TabView } from './TabView';
 
@@ -105,6 +106,8 @@ function ImportBody() {
     unsavedPaste = pasteMode && paste.trim() !== '' && paste !== (draft.pasteText ?? '');
   }, [paste, pasteMode, draft.pasteText]);
   useEffect(() => () => void (unsavedPaste = false), []);
+  // (Leaving the page with pasted text not opened yet asks first, as closing the dialog does.)
+  useDraft(pasteMode && paste.trim() !== '' && paste !== (draft.pasteText ?? ''));
 
   const imported = useMemo<(Imported & { kind?: string }) | null>(() => {
     if (draft.imported) return draft.imported;

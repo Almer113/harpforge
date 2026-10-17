@@ -5,7 +5,8 @@
 //
 // A :| goes back to the last |: before it, or — with none since the previous repeat — to the
 // end of that repeat (or the start of the song). :|: ends one repeat and starts the next.
-// First and second endings aren't written in the format, so they aren't played.
+// 1st/2nd endings play only their times through, and :|xN plays a repeat N times (see
+// endings.ts for where an ending stops).
 
 import { docBars, type WrittenBar } from './endings';
 import type { TabDoc } from './htab/types';

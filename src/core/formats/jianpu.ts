@@ -13,7 +13,7 @@
 //   {5 6 5}          a beat split evenly (triplets etc.), as in .htab
 //   [G7] w: @ |      chord symbols, lyrics, sections, bars — as in .htab
 
-import { setLyricOf } from '../verses';
+import { isHeld, setHeld, setLyricOf } from '../verses';
 import type { Harmonica } from '../instruments';
 import { keyUsesFlats, mod12, parseKey, parsePitchClass, pitchClassName } from '../pitch';
 import type { BarEvent, NoteEvent, RestEvent, TabDoc, TabEvent, TabLine } from '../htab/types';
@@ -148,7 +148,8 @@ export function parseJianpu(text: string): Imported {
         for (const ev of lastLine.events) {
           if (ev.kind !== 'note' || ev.tied || k >= syl.length) continue;
           const s = syl[k++];
-          if (s !== '*' && s !== '_') setLyricOf(ev, verse, s);
+          if (s === '_') setHeld(ev, verse, true);
+          else if (s !== '*') setLyricOf(ev, verse, s);
         }
       }
       continue;
@@ -374,7 +375,7 @@ export function writeJianpu(doc: TabDoc, harp?: Harmonica): string {
       }
       const core = midis.length ? degreeText(midiToDegree(midis[midis.length - 1], doPc)) : '0';
       // A note the harp can't play is written as a rest ("0"), which takes no syllable.
-      if (e.kind === 'note' && midis.length) lyrics.push(e.lyric ? e.lyric.trim().replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-') : '*');
+      if (e.kind === 'note' && midis.length) lyrics.push(e.lyric ? e.lyric.trim().replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-') : isHeld(e, 0) ? '_' : '*');
       if (scaleBeats !== null) return chord + core + '~'.repeat(Math.max(0, Math.round(scaleBeats) - 1));
       const sp = durationSpelling(e.beats)!;
       return chord + core + sp.suffix + ' -'.repeat(sp.dashes);

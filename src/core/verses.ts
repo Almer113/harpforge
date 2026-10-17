@@ -55,6 +55,11 @@ export function hasLyrics(ev: Sung): boolean {
   return !!ev.lyric || !!ev.verses?.some((x) => !!x);
 }
 
+/** Whether something is sung on it in any verse: words, or a syllable held over it. */
+export function hasWords(ev: Sung): boolean {
+  return hasLyrics(ev) || !!ev.holds?.length;
+}
+
 /** How many verses a line has: up to the last one with words (0 without any). */
 export function lineVerses(line: TabLine): number {
   let n = 0;
@@ -64,6 +69,8 @@ export function lineVerses(line: TabLine): number {
     ev.verses?.forEach((x, k) => {
       if (x) n = Math.max(n, k + 2);
     });
+    // (A verse whose words on this line are only holds — "Oh" carried over the line break — counts.)
+    for (const v of ev.holds ?? []) n = Math.max(n, v + 1);
   }
   return n;
 }
