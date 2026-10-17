@@ -27,6 +27,6 @@ export const EXPORTS: { id: ExportKind; name: string; ext: string; mime: string;
   { id: 'abc', name: 'ABC notation', ext: 'abc', mime: 'text/vnd.abc', hint: 'Notes + tab line + lyrics', loses: 'Bends show as pitches' },
   { id: 'musicxml', name: 'MusicXML', ext: 'musicxml', mime: 'application/vnd.recordare.musicxml+xml', hint: 'For MuseScore, Finale, Sibelius…', loses: 'The tab is a lyric line after the verses; comments are left out' },
   { id: 'midi', name: 'MIDI', ext: 'mid', mime: 'audio/midi', hint: 'Plays in any MIDI app: the tune with its words as sung, repeats played out, and the backing on a track of its own', loses: 'No tab or sections; repeat signs become the notes played again' },
-  { id: 'chordpro', name: 'ChordPro', ext: 'cho', mime: 'text/plain', hint: 'Chords + lyrics only', loses: 'No melody or tab; only verse 1 of the lyrics; no repeat signs or endings' },
-  { id: 'jianpu', name: 'Numbered notation', ext: 'txt', mime: 'text/plain', hint: 'Jianpu (1=C …), common for tremolo', loses: 'Harmonica chords keep only their top note; notes the harp can’t play become rests (and lose their syllable); no tab; only verse 1 of the lyrics' },
+  { id: 'chordpro', name: 'ChordPro', ext: 'cho', mime: 'text/plain', hint: 'Chords + lyrics only', loses: 'No melody or tab; no repeat signs or endings (a section sung to several verses is written once for each)' },
+  { id: 'jianpu', name: 'Numbered notation', ext: 'txt', mime: 'text/plain', hint: 'Jianpu (1=C …), common for tremolo', loses: 'Harmonica chords keep only their top note; notes the harp can’t play become rests (and lose their syllable); no tab' },
 ];

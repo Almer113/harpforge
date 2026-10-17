@@ -10,6 +10,7 @@ import { spliceBody } from './edit/splice';
 import { exportDoc, EXPORTS, importText, type ExportKind, type ImportKind } from './formats';
 import { parseMidi } from './formats/midi';
 import { playbackScore } from './repeats';
+import { isHeld, lineVerse, lineVerses, lyricOf } from './verses';
 import { parseHtab, splitHeader } from './htab/parser';
 import { serializeHtab } from './htab/serializer';
 import type { TabDoc } from './htab/types';
@@ -54,6 +55,22 @@ function played(d: TabDoc) {
     out.push({ at: +e.start.toFixed(4), len: +e.beats.toFixed(4), pitches: e.midis.map((m) => (m === null ? '?' : midiToName(m))).join('+') });
   }
   return out;
+}
+/** A chord sheet's chords and words: each section once for every verse it's sung to. */
+function everyVerse(d: TabDoc) {
+  const secs: TabDoc['lines'][] = [];
+  for (const l of d.lines) {
+    if (l.section !== undefined || !secs.length) secs.push([]);
+    secs[secs.length - 1].push(l);
+  }
+  const lines = secs.flatMap((sec) => {
+    const n = Math.max(1, ...sec.map(lineVerses));
+    return Array.from({ length: n }, (_, v) =>
+      sec.map((l) => ({ ...l, events: l.events.map((e) => (e.kind === 'bar' ? e : { ...e, lyric: isHeld(e, lineVerse(l, v)) ? undefined : lyricOf(e, lineVerse(l, v)) })) })),
+    ).flat();
+  });
+  const doc = { meta: d.meta, lines };
+  return { chords: chords(doc), words: words(doc) };
 }
 const sections = (d: TabDoc) => d.lines.filter((l) => l.section !== undefined).map((l) => l.section);
 /** Chord symbols in order, wherever they are (notes, rests, markers). */
@@ -111,14 +128,15 @@ describe('2. an edit to one note changes only its line', () => {
  * - MIDI: notes and rhythm only (no lyrics, chord symbols or sections).
  * - ChordPro: chord symbols and words only (no melody).
  */
-const KEEPS: Record<Exclude<ExportKind, 'htab'>, 'all' | 'top-note' | 'notes-only' | 'played-notes' | 'chords-and-words'> = {
+const KEEPS: Record<Exclude<ExportKind, 'htab'>, 'all' | 'top-note' | 'notes-only' | 'played-notes' | 'chords-and-words' | 'sheet'> = {
   notes: 'all',
   abc: 'all',
   musicxml: 'all',
   jianpu: 'top-note',
   // (Repeats played out, every verse sung: MIDI has no repeat signs.)
   midi: 'played-notes',
-  chordpro: 'chords-and-words',
+  // (A section sung to several verses: once for each, its chords over each.)
+  chordpro: 'sheet',
 };
 
 type Keeps = (typeof KEEPS)[keyof typeof KEEPS];
@@ -127,6 +145,7 @@ type Keeps = (typeof KEEPS)[keyof typeof KEEPS];
 function kept(d: TabDoc, keeps: Keeps) {
   const title = d.meta.title;
   if (keeps === 'chords-and-words') return { title, chords: chords(d), words: words(d) };
+  if (keeps === 'sheet') return { title, ...everyVerse(d) };
   const timing = { title, time: d.meta.time, tempo: d.meta.tempo };
   const ns = music(d);
   if (keeps === 'played-notes') return { ...timing, notes: played(d) };
@@ -162,7 +181,7 @@ describe('3. export and import again', () => {
 
       for (const [kind, keeps] of Object.entries(KEEPS) as [Exclude<ExportKind, 'htab'>, Keeps][]) {
         it(kind, () => {
-          expect(kept(roundTrip(kind, doc, s.text), keeps)).toEqual(kept(doc, keeps));
+          expect(kept(roundTrip(kind, doc, s.text), keeps === 'sheet' ? 'chords-and-words' : keeps)).toEqual(kept(doc, keeps));
         });
       }
     });

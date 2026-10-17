@@ -83,4 +83,27 @@ time: 4/4
 ~ 5 4 4 |
 `,
   },
+  {
+    // Phase 20d: verses — a verse sung twice over (two w: lines), a chorus with one verse, a
+    // held syllable, chords on both; Indonesian words.
+    name: 'verses and a chorus',
+    text: `---
+title: Verses and a chorus
+harmonica: diatonic
+harp-key: C
+time: 4/4
+tempo: 92
+---
+@ Verse
+[C] 4 4 5 6 | [F] -6 -6 6 . |
+w: Di si-ni se-nang
+w: Di sa-na se-nang
+[G] -4 -4 -5 -4 | [C] 4~~~ |
+w: di ma-na ma-na
+w: ha-ti-ku se-nang
+@ Chorus
+[F] -6 -6 6 5 | [C] 4 5 6~ ~ |
+w: La la la la la la la _
+`,
+  },
 ];

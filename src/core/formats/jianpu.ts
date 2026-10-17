@@ -13,7 +13,7 @@
 //   {5 6 5}          a beat split evenly (triplets etc.), as in .htab
 //   [G7] w: @ |      chord symbols, lyrics, sections, bars — as in .htab
 
-import { isHeld, setHeld, setLyricOf } from '../verses';
+import { isHeld, lineVerses, lyricOf, setHeld, setLyricOf } from '../verses';
 import type { Harmonica } from '../instruments';
 import { keyUsesFlats, mod12, parseKey, parsePitchClass, pitchClassName } from '../pitch';
 import type { BarEvent, NoteEvent, RestEvent, TabDoc, TabEvent, TabLine } from '../htab/types';
@@ -360,7 +360,9 @@ export function writeJianpu(doc: TabDoc, harp?: Harmonica): string {
     if (line.section) out.push(`@ ${line.section}`);
     if (!line.events.length) continue;
     const parts: string[] = [];
-    const lyrics: string[] = [];
+    // A row of syllables for each verse the line has (a "w:" line each).
+    const verses = Math.max(1, lineVerses(line));
+    const lyrics: string[][] = Array.from({ length: verses }, () => []);
     const events = line.events;
     let i = 0;
     const tokenFor = (e: NoteEvent | RestEvent, scaleBeats: number | null): string => {
@@ -375,7 +377,11 @@ export function writeJianpu(doc: TabDoc, harp?: Harmonica): string {
       }
       const core = midis.length ? degreeText(midiToDegree(midis[midis.length - 1], doPc)) : '0';
       // A note the harp can't play is written as a rest ("0"), which takes no syllable.
-      if (e.kind === 'note' && midis.length) lyrics.push(e.lyric ? e.lyric.trim().replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-') : isHeld(e, 0) ? '_' : '*');
+      if (e.kind === 'note' && midis.length)
+        lyrics.forEach((row, v) => {
+          const syl = lyricOf(e, v);
+          row.push(syl ? syl.trim().replace(/\s+/g, '~').replace(/-(?!$)/g, '\\-') : isHeld(e, v) ? '_' : '*');
+        });
       if (scaleBeats !== null) return chord + core + '~'.repeat(Math.max(0, Math.round(scaleBeats) - 1));
       const sp = durationSpelling(e.beats)!;
       return chord + core + sp.suffix + ' -'.repeat(sp.dashes);
@@ -419,9 +425,11 @@ export function writeJianpu(doc: TabDoc, harp?: Harmonica): string {
       parts.push('{' + group.map((g, k) => tokenFor(g, units[k] / g0)).join(' ') + '}' + groupLength(sum));
     }
     out.push(parts.join(' '));
-    if (lyrics.some((l) => l !== '*')) {
+    // (Each verse that has words on this line; an empty one before a later one keeps its place.)
+    const last = lyrics.map((row) => row.some((l) => l !== '*')).lastIndexOf(true);
+    for (const row of lyrics.slice(0, last + 1)) {
       let text = '';
-      for (const syl of lyrics) text += text === '' || text.endsWith('-') ? syl : ' ' + syl;
+      for (const syl of row) text += text === '' || text.endsWith('-') ? syl : ' ' + syl;
       out.push('w: ' + text);
     }
   }

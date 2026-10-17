@@ -7,6 +7,7 @@ import type { NoteEvent, TabDoc, TabEvent } from '../htab/types';
 import { midiToName, keySpelling, type Spelling } from '../pitch';
 import type { HoleSound, Sound } from '../types';
 import { endingLabel } from '../endings';
+import { isHeld, lineVerses, lyricOf } from '../verses';
 
 export interface PlainTextOptions {
   /** Write holes (4 -4) or notes (C5 D5). */
@@ -67,11 +68,12 @@ interface Cell {
   /** A bar line ("|", "|:", ":|", ":|x3"): where a row may break. */
   bar?: boolean;
   chord?: string;
-  lyric?: string;
+  /** Its syllable in each verse (a lyric row each under the tab). */
+  lyrics?: (string | undefined)[];
 }
 
 /** One line of tab as columns: a cell per played note, "|" cells for bars. */
-function cellsOf(events: TabEvent[], o: PlainTextOptions, flats: Spelling, harp: Harmonica): Cell[] {
+function cellsOf(events: TabEvent[], o: PlainTextOptions, flats: Spelling, harp: Harmonica, verses = 1): Cell[] {
   const cells: Cell[] = [];
   let pendingChord: string | undefined;
   // An ending's "1." goes over its first note, with the chord there.
@@ -90,7 +92,7 @@ function cellsOf(events: TabEvent[], o: PlainTextOptions, flats: Spelling, harp:
     // Rests and held-over (tied) notes aren't played: no column, but a chord on them waits for the next note.
     if (e.kind === 'rest' || e.tied || !e.sounds.length) continue;
     const chord = [pendingEnding, o.chords ? pendingChord : undefined].filter(Boolean).join(' ') || undefined;
-    cells.push({ tab: noteToken(e, o, flats, harp), chord, lyric: o.lyrics ? e.lyric : undefined });
+    cells.push({ tab: noteToken(e, o, flats, harp), chord, lyrics: o.lyrics ? Array.from({ length: verses }, (_, v) => (isHeld(e, v) ? undefined : lyricOf(e, v))) : undefined });
     pendingChord = undefined;
     pendingEnding = undefined;
   }
@@ -100,7 +102,7 @@ function cellsOf(events: TabEvent[], o: PlainTextOptions, flats: Spelling, harp:
 
 /** Lays cells out in aligned rows (chords, tab, lyrics), breaking at bars to fit the width. */
 function layout(cells: Cell[], o: PlainTextOptions): string[] {
-  const widthOf = (c: Cell) => (c.bar ? c.tab.length + 1 : Math.max(c.tab.length, (c.chord?.length ?? 0), (c.lyric?.length ?? 0)) + 1);
+  const widthOf = (c: Cell) => (c.bar ? c.tab.length + 1 : Math.max(c.tab.length, c.chord?.length ?? 0, ...(c.lyrics ?? []).map((l) => l?.length ?? 0)) + 1);
   const rows: Cell[][] = [[]];
   let used = 0;
   // Break only at bar lines (or anywhere, if a bar is longer than the width).
@@ -130,16 +132,18 @@ function layout(cells: Cell[], o: PlainTextOptions): string[] {
     if (!row.length) continue;
     let chords = '';
     let tab = '';
-    let lyrics = '';
+    // (A row of words for each verse.)
+    const verses = Math.max(0, ...row.map((c) => c.lyrics?.length ?? 0));
+    const lyrics: string[] = Array.from({ length: verses }, () => '');
     for (const c of row) {
       const w = widthOf(c);
       tab += c.tab.padEnd(w);
       chords += (c.chord ?? '').padEnd(w);
-      lyrics += (c.lyric ?? '').padEnd(w);
+      for (let v = 0; v < verses; v++) lyrics[v] += (c.lyrics?.[v] ?? '').padEnd(w);
     }
     if (chords.trim()) out.push(chords.trimEnd());
     out.push(tab.replace(/\s*\|\s*$/, ' |').trimEnd());
-    if (lyrics.trim()) out.push(lyrics.trimEnd());
+    for (const l of lyrics) if (l.trim()) out.push(l.trimEnd());
   }
   return out;
 }
@@ -167,7 +171,7 @@ export function writePlainText(doc: TabDoc, harp: Harmonica, o: PlainTextOptions
       if (!first) out.push('');
       out.push(`[${line.section}]`);
     }
-    const cells = cellsOf(line.events, o, flats, harp);
+    const cells = cellsOf(line.events, o, flats, harp, Math.max(1, lineVerses(line)));
     if (!cells.some((c) => c.tab !== '|')) continue;
     out.push(...layout(cells, o));
     first = false;

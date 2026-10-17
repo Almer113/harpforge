@@ -6,6 +6,7 @@ import { isChordSymbol, isNoChord, parseChord, transposeChord } from '../chords'
 import { keyUsesFlats } from '../pitch';
 import { beatsPerBar, type NoteEvent, type RestEvent, type TabDoc, type TabEvent, type TabLine } from '../htab/types';
 import { notesMeta, type Imported } from './common';
+import { isHeld, lineVerse, lineVerses, lyricOf } from '../verses';
 
 export { transposeChord };
 
@@ -27,6 +28,13 @@ export function parseChordPro(text: string): Imported {
   // Lyric lines before any chord, as written (a file with no chords at all keeps them).
   const lyricLines: { text: string; section?: string }[] = [];
   let inTab = false;
+  // The chorus ({soc} … {eoc}): its lines, for {chorus} to bring back.
+  let chorusFrom: number | null = null;
+  let chorus: TabLine[] = [];
+  const endChorus = () => {
+    if (chorusFrom !== null) chorus = lines.slice(chorusFrom).map((l) => ({ ...l, events: l.events.map((e) => ({ ...e })) }));
+    chorusFrom = null;
+  };
   const bars = () => beatsPerBar(meta);
 
   /**
@@ -72,7 +80,27 @@ export function parseChordPro(text: string): Imported {
       else if (name === 'capo') capo = parseInt(value, 10) || 0;
       else if (name === 'sot' || name === 'start_of_tab' || name === 'start_of_grid' || name === 'sog') inTab = true;
       else if (name === 'eot' || name === 'end_of_tab' || name === 'end_of_grid' || name === 'eog') inTab = false;
-      else if (SECTION_DIRECTIVES[name]) pendingSection = value || SECTION_DIRECTIVES[name];
+      else if (name === 'soc' || name === 'start_of_chorus') {
+        endChorus();
+        chorusFrom = lines.length;
+        pendingSection = value || 'Chorus';
+      } else if (name === 'eoc' || name === 'end_of_chorus') endChorus();
+      else if (name === 'chorus') {
+        // {chorus}: the last chorus again, here.
+        endChorus();
+        if (!chorus.length) warnings.push('“{chorus}” with no chorus ({soc} … {eoc}) before it: left out.');
+        else
+          chorus.forEach((l, k) => {
+            const copy: TabLine = { ...l, events: l.events.map((e) => ({ ...e })) };
+            delete copy.src;
+            if (k === 0) copy.section = value || l.section || 'Chorus';
+            else delete copy.section;
+            lines.push(copy);
+          });
+      } else if (SECTION_DIRECTIVES[name]) {
+        endChorus();
+        pendingSection = value || SECTION_DIRECTIVES[name];
+      }
       else if (/^(start_of_|so)/.test(name)) pendingSection = value || name.replace(/^start_of_|^so/, '');
       else if (name === 'comment' || name === 'c' || name === 'ci' || name === 'comment_italic') pendingSection = value;
       continue;
@@ -349,6 +377,11 @@ export function looksLikeChordSheet(text: string): boolean {
 
 // ---- Export ---------------------------------------------------------------------
 
+/**
+ * A ChordPro chord sheet: chords and words. A section sung to several verses is written once
+ * for each, its chords over each (a line with fewer verses giving its last); a chorus between
+ * {soc} and {eoc}, the other sections as a comment heading them.
+ */
 export function writeChordPro(doc: TabDoc): string {
   const { meta } = doc;
   const out: string[] = [];
@@ -356,24 +389,38 @@ export function writeChordPro(doc: TabDoc): string {
   if (meta.artist) out.push(`{artist: ${meta.artist}}`);
   if (meta.key) out.push(`{key: ${meta.key}}`);
   out.push(`{tempo: ${Math.round(meta.tempo)}}`, `{time: ${meta.time}}`);
+  // The song's sections: the lines from one heading to the next.
+  const sections: { name?: string; lines: TabLine[] }[] = [];
   for (const line of doc.lines) {
-    if (line.section) out.push('', `{comment: ${line.section}}`);
-    if (!line.events.length) continue;
-    let text = '';
-    let lastChord: string | undefined;
-    for (const e of line.events) {
-      if (e.kind === 'bar') continue;
-      const ev = e as NoteEvent | RestEvent;
-      if (ev.chord && ev.chord !== lastChord) {
-        text += `[${ev.chord}]`;
-        lastChord = ev.chord;
+    if (line.section !== undefined || !sections.length) sections.push({ name: line.section, lines: [] });
+    sections[sections.length - 1].lines.push(line);
+  }
+  for (const sec of sections) {
+    const verses = Math.max(1, ...sec.lines.map(lineVerses));
+    const chorus = !!sec.name && /chorus|refrain|reff?\b/i.test(sec.name);
+    for (let v = 0; v < verses; v++) {
+      const heading = sec.name ? `${sec.name}${verses > 1 ? ` ${v + 1}` : ''}` : verses > 1 ? `Verse ${v + 1}` : undefined;
+      if (chorus) out.push('', heading && heading !== 'Chorus' ? `{start_of_chorus: ${heading}}` : '{start_of_chorus}');
+      else if (heading) out.push('', `{comment: ${heading}}`);
+      for (const line of sec.lines) {
+        if (!line.events.length) continue;
+        const lv = lineVerse(line, v);
+        let text = '';
+        let lastChord: string | undefined;
+        for (const e of line.events) {
+          if (e.kind === 'bar') continue;
+          const ev = e as NoteEvent | RestEvent;
+          if (ev.chord && ev.chord !== lastChord) {
+            text += `[${ev.chord}]`;
+            lastChord = ev.chord;
+          }
+          const syl = isHeld(ev, lv) ? undefined : lyricOf(ev, lv);
+          if (syl && !(ev.kind === 'note' && ev.tied)) text += syl.endsWith('-') ? syl.slice(0, -1) : syl + ' ';
+        }
+        if (text.trim()) out.push(text.trimEnd());
       }
-      if (ev.lyric) {
-        const syl = ev.lyric;
-        text += syl.endsWith('-') ? syl.slice(0, -1) : syl + ' ';
-      }
+      if (chorus) out.push('{end_of_chorus}');
     }
-    if (text.trim()) out.push(text.trimEnd());
   }
   return out.join('\n') + '\n';
 }
