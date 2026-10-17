@@ -473,12 +473,18 @@ export interface ChordSheetResult extends ConvertResult {
   missingChords: string[];
 }
 
-export function chordSheetToTab(doc: TabDoc, harp: Harmonica, pattern: StrumPattern = 'halves'): ChordSheetResult {
+/**
+ * A chord sheet as a tab for `harp`: each chord played in `pattern`. `voicings`: chords to
+ * play on other holes (a fully playable chord picked to stand in) — the symbol stays as
+ * written, so the song's harmony (and its backing) is still the song's.
+ */
+export function chordSheetToTab(doc: TabDoc, harp: Harmonica, pattern: StrumPattern = 'halves', voicings: Record<string, HoleSound[]> = {}): ChordSheetResult {
   const cache = new Map<string, ReturnType<typeof findHarmonicaChord>>();
   const lookup = (sym: string) => {
     if (!cache.has(sym)) {
       const info = parseChord(sym);
-      cache.set(sym, info ? findHarmonicaChord(harp, info) : null);
+      const own = voicings[sym];
+      cache.set(sym, own?.length ? { sounds: own, coverage: 1, hasRoot: true, cost: 0 } : info ? findHarmonicaChord(harp, info) : null);
     }
     return cache.get(sym)!;
   };

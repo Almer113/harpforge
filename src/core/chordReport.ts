@@ -159,3 +159,113 @@ export function missingText(missing: MissingTone[]): string {
   if (!missing.length) return 'all of it';
   return `no ${missing.map((m) => `${m.name} (${m.role})`).join(missing.length === 2 ? ' or ' : ', ')}`;
 }
+
+// ---- Phase 19b: fully playable chords to pick instead --------------------------------------
+
+/** The chord types a group of holes is named as (the common ones; a group that's none of them isn't offered). */
+const FULL_TYPES: { suffix: string; ivs: number[] }[] = [
+  { suffix: '', ivs: [0, 4, 7] },
+  { suffix: 'm', ivs: [0, 3, 7] },
+  { suffix: '7', ivs: [0, 4, 7, 10] },
+  { suffix: 'm7', ivs: [0, 3, 7, 10] },
+  { suffix: 'maj7', ivs: [0, 4, 7, 11] },
+  { suffix: '6', ivs: [0, 4, 7, 9] },
+  { suffix: 'm7b5', ivs: [0, 3, 6, 10] },
+  { suffix: 'dim', ivs: [0, 3, 6] },
+  { suffix: 'aug', ivs: [0, 4, 8] },
+  { suffix: 'sus4', ivs: [0, 5, 7] },
+  { suffix: 'sus2', ivs: [0, 2, 7] },
+];
+
+export interface FullChord {
+  symbol: string;
+  info: ChordInfo;
+  sounds: HoleSound[];
+}
+
+/**
+ * Every chord `harp` plays in full: 3 or 4 neighbouring holes on one breath (no bends), all of
+ * whose notes make one chord and nothing else — named, each once (the voicing nearest the
+ * middle of the harmonica). `flats`: how to name their roots.
+ */
+export function fullChords(harp: Harmonica, flats: Spelling = false): FullChord[] {
+  const mid = (harp.holes.length + 1) / 2;
+  const best = new Map<string, { chord: FullChord; cost: number }>();
+  const slides = harp.hasSlide ? [false, true] : [false];
+  for (const breath of ['blow', 'draw'] as const)
+    for (const slide of slides)
+      for (let size = 3; size <= 4; size++)
+        for (let start = 0; start + size <= harp.holes.length; start++) {
+          const sounds: HoleSound[] = harp.holes.slice(start, start + size).map((h) => ({ type: 'hole', hole: h.hole, breath, bend: 0, over: false, slide }));
+          const pcs = new Set(sounds.map((s) => soundPitch(harp, s)).filter((m): m is number => m !== null).map(mod12));
+          for (const root of pcs)
+            for (const t of FULL_TYPES) {
+              const tones = t.ivs.map((iv) => mod12(root + iv));
+              if (tones.length !== pcs.size || !tones.every((pc) => pcs.has(pc))) continue;
+              const symbol = pitchClassName(root, flats) + t.suffix;
+              const info = parseChord(symbol);
+              if (!info) continue;
+              // (Nearer the middle, with the root at the bottom, without the slide: the one kept.)
+              const low = soundPitch(harp, sounds[0]);
+              const cost = Math.abs(start + 1 + (size - 1) / 2 - mid) * 0.15 + (low !== null && mod12(low) === root ? 0 : 0.4) + (slide ? 0.5 : 0) + (size === 4 ? 0 : 0.1);
+              const had = best.get(symbol);
+              if (!had || cost < had.cost) best.set(symbol, { chord: { symbol, info, sounds }, cost });
+            }
+        }
+  return [...best.values()].map((b) => b.chord);
+}
+
+export interface Substitute extends FullChord {
+  /** Why it stands in: "has Am's C and E (its relative major)". */
+  reason: string;
+  score: number;
+}
+
+const WEIGHT = (iv: number) => (iv === 0 ? 3 : iv === 3 || iv === 4 ? 2.2 : iv === 10 || iv === 11 ? 1.4 : 1);
+
+/**
+ * Chords `harp` plays in full that can stand in for `chord`, the best first (at most `limit`):
+ * sharing its notes (the root and the 3rd most), related to it (the same root, its relative
+ * major or minor), adding little of their own.
+ */
+export function substitutes(harp: Harmonica, chord: ChordInfo, flats: Spelling = false, limit = 3): Substitute[] {
+  const own = chord.intervals.filter((iv) => iv <= 12);
+  const ownPcs = new Map(own.map((iv) => [mod12(chord.root + iv), iv]));
+  const minor = own.includes(3) && !own.includes(4);
+  const out: Substitute[] = [];
+  for (const c of fullChords(harp, flats)) {
+    const pcs = c.info.tones;
+    // (Not the chord itself, as written or spelled another way.)
+    if (pcs.length === ownPcs.size && pcs.every((pc) => ownPcs.has(pc))) continue;
+    const shared = pcs.filter((pc) => ownPcs.has(pc));
+    const sharedIvs = shared.map((pc) => ownPcs.get(pc)!);
+    const extra = pcs.filter((pc) => !ownPcs.has(pc));
+    // It has to keep the chord's root or 3rd, and two of its notes.
+    if (shared.length < 2 || !sharedIvs.some((iv) => iv === 0 || iv === 3 || iv === 4)) continue;
+    const sameRoot = c.info.root === chord.root;
+    const cMinor = c.info.intervals.includes(3) && !c.info.intervals.includes(4);
+    const relative = (minor && !cMinor && c.info.root === mod12(chord.root + 3)) || (!minor && cMinor && c.info.root === mod12(chord.root - 3));
+    // A note it adds that grates against the chord: a semitone above one of its notes (a ♭9
+    // over the root), or next to its 3rd (major against minor). A semitone below the root —
+    // a major 7th — sits well.
+    const thirds = own.filter((iv) => iv === 3 || iv === 4).map((iv) => mod12(chord.root + iv));
+    const clashes = extra.filter((pc) => ownPcs.has(mod12(pc - 1)) || thirds.some((t) => mod12(pc - t) === 11)).length;
+    // (And the tritone over the root, unless the chord has it: a different colour altogether.)
+    const tritone = extra.includes(mod12(chord.root + 6)) ? 1.5 : 0;
+    const score = sharedIvs.reduce((a, iv) => a + WEIGHT(iv), 0) + (sameRoot ? 2 : 0) + (relative ? 1.5 : 0) - extra.length * 0.8 - clashes * 3 - tritone;
+    // (Too little in common, or too much against it, to stand in.)
+    if (score < 2.2) continue;
+    const names = sharedIvs.sort((a, b) => a - b).map((iv) => toneName(chord.symbol, iv, chord.intervals));
+    const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+    const why = sameRoot
+      ? c.info.intervals.length < own.length
+        ? ' (the same chord, simpler)'
+        : ' (the same root)'
+      : relative
+        ? ` (its relative ${minor ? 'major' : 'minor'})`
+        : '';
+    const adds = extra.length ? `; adds ${extra.map((pc) => pitchClassName(pc, flats)).join(' ')}` : '';
+    out.push({ ...c, score, reason: `has ${chord.symbol}’s ${list}${why}${adds}` });
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, limit);
+}

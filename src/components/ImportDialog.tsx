@@ -25,7 +25,7 @@ import { useSuggestions } from '../state/useSuggestions';
 import { useDraft } from '../state/leaveGuard';
 import { Dialog } from './Dialog';
 import { TabView } from './TabView';
-import { ChordList } from './ChordList';
+import { ChordList, type Picks } from './ChordList';
 import type { ChordLine } from '../core/chordReport';
 import { soundPitch } from '../core/instruments';
 
@@ -189,14 +189,19 @@ function ImportBody() {
     return { id: specId(s.spec), spec: s.spec, shift: s.shift, position: s.position };
   }, [suggestions, picked, mine, owned.length]);
 
+  // Chords picked to stand in for ones this harmonica can't play in full (for this harmonica).
+  const [picks, setPicks] = useState<{ harp: string; picks: Picks }>({ harp: '', picks: {} });
+  const standIns = useMemo(() => (choice && picks.harp === choice.id ? picks.picks : {}), [choice, picks]);
+  const voicings = useMemo(() => Object.fromEntries(Object.entries(standIns).map(([sym, p]) => [sym, p.sounds])), [standIns]);
+
   const result = useMemo(() => {
     if (!analysis || !choice) return null;
     const harp = getHarmonica(choice.spec);
-    const r = analysis.chordSheet ? chordSheetToTab(analysis.doc, harp, pattern) : notesToTab(analysis.doc, harp, { shift: choice.shift, sourceHarp: analysis.sourceHarp });
+    const r = analysis.chordSheet ? chordSheetToTab(analysis.doc, harp, pattern, voicings) : notesToTab(analysis.doc, harp, { shift: choice.shift, sourceHarp: analysis.sourceHarp });
     if (choice.position) r.doc.meta.position = positionName(choice.position);
     const text = serializeHtab(r.doc);
     return { ...r, text, parsed: makeParsed(text) };
-  }, [analysis, choice, pattern]);
+  }, [analysis, choice, pattern, voicings]);
 
   // Hear the result before importing it.
   const [playing, setPlaying] = useState(false);
@@ -467,7 +472,7 @@ function ImportBody() {
                 </select>
               </label>
             )}
-            {analysis.chordSheet && chosenHarp && <ChordList doc={analysis.doc} harp={chosenHarp} onPick={hearChord} />}
+            {analysis.chordSheet && chosenHarp && choice && <ChordList doc={analysis.doc} harp={chosenHarp} picks={standIns} onPicks={(p) => setPicks({ harp: choice.id, picks: p })} onHear={hearChord} />}
           </div>
 
           <div className="import-preview sheet">

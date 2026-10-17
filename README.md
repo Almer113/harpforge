@@ -119,7 +119,9 @@ old one. No server answering: guest only (the account menu offers **Try again**)
   `x4`), ASCII guitar tab, numbered notation, typed notes (`C4 D4 E4~`), and **PDF** —
   image-only PDFs through OCR with chord-aware corrections. Each import ranks the
   harmonicas and positions that play it best and previews the tab with sound; chord sheets
-  become harmonica chords.
+  become harmonica chords — the dialog lists each chord as that harmonica plays it (what's
+  left out, by name: "Am · 4 5 · no A, the root") and offers chords it plays in full to
+  stand in ("Play as C: Am's relative major"), the chord symbols kept as written.
 - **Export:** HarpTab, Notes (the melody as note names, no holes), ABC, MusicXML, MIDI,
   ChordPro, numbered notation; a **plain-text tab** for posting; and **share links** (the
   whole tab in the link; nothing goes to a server).
@@ -200,11 +202,11 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 - **Phase 17:** editing tools — section tools (heading menu, Alt+↑/↓), find and replace
   holes (Ctrl+H).
 - **Phase 18:** the Contour view.
+- **Phase 19:** chord sheets — what each chord becomes on the harmonica, and fully playable
+  chords to play instead.
 
 **Planned**
 
-19. Chord sheets: warnings for chords played without their root, and fully playable
-    nearby chords to pick instead.
 20. File formats: ABC `W:` verses and voice choice; MusicXML part choice and timewise
     files; MIDI lyrics, track choice, tempo changes (the longest-lasting tempo kept, with a
     warning), export with repeats played out and the backing; ChordPro `{chorus}`; every

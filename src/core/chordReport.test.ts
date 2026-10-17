@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { parseChord } from './chords';
-import { chordReport, missingText, missingTones, roleOf, toneName } from './chordReport';
+import { chordReport, fullChords, missingText, missingTones, roleOf, substitutes, toneName } from './chordReport';
 import { chordSheetToTab } from './convert';
 import { parseHtab } from './htab/parser';
 import { getHarmonica } from './instruments';
@@ -58,6 +58,30 @@ describe('the chords on a harmonica', () => {
     const c = [4, 5, 6].map((hole) => ({ type: 'hole' as const, hole, breath: 'blow' as const, bend: 0, over: false, slide: false }));
     const am = chordReport(doc, C(), { Am: c }).find((l) => l.symbol === 'Am')!;
     expect([am.notes.join(' '), am.level]).toEqual(['C E G', 'thin']);
+  });
+
+  it('the chords a harmonica plays in full: 3–4 neighbouring holes on one breath, all one chord', () => {
+    expect(fullChords(C()).map((c) => c.symbol).sort()).toEqual(['Bdim', 'Bm7b5', 'C', 'Dm', 'G', 'G7']);
+    expect(holes(fullChords(C()).find((c) => c.symbol === 'Dm')!)).toBe('-4 -5 -6');
+  });
+
+  it('stand-ins: sharing the chord’s notes (root and 3rd most), related to it, the best first, with why', () => {
+    const subs = (sym: string, harp = C()) => substitutes(harp, parseChord(sym)!).map((s) => `${s.symbol}: ${s.reason}`);
+    expect(subs('Am')[0]).toBe('C: has Am’s C and E (its relative major); adds G');
+    expect(subs('F')[0]).toBe('Dm: has F’s F and A (its relative minor); adds D');
+    expect(subs('Cmaj7')[0]).toBe('C: has Cmaj7’s C, E and G (the same chord, simpler)');
+    // (Not one that grates against it: Bdim's B over Bb, Em7b5's G against E7's G#.)
+    expect(subs('Bb')).toEqual(['Dm: has Bb’s D and F; adds A']);
+    expect(subs('E7', getHarmonica({ family: 'diatonic', tuning: 'richter', key: 'F' }))).toEqual([]);
+    // (A chord it plays in full needs none: not offered itself.)
+    expect(subs('C').some((s) => s.startsWith('C:'))).toBe(false);
+  });
+
+  it('a stand-in picked: the tab plays its holes, the chord symbol stays as written', () => {
+    const c = fullChords(C()).find((x) => x.symbol === 'C')!;
+    const r = chordSheetToTab(sheet('[Am] . . . . |'), C(), 'hold', { Am: c.sounds });
+    const note = r.doc.lines[0].events.find((e) => e.kind === 'note')!;
+    expect(note.kind === 'note' && [note.chord, note.sounds.map((s) => (s.type === 'hole' ? s.hole : 0))]).toEqual(['Am', [4, 5, 6, 7]]);
   });
 
   it('the harmonica list counts each chord once: missing its root or 3rd, or not playable at all', () => {
