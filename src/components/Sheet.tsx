@@ -6,6 +6,7 @@ import type { NoteEvent, RestEvent } from '../core/htab/types';
 import { useApp, useParsed, type Parsed, type ReadAs, type SheetShow, type SheetView } from '../state/store';
 import { doPitchClass } from '../core/formats/jianpu';
 import { pitchClassName, keyUsesFlats } from '../core/pitch';
+import { ContourView } from './ContourView';
 import { LyricsView } from './LyricsView';
 import { SimpleTabView } from './SimpleTabView';
 import { TabView } from './TabView';
@@ -61,20 +62,22 @@ export function Sheet({
     <div className={`sheet ${bare ? 'bare' : ''}`}>
       {!bare && <div className="sheet-head">
         <h2>
-          {view === 'numbers' ? 'Numbered notation' : view === 'staff' ? 'Staff notation' : view === 'lyrics' ? 'Lyrics' : notes ? (view === 'simple' ? 'Simple notes' : 'Notes') : view === 'simple' ? 'Simple tab' : title}
+          {view === 'numbers' ? 'Numbered notation' : view === 'staff' ? 'Staff notation' : view === 'lyrics' ? 'Lyrics' : view === 'contour' ? 'Contour' : notes ? (view === 'simple' ? 'Simple notes' : 'Notes') : view === 'simple' ? 'Simple tab' : title}
           {view === 'numbers' && <span className="chip plain jp-key">1={doName}</span>}
           {verses.length === 1 && verseCount > 1 && view !== 'simple' && <span className="chip plain">Verse {verses[0] + 1}</span>}
         </h2>
         <div className="tb-group">
           {view !== 'simple' && <ShowMenu view={view} />}
-          {(view === 'tab' || view === 'simple' || view === 'lyrics') && <ReadAsSwitch />}
-          <ViewSwitch />
+          {(view === 'tab' || view === 'simple' || view === 'lyrics' || view === 'contour') && <ReadAsSwitch />}
+          <ViewSwitch short />
           {actions}
         </div>
       </div>}
       {/* (The staff is drawn to the width it's given: it's made bigger by giving it less.) */}
       <div className="sheet-body" style={scale !== 1 && view !== 'staff' ? { zoom: scale } : undefined}>
-      {view === 'lyrics' ? (
+      {view === 'contour' ? (
+        <ContourView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} passage={passage} loopRange={loopRange} marks={marks} marksPrev={marksPrev} readAs={readAs} show={show.contour} verses={verses} singing={singing} />
+      ) : view === 'lyrics' ? (
         <LyricsView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} passage={passage} loopRange={loopRange} marks={marks} marksPrev={marksPrev} readAs={readAs} show={show.lyrics} verses={verses} singing={singing} />
       ) : view === 'simple' ? (
         <SimpleTabView parsed={parsed} activeEvents={activeEvents} selectedEvent={selectedEvent} onSelect={onSelect} passage={passage} loopRange={loopRange} marks={marks} marksPrev={marksPrev} readAs={readAs} />
@@ -113,9 +116,10 @@ const VIEWS: { id: SheetView; label: string; short: string; title?: string }[] =
   { id: 'staff', label: 'Staff', short: 'Staff', title: 'Standard notation, with the holes underneath' },
   { id: 'numbers', label: 'Numbers', short: 'Numbers', title: 'Numbered notation (jianpu): 1 = do of the key' },
   { id: 'lyrics', label: 'Lyrics', short: 'Lyrics', title: 'The words, with the holes above them, like a chord sheet' },
+  { id: 'contour', label: 'Contour', short: 'Contour', title: 'The tune’s shape: each note as high as it sounds and as long as it lasts' },
 ];
 
-/** Simple tab | Tab | Staff | Numbers | Lyrics. `short`: shorter names (performance mode's menu). */
+/** Simple tab | Tab | Staff | Numbers | Lyrics | Contour. `short`: shorter names (performance mode's menu). */
 export function ViewSwitch({ short = false }: { short?: boolean }) {
   const view = useApp((s) => s.sheetView);
   return (
@@ -149,8 +153,8 @@ export function ReadAsSwitch({ className = '', icons = false }: { className?: st
 /** "Show ▾": what the Tab, Numbers, Staff or Lyrics view shows besides the notes. */
 export function ShowMenu({ view }: { view: ShowView }) {
   const items = useShowItems(view);
-  // The staff's title is off by default, so it doesn't count as "hidden".
-  const hidden = items.filter((i) => !i.on && i.label !== 'Title and tempo').length;
+  // The staff's title and the contour's outline are off by default, so they don't count as "hidden".
+  const hidden = items.filter((i) => !i.on && i.label !== 'Title and tempo' && i.label !== 'Outline').length;
   return (
     <Popover label={`Show${hidden ? ` (${hidden} hidden)` : ''} ▾`} title="Choose what this view shows" kind="panel" panelClass="menu show-menu" wrapClass="show-wrap" panelLabel="Show">
       <ShowItems view={view} />
@@ -158,7 +162,7 @@ export function ShowMenu({ view }: { view: ShowView }) {
   );
 }
 
-type ShowView = 'tab' | 'numbers' | 'staff' | 'lyrics';
+type ShowView = 'tab' | 'numbers' | 'staff' | 'lyrics' | 'contour';
 
 /** The verses the sheet shows (0-based), from the Show menu's choice. */
 export function useShownVerses(parsed: Parsed): number[] {
@@ -213,7 +217,7 @@ function useShowItems(view: ShowView): { label: string; on: boolean; toggle: (v:
   const show = useApp((s) => s.sheetShow);
   const names = useApp((s) => s.showNoteNames);
   const notes = useApp((s) => s.readAs === 'notes');
-  const set = (patch: Partial<SheetShow['tab']> & Partial<SheetShow['numbers']> & Partial<SheetShow['staff']> & Partial<SheetShow['lyrics']>) =>
+  const set = (patch: Partial<SheetShow['tab']> & Partial<SheetShow['numbers']> & Partial<SheetShow['staff']> & Partial<SheetShow['lyrics']> & Partial<SheetShow['contour']>) =>
     useApp.setState((s) => ({ sheetShow: { ...s.sheetShow, [view]: { ...s.sheetShow[view], ...patch } } }));
   return view === 'tab'
       ? [
@@ -227,6 +231,13 @@ function useShowItems(view: ShowView): { label: string; on: boolean; toggle: (v:
         ? [
             { label: notes ? 'Notes' : 'Holes', on: show.lyrics.holes, toggle: (v) => set({ holes: v }), hint: notes ? 'C5, E5… above the words' : '4, -4… above the words' },
             { label: 'Chords', on: show.lyrics.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the words' },
+          ]
+      : view === 'contour'
+        ? [
+            { label: notes ? 'Notes' : 'Holes', on: show.contour.holes, toggle: (v) => set({ holes: v }), hint: notes ? 'C5, E5… on the notes' : '4, -4… on the notes' },
+            { label: 'Words', on: show.contour.lyrics, toggle: (v) => set({ lyrics: v }), hint: 'The lyrics under the notes' },
+            { label: 'Chords', on: show.contour.chords, toggle: (v) => set({ chords: v }), hint: 'Chord symbols above the notes' },
+            { label: 'Outline', on: show.contour.line, toggle: (v) => set({ line: v }), hint: 'A thin line from note to note: the tune’s shape at a glance' },
           ]
       : view === 'numbers'
         ? [

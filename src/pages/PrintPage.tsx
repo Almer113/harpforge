@@ -3,6 +3,7 @@
 
 import { lazy, Suspense, useEffect } from 'react';
 import { ReadAsSwitch, ShowMenu, useShownVerses } from '../components/Sheet';
+import { ContourView } from '../components/ContourView';
 import { LyricsView } from '../components/LyricsView';
 import { SimpleTabView } from '../components/SimpleTabView';
 import { TabView } from '../components/TabView';
@@ -27,6 +28,7 @@ const VIEWS: { id: SheetView; label: string }[] = [
   { id: 'staff', label: 'Staff' },
   { id: 'numbers', label: 'Numbers' },
   { id: 'lyrics', label: 'Lyrics' },
+  { id: 'contour', label: 'Contour' },
 ];
 
 const ZOOM = { compact: 0.82, normal: 1, large: 1.3 };
@@ -72,7 +74,7 @@ export function PrintPage() {
               </button>
             ))}
           </div>
-          {(prefs.view === 'tab' || prefs.view === 'simple' || prefs.view === 'lyrics') && <ReadAsSwitch />}
+          {(prefs.view === 'tab' || prefs.view === 'simple' || prefs.view === 'lyrics' || prefs.view === 'contour') && <ReadAsSwitch />}
           {prefs.view !== 'simple' && <ShowMenu view={prefs.view} />}
           <select value={prefs.size} onChange={(e) => set({ size: e.target.value as PrintPrefs['size'] })} title="Size on the page">
             <option value="compact">Compact</option>
@@ -127,7 +129,9 @@ export function PrintPage() {
           </table>
         )}
         <div className="paper-body">
-          {prefs.view === 'lyrics' ? (
+          {prefs.view === 'contour' ? (
+            <ContourView parsed={parsed} activeEvents={[]} selectedEvent={null} readAs={readAs} show={show.contour} verses={verses} />
+          ) : prefs.view === 'lyrics' ? (
             <LyricsView parsed={parsed} activeEvents={[]} selectedEvent={null} readAs={readAs} show={show.lyrics} verses={verses} />
           ) : prefs.view === 'simple' ? (
             <SimpleTabView parsed={parsed} activeEvents={[]} selectedEvent={null} readAs={readAs} />

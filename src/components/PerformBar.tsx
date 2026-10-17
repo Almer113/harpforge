@@ -19,7 +19,7 @@ const IDLE_MS = 2500;
 let lastPlayed: number | null = null;
 /** The first fade of a visit says how to get the bar back. */
 let hinted = false;
-const VIEW_NAMES = { simple: 'Simple tab', tab: 'Tab', staff: 'Staff', numbers: 'Numbers', lyrics: 'Lyrics' };
+const VIEW_NAMES = { simple: 'Simple tab', tab: 'Tab', staff: 'Staff', numbers: 'Numbers', lyrics: 'Lyrics', contour: 'Contour' };
 
 export function PerformBar() {
   useTransportKeys();
@@ -122,7 +122,7 @@ export function PerformBar() {
         {/* The view, what it shows and how it moves, in one menu: the bar stays one row on a laptop. */}
         <Popover label={`${VIEW_NAMES[view]} ▾`} title="Choose the view, what it shows, and how the music moves as it plays" kind="panel" panelClass="menu pf-view-menu" wrapClass="pf-view-wrap" panelLabel="View">
           <ViewSwitch short />
-          {(view === 'tab' || view === 'simple' || view === 'lyrics') && <ReadAsSwitch />}
+          {(view === 'tab' || view === 'simple' || view === 'lyrics' || view === 'contour') && <ReadAsSwitch />}
           {view !== 'simple' && (
             <div className="pf-show">
               <span className="pb-head">Show</span>
