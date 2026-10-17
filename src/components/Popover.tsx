@@ -46,7 +46,7 @@ export function Popover({ label, buttonClass = 'btn small ghost', title, ariaLab
   useEffect(() => {
     if (!open) return;
     const panel = () => root.current?.querySelector<HTMLElement>(':scope > .pop-panel');
-    const items = () => [...(panel()?.querySelectorAll<HTMLElement>(kind === 'menu' ? '[role=menuitem], [role=menuitemradio]' : FOCUSABLE) ?? [])];
+    const items = () => [...(panel()?.querySelectorAll<HTMLElement>(kind === 'menu' ? '[role=menuitem]:not(:disabled), [role=menuitemradio]:not(:disabled)' : FOCUSABLE) ?? [])];
     // The keyboard goes to the first item (a menu) or field (a panel).
     items()[0]?.focus({ preventScroll: true });
     // A dialog opened over the popover (e.g. the shortcut list from the keyboard help) has the

@@ -210,6 +210,60 @@ describe('repeating a section', () => {
   });
 });
 
+describe('Phase 17 review', () => {
+  it('a tab written without bar lines keeps its bars through every tool (no bar line is added)', () => {
+    const t = `${HEAD}@ A\n4 5 6 7 4 5 6 7\n@ B\n5 5 5 5\n`;
+    const s = songOf(t);
+    expect(s.measures).toHaveLength(3);
+    for (const out of [
+      written(t, renameSection(s, 0, 'X')),
+      written(t, moveSection(s, 1, -1)!),
+      written(t, duplicateSection(s, 0)!),
+      written(t, newSectionAfter(s, 1, 'C')),
+    ]) {
+      expect(out).not.toContain('|');
+      expect(songOf(out).measures.length).toBeGreaterThanOrEqual(3);
+    }
+    expect(sectionRanges(songOf(written(t, moveSection(s, 1, -1)!))).map((r) => [r.name, r.to - r.from])).toEqual([
+      ['B', 1],
+      ['A', 2],
+    ]);
+    expect(canRepeat(s, 0)).toBe(false);
+  });
+
+  it('a comment right above a heading goes with its section (moved, copied, deleted); the song’s opening ones stay on top', () => {
+    const t = `${HEAD}# the song\n@ A\n4 4 |\n\n# about B\n@ B\n5 5 |\n@ C\n6 6 |]\n`;
+    const s = songOf(t);
+    expect(body(sectionText(t, moveSection(s, 1, 1)!)!)).toBe('# the song\n@ A\n4 4 |\n\n@ C\n6 6 |\n\n# about B\n@ B\n5 5 |]\n');
+    expect(written(t, duplicateSection(s, 1)!).split('# about B').length).toBe(3);
+    expect(written(t, deleteSection(s, 1)!)).not.toContain('# about B');
+    expect(body(sectionText(t, moveSection(s, 0, 1)!)!).startsWith('# the song\n# about B\n@ B\n5 5 |')).toBe(true);
+  });
+
+  it('a section made across two: all the selected bars, the second one’s name starting again after', () => {
+    const t = `${HEAD}@ A\n4 4 | 4 4 |\n@ B\n5 5 | 5 5 |]\n`;
+    const { song } = makeSection(songOf(t), 1, 2, 'N');
+    expect(sectionRanges(song).map((r) => [r.name, r.from, r.to])).toEqual([
+      ['A', 0, 1],
+      ['N', 1, 3],
+      ['B', 3, 4],
+    ]);
+  });
+
+  it('a section made inside the start (no heading): its rest joins it, and that’s said', () => {
+    const t = `${HEAD}4 4 | 5 5 | 6 6 |\n@ B\n5 5 |]\n`;
+    const edit = makeSection(songOf(t), 0, 0, 'N');
+    expect(edit.note).toMatch(/rest of the start \(bars 2–3\) joins it/);
+  });
+
+  it('Windows line ends stay Windows line ends', () => {
+    const t = `${HEAD}@ A\r\n4 4 |\r\n\r\n@ B\r\n5 5 |\r\n\r\n@ C\r\n6 6 |]\r\n`.replace(/\n/g, '\r\n').replace(/\r\r\n/g, '\r\n');
+    const out = sectionText(t, moveSection(songOf(t), 1, -1)!)!;
+    expect(out.replace(/\r\n/g, '')).not.toContain('\n');
+    expect(body(out.replace(/\r\n/g, '\n'))).toBe('@ B\n5 5 |\n\n@ A\n4 4 |\n\n@ C\n6 6 |]\n');
+  });
+});
+
 describe('the text', () => {
   it('lines that don’t match the parts (a heading over no music): the music is still right', () => {
     const t = `${HEAD}@ Empty\n@ A\n4 4 |\n@ B\n5 5 |]\n`;

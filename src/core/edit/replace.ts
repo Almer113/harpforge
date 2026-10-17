@@ -9,7 +9,8 @@ import { chainAt, cloneSong, EPS, findItem, samePos, type Pos, type Song } from 
 
 /** The one hole `text` writes, or null (not a hole, or more than one). */
 export function parseHole(text: string): HoleSound | null {
-  const t = text.trim();
+  // (A minus sign or dash pasted from a web page counts as the draw's "-".)
+  const t = text.trim().replace(/^[\u2212\u2013\u2010]/, '-');
   if (!t || /\s/.test(t)) return null;
   const { doc, issues } = parseHtab(t);
   if (issues.some((i) => i.severity === 'error')) return null;
@@ -39,7 +40,6 @@ export function findHoles(song: Song, hole: HoleSound, opts: { chords: boolean; 
   const chosen = scope.kind === 'notes' ? scope.at : [];
   const out: Found[] = [];
   song.measures.forEach((meas, m) => {
-    if (scope.kind === 'bars' && (m < scope.from || m >= scope.to)) return;
     for (const it of [...meas.items].sort((a, b) => a.start - b.start)) {
       if (it.dur <= EPS || !it.sounds.length) continue;
       const chord = it.sounds.length > 1;
@@ -48,6 +48,8 @@ export function findHoles(song: Song, hole: HoleSound, opts: { chords: boolean; 
       const chain = chainAt(song, at);
       // (The tied-over parts are found with the first.)
       if (chain.length && !samePos(chain[0], at)) continue;
+      // (A tied note counts when any part of it is where it's looked for.)
+      if (scope.kind === 'bars' && !(chain.length ? chain : [at]).some((p) => p.m >= scope.from && p.m < scope.to)) continue;
       if (scope.kind === 'notes' && !chain.some((p) => chosen.some((c) => samePos(c, p)))) continue;
       out.push({ at, chain: chain.length ? chain : [at], chord });
     }

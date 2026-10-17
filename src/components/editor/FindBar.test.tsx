@@ -142,6 +142,44 @@ describe('find and replace holes', () => {
     expect(input('find').value).toBe('5');
   });
 
+  it('the same hole in both boxes: nothing to replace (and no Undo to take back something else)', async () => {
+    await act(async () => openFind());
+    await type('find', '-2');
+    await type('by', '-2');
+    expect(host.querySelector('.find-change')!.textContent).toContain('same hole');
+    expect(button('Replace all').disabled).toBe(true);
+    expect(button('Replace').disabled).toBe(true);
+  });
+
+  it('another song: the bar closes (its section and selection were the old song’s)', async () => {
+    await act(async () => s().setVe({ selection: [{ m: 3, start: 0 }, { m: 3, start: 1 }] }));
+    await act(async () => openFind());
+    await act(async () => s().loadText('---\ntitle: Other\n---\n-2 -2 -2 -2 |\n', null));
+    expect(host.querySelector('.find-bar')).toBeNull();
+  });
+
+  it('only Enter and Esc are the bar’s: Ctrl+S in its box still reaches the app', async () => {
+    await act(async () => openFind());
+    const heard: string[] = [];
+    const listen = (e: KeyboardEvent) => heard.push(e.key);
+    window.addEventListener('keydown', listen);
+    await act(async () => input('find').dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true })));
+    await press('find', 'Enter');
+    window.removeEventListener('keydown', listen);
+    expect(heard).toEqual(['s']);
+  });
+
+  it('a tied note selected (all of it, from either end): its hole to find', async () => {
+    await act(async () => s().setVe({ selection: [{ m: 2, start: 0 }, { m: 1, start: 2 }] }));
+    await act(async () => openFind());
+    expect(input('find').value).toBe('-2');
+    expect(s().ve.find!.scope).toBe('song');
+    // (It's found as the one selected, whichever end was clicked first.)
+    expect(status()).toBe('3 of 5 found');
+    await press('find', 'Enter');
+    expect(status()).toBe('4 of 5 found');
+  });
+
   it('a tab written as notes has no holes to find', async () => {
     await act(async () => s().loadText('---\ntitle: N\nnotation: notes\n---\nC5 D5 E5 |\n', null));
     await act(async () => openFind());

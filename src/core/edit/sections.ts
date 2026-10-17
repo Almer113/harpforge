@@ -52,15 +52,14 @@ const tidy = (m: Measure): Measure => {
 
 /**
  * The song's end bar (|]) stays on its last bar: one left in the middle by a move becomes an
- * ordinary bar line, and the new last bar takes it (if it had an ordinary one). A bar that
- * ran on without a bar line before a part that moved away gets one.
+ * ordinary bar line, and the new last bar takes it (if it had an ordinary one). (A bar written
+ * without a bar line stays that way: a heading after it starts a new bar anyway — and a tab
+ * written without bar lines would read differently with one.)
  */
 function settle(s: Song, hadFinal: boolean): Song {
   const last = s.measures.length - 1;
   s.measures.forEach((m, i) => {
     if (i < last && m.endBar === 'final') m.endBar = 'single';
-    // (A bar line is needed before a heading: a part ends at its last bar.)
-    if (i < last && m.endBar === 'none' && s.measures[i + 1].section !== undefined) m.endBar = 'single';
   });
   if (hadFinal && s.measures[last] && s.measures[last].endBar === 'single') s.measures[last].endBar = 'final';
   if (s.measures[0]) s.measures[0].lineBreak = true;
@@ -68,6 +67,8 @@ function settle(s: Song, hadFinal: boolean): Song {
   return s;
 }
 const endsFinal = (s: Song) => s.measures[s.measures.length - 1]?.endBar === 'final';
+/** Whether the tab is written with bar lines (one without is cut into bars only for the editor). */
+export const barred = (s: Song) => s.measures.some((m) => m.endBar !== 'none' || m.startBar !== undefined);
 
 // ---- Repeats that cross a part's edges ---------------------------------------------------
 
@@ -143,8 +144,6 @@ export function duplicateSection(song: Song, k: number): SectionEdit | null {
   const final = endsFinal(s);
   const copy = s.measures.slice(r.from, r.to).map((m) => ({ ...cloneMeasure(m), src: undefined }));
   copy[0].lineBreak = true;
-  // The original now has a part after it: it needs a bar line at its end.
-  if (s.measures[r.to - 1].endBar === 'none') s.measures[r.to - 1].endBar = 'single';
   s.measures.splice(r.to, 0, ...copy);
   const order: (number | 'copy')[] = sectionRanges(song).map((_, i) => i);
   order.splice(k + 1, 0, 'copy');
@@ -189,10 +188,13 @@ export function sectionRepeat(song: Song, k: number): number | null {
   return first.startBar === 'repeat-start' && last.endBar === 'repeat-end' ? (last.endTimes ?? 2) : null;
 }
 
-/** Whether "Repeat it" can wrap the part: it has no repeats or endings of its own inside. */
+/**
+ * Whether "Repeat it" can wrap the part: it has no repeats or endings of its own inside (and
+ * the tab has bar lines: repeat signs would make one without them read differently).
+ */
 export function canRepeat(song: Song, k: number): boolean {
   const r = sectionRanges(song)[k];
-  if (!r) return false;
+  if (!r || !barred(song)) return false;
   if (sectionRepeat(song, k) !== null) return true;
   const inside = song.measures.slice(r.from, r.to);
   return !inside.some((m, i) => m.ending?.length || m.endBar === 'repeat-end' || (i > 0 && m.startBar === 'repeat-start')) && !crossesRepeat(song, r);
@@ -226,29 +228,32 @@ export function newSectionAfter(song: Song, k: number, name: string): Song {
   const s = cloned(song);
   const final = endsFinal(s);
   const at = r ? r.to : s.measures.length;
-  if (s.measures[at - 1]?.endBar === 'none') s.measures[at - 1].endBar = 'single';
-  s.measures.splice(at, 0, { items: [], endBar: 'single', lineBreak: true, section: name.trim() });
+  s.measures.splice(at, 0, { items: [], endBar: barred(song) ? 'single' : 'none', lineBreak: true, section: name.trim() });
   return settle(s, final);
 }
 
 /**
- * Bars `from`..`to` (inclusive) as a section named `name`. The bars after them keep the name
- * of the part they were in (they start it again), so nothing loses its heading.
+ * Bars `from`..`to` (inclusive) as a section named `name` — all of them, across the headings
+ * of the parts they were in. The bars after them start the part the last one was in again,
+ * so nothing loses its heading (only the start, which has none, can't: its rest joins in).
  */
 export function makeSection(song: Song, from: number, to: number, name: string): SectionEdit {
   const s = cloned(song);
   const final = endsFinal(s);
-  const k = sectionAt(song, from);
-  const was = sectionRanges(song)[k];
-  if (to + 1 < s.measures.length && s.measures[to + 1].section === undefined && sectionAt(song, to + 1) === k && was.name !== undefined) {
-    s.measures[to + 1].section = was.name;
-    s.measures[to + 1].lineBreak = true;
-  } else if (to + 1 < s.measures.length) s.measures[to + 1].lineBreak = true;
+  const ranges = sectionRanges(song);
+  const last = ranges[sectionAt(song, to)];
+  const notes: string[] = [];
+  for (let i = from + 1; i <= to; i++) delete s.measures[i].section;
+  const after = s.measures[to + 1];
+  if (after && after.section === undefined) {
+    after.lineBreak = true;
+    if (last.name !== undefined) after.section = last.name;
+    else notes.push(`The rest of the start (bar${last.to - to - 1 === 1 ? '' : 's'} ${to + 2}${last.to - to - 1 > 1 ? `–${last.to}` : ''}) joins it: a heading of its own keeps it apart.`);
+  }
   s.measures[from].section = name.trim();
   s.measures[from].lineBreak = true;
-  for (const i of [from - 1, to]) if (s.measures[i]?.endBar === 'none') s.measures[i].endBar = 'single';
-  const made = { from, to: to + 1 };
-  return { song: settle(s, final), note: crossesRepeat(song, made) ? 'A repeat runs across the new section’s edge: moving either part later would take the repeat apart.' : undefined };
+  if (crossesRepeat(song, { from, to: to + 1 })) notes.push('A repeat runs across the new section’s edge: moving either part later would take the repeat apart.');
+  return { song: settle(s, final), note: notes.join(' ') || undefined };
 }
 
 /** Every note and rest of part k (for selecting it). */
@@ -275,17 +280,27 @@ export function sameMusic(a: Song, b: Song): boolean {
  */
 export function sectionText(text: string, edit: SectionEdit): string | null {
   if (!edit.blocks) return null;
+  // (Windows line ends: read as lines, written back the same way.)
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
   const { bodyStart } = splitHeader(text);
   const head = text.slice(0, bodyStart);
-  const lines = text.slice(bodyStart).replace(/\n$/, '').split('\n');
+  const lines = text.slice(bodyStart).replace(/\r?\n$/, '').split(/\r?\n/);
   const headings = lines.flatMap((l, i) => (l.trim().startsWith('@') ? [i] : []));
   const ranges = sectionRanges(fromDoc(parseHtab(text).doc));
   const lead = ranges[0].name === undefined;
   // (One block of lines per part, or this isn't for it: a heading over no music, say.)
   if (headings.length !== ranges.length - (lead ? 1 : 0)) return null;
+  // A section's block starts at its heading, or at the comments right above it (no blank line
+  // between): they're about it. Not the song's opening comments, above the first heading.
+  const own = headings.map((h, i) => {
+    let from = h;
+    const floor = i === 0 ? (lead ? 1 : h) : headings[i - 1] + 1;
+    while (from - 1 >= floor && lines[from - 1].trim().startsWith('#')) from--;
+    return from;
+  });
   // Above the first heading: the start's music (a part of its own), or only comments (kept on top).
-  const starts = lead ? [0, ...headings] : headings;
-  const top = lead ? [] : lines.slice(0, headings[0]);
+  const starts = lead ? [0, ...own] : own;
+  const top = lead ? [] : lines.slice(0, own[0]);
   if (top.some((l) => l.trim() && !l.trim().startsWith('#'))) return null;
   const blocks = starts.map((from, i) => {
     const part = lines.slice(from, starts[i + 1] ?? lines.length);
@@ -301,11 +316,12 @@ export function sectionText(text: string, edit: SectionEdit): string | null {
     out.push(...block.lines);
     if (i < order.length - 1) out.push(...Array<string>(Math.max(1, block.gap)).fill(''));
   });
-  const rearranged = head + out.join('\n') + '\n';
+  const rearranged = head + out.join(eol) + eol;
   const read = fromDoc(parseHtab(rearranged).doc);
   if (read.measures.length !== edit.song.measures.length) return null;
   // The change's bar lines on the rearranged lines: only lines whose music differs are rewritten.
   const target: Song = { ...edit.song, measures: edit.song.measures.map((m, i) => ({ ...m, src: read.measures[i].src })) };
-  const result = head + spliceBody(rearranged, target) + '\n';
+  let result = head + spliceBody(rearranged, target) + '\n';
+  if (eol === '\r\n') result = result.replace(/\r?\n/g, '\r\n');
   return sameMusic(fromDoc(parseHtab(result).doc), edit.song) ? result : null;
 }

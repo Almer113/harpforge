@@ -103,7 +103,7 @@ function actions(song: Song, k: number, sel: Pos[]): { items: Action[]; repeat: 
     );
   }
   items.push(
-    { name: 'Loop it', key: 'L ends it', run: () => {
+    { name: 'Loop it', key: 'L ends it', disabled: !sectionPositions(song, k).length, hint: sectionPositions(song, k).length ? undefined : 'It has no notes yet', run: () => {
       if (useApp.getState().loop) endPassageLoop();
       useApp.getState().setVe({ selection: sectionPositions(songNow(), k), anchor: undefined });
       toggleLoop();
@@ -155,7 +155,7 @@ function RepeatRow({ k, times, can, close }: { k: number; times: number | null; 
     commit(repeatSection(songNow(), k, n));
   };
   return (
-    <div className="mi-row sec-repeat" role="group" aria-label="Repeat it" title={can ? 'Play it more than once: |: … :| around it' : 'It has repeats or endings of its own (or a repeat runs across it)'}>
+    <div className="mi-row sec-repeat" role="group" aria-label="Repeat it" title={can ? 'Play it more than once: |: … :| around it' : 'Not here: it has repeats or endings of its own, a repeat runs across it, or the tab has no bar lines'}>
       <span className="mi-name">Repeat it</span>
       {([null, 2, 3, 4] as const).map((n) => (
         <button key={String(n)} role="menuitemradio" aria-checked={times === n} className={`menu-item ${times === n ? 'checked' : ''}`} disabled={!can} onClick={pick(n)}>
@@ -219,9 +219,13 @@ export function SectionHeading({ m, name }: { m: number; name: string }) {
 function NameBox({ m, name }: { m: number; name: string }) {
   const [value, setValue] = useState(name);
   const box = useRef<HTMLInputElement>(null);
+  // (Once: Esc, then the box going away, mustn't keep the name after all.)
+  const finished = useRef(false);
   useDraft(value.trim() !== name);
   useEffect(() => box.current?.select(), []);
   const done = (keep: boolean) => {
+    if (finished.current) return;
+    finished.current = true;
     useApp.getState().setVe({ naming: undefined });
     const v = value.trim();
     if (keep && v && v !== name) {

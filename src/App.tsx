@@ -201,7 +201,7 @@ export function App() {
     window.addEventListener('hashchange', onHash);
     const onKey = (e: KeyboardEvent) => {
       // (Not behind a dialog — the start screen, say: Ctrl+S and Ctrl+P are for the song.)
-      if ((e.ctrlKey || e.metaKey) && /^[ps]$/i.test(e.key) && document.querySelector('.modal-backdrop')) {
+      if ((e.ctrlKey || e.metaKey) && /^[psh]$/i.test(e.key) && document.querySelector('.modal-backdrop')) {
         e.preventDefault();
         return;
       }

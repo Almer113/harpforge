@@ -27,6 +27,11 @@ describe('the hole to find', () => {
     expect(parseHole(' 5 ')).toMatchObject({ hole: 5, breath: 'blow' });
   });
 
+  it('a minus sign or dash pasted from a web page is the draw’s "-"', () => {
+    expect(parseHole('−4')).toMatchObject({ hole: 4, breath: 'draw' });
+    expect(parseHole('–6')).toMatchObject({ hole: 6, breath: 'draw' });
+  });
+
   it('not a hole: nothing', () => {
     expect([parseHole(''), parseHole('4 5'), parseHole('(4 5)'), parseHole('C5'), parseHole('x')]).toEqual([null, null, null, null, null]);
   });
@@ -43,6 +48,12 @@ describe('finding', () => {
     const found = findHoles(song, parseHole('-4')!, { chords: false, scope: SONG });
     expect(found).toHaveLength(1);
     expect(found[0].chain).toEqual([{ m: 0, start: 3 }, { m: 1, start: 0 }]);
+  });
+
+  it('within bars: a note tied in from before them counts (it sounds there)', () => {
+    const song = songOf(text('@ A\n4 4 4 -4 |\n@ B\n~ 4 4 4 |'));
+    const found = findHoles(song, parseHole('-4')!, { chords: false, scope: { kind: 'bars', from: 1, to: 2 } });
+    expect(found.map((f) => f.chain)).toEqual([[{ m: 0, start: 3 }, { m: 1, start: 0 }]]);
   });
 
   it('in chords only when asked', () => {

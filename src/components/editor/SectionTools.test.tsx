@@ -104,6 +104,38 @@ describe('the heading’s menu', () => {
   });
 });
 
+describe('Phase 17 review', () => {
+  it('the arrow keys pass over a disabled item (Move up on the first section)', async () => {
+    await act(async () => root.render(<Heading m={0} />));
+    await click(host.querySelector('button.ve-section'));
+    item('Duplicate')!.focus();
+    await act(async () => document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })));
+    expect(document.activeElement?.textContent).toMatch(/^Move down/);
+  });
+
+  it('Esc, then the box losing focus: the old name stays', async () => {
+    await act(async () => root.render(<Heading m={2} />));
+    await act(async () => s().setVe({ naming: 2 }));
+    const box = host.querySelector<HTMLInputElement>('.ve-section-name')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(box, 'Oops');
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      box.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    });
+    expect(headings()).toEqual(['@ Verse', '@ Chorus']);
+  });
+
+  it('Loop it on a section with no notes yet: not offered', async () => {
+    s().loadText(`${TEXT}\n@ Empty\n.~~~ |\n`, null);
+    await act(async () => root.render(<Heading m={4} />));
+    await click(host.querySelector('button.ve-section'));
+    expect(item('Loop it')!.disabled).toBe(true);
+  });
+});
+
 describe('moving with the keys', () => {
   it('the selection and the caret go with the section', async () => {
     s().setVe({ selection: [{ m: 2, start: 0 }], caret: { m: 3, start: 1 } });

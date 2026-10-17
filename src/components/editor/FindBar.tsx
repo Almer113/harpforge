@@ -5,9 +5,9 @@ import { useEffect, useMemo, useRef } from 'react';
 import { soundPitch } from '../../core/instruments';
 import { holeSoundText } from '../../core/htab/serializer';
 import { flatsFor } from '../../core/edit/splice';
-import { fromDoc, realBeat, samePos, type Pos, type Song } from '../../core/edit/model';
+import { chainAt, findItem, fromDoc, realBeat, samePos, type Pos, type Song } from '../../core/edit/model';
 import { offHarp } from '../../core/edit/notes';
-import { findHoles, parseHole, replaceHoles, type FindScope, type Found } from '../../core/edit/replace';
+import { findHoles, parseHole, replaceHoles, sameHole, type FindScope, type Found } from '../../core/edit/replace';
 import { label, sectionAt, sectionRanges } from '../../core/edit/sections';
 import { midiToName } from '../../core/pitch';
 import { commitSong } from '../../state/editor';
@@ -24,11 +24,14 @@ export function openFind() {
   const sel = st.ve.selection;
   const at = sel[0]?.m ?? st.ve.caret.m;
   const r = sectionRanges(song)[sectionAt(song, Math.min(at, song.measures.length - 1))];
-  // A note selected: its hole to start with.
-  const one = sel.length ? song.measures[sel[0].m]?.items.find((it) => samePos({ m: sel[0].m, start: it.start }, sel[0])) : undefined;
-  const query = one?.sounds.length === 1 && one.sounds[0].type === 'hole' ? holeSoundText(one.sounds[0]) : (st.ve.find === undefined ? lastQuery : '');
+  // One note selected (all of it, if it's tied over): its hole to start with.
+  const chain = sel.length ? chainAt(song, sel[0]) : [];
+  const single = sel.length > 0 && (sel.length === 1 || (chain.length === sel.length && sel.every((p) => chain.some((c) => samePos(c, p)))));
+  const one = single ? findItem(song, chain[0] ?? sel[0]) : undefined;
+  const query = one?.sounds.length === 1 && one.sounds[0].type === 'hole' ? holeSoundText(one.sounds[0]) : lastQuery;
+  const several = sel.length > 1 && !single;
   st.setVe({
-    find: { query, by: lastBy, chords: lastChords, scope: sel.length > 1 ? 'selection' : 'song', section: [r.from, r.to], notes: sel.length > 1 ? sel : [] },
+    find: { query, by: lastBy, chords: lastChords, scope: several ? 'selection' : 'song', section: [r.from, r.to], notes: several ? sel : [] },
   });
 }
 // (What was asked last, for the next time the bar opens.)
@@ -37,18 +40,26 @@ let lastBy = '';
 let lastChords = false;
 
 export function closeFind() {
-  const f = useApp.getState().ve.find;
-  if (f) [lastQuery, lastBy, lastChords] = [f.query, f.by, f.chords];
   useApp.getState().setVe({ find: undefined });
 }
 
-const scopeOf = (f: FindState): FindScope => (f.scope === 'section' ? { kind: 'bars', from: f.section[0], to: f.section[1] } : f.scope === 'selection' ? { kind: 'notes', at: f.notes } : { kind: 'song' });
+/** The section the bar looks in: the one holding the bar it started on (bars added or taken away since included). */
+function sectionOf(song: Song, f: FindState) {
+  return sectionRanges(song)[sectionAt(song, Math.min(f.section[0], song.measures.length - 1))];
+}
+const scopeOf = (song: Song, f: FindState): FindScope => {
+  if (f.scope === 'section') {
+    const r = sectionOf(song, f);
+    return { kind: 'bars', from: r.from, to: r.to };
+  }
+  return f.scope === 'selection' ? { kind: 'notes', at: f.notes } : { kind: 'song' };
+};
 
 /** What the bar finds in `song` now (none while it's closed or the box isn't a hole). */
 export function findNow(song: Song, f: FindState | undefined): Found[] {
   if (!f) return [];
   const hole = parseHole(f.query);
-  return hole ? findHoles(song, hole, { chords: f.chords, scope: scopeOf(f) }) : [];
+  return hole ? findHoles(song, hole, { chords: f.chords, scope: scopeOf(song, f) }) : [];
 }
 
 /** Every note the bar has found (all parts of tied ones), for outlining them. */
@@ -63,9 +74,9 @@ function show(x: Found) {
   requestAnimationFrame(() => document.querySelector('.ve-item.selected')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
 }
 
-/** The found note selected now, if one is. */
+/** The found note selected now, if one is (all of it, in whatever order it was selected). */
 function currentOf(found: Found[], sel: Pos[]): number {
-  return found.findIndex((x) => x.chain.length === sel.length && x.chain.every((p, i) => samePos(p, sel[i])));
+  return found.findIndex((x) => x.chain.length === sel.length && x.chain.every((p) => sel.some((q) => samePos(p, q))));
 }
 
 export function FindBar() {
@@ -78,17 +89,23 @@ export function FindBar() {
   useEffect(() => {
     if (open) box.current?.select();
   }, [open]);
+  // (Worked out again when the song or the boxes change, not on every caret move.)
+  const parsed = getParsed(text);
+  const song = useMemo(() => fromDoc(parsed.doc), [parsed]);
+  const found = useMemo(() => findNow(song, f), [song, f]);
   if (!f) return null;
 
-  const parsed = getParsed(text);
-  const song = fromDoc(parsed.doc);
   const harp = parsed.harp;
-  const set = (patch: Partial<FindState>) => useApp.getState().setVe({ find: { ...f, ...patch } });
+  const set = (patch: Partial<FindState>) => {
+    const next = { ...f, ...patch };
+    // (Kept for the next time the bar opens, whichever way it's closed.)
+    [lastQuery, lastBy, lastChords] = [next.query, next.by, next.chords];
+    useApp.getState().setVe({ find: next });
+  };
   const hole = parseHole(f.query);
   const by = parseHole(f.by);
-  const found = findNow(song, f);
   const current = currentOf(found, sel);
-  const sectionName = label(sectionRanges(song).find((r) => r.from === f.section[0]) ?? { from: 0, to: 0 });
+  const sectionName = label(sectionOf(song, f));
   const where = f.scope === 'section' ? ` in ${sectionName}` : f.scope === 'selection' ? ' in the selection' : '';
   const asNotes = !song.measures.some((m) => m.items.some((it) => it.sounds.some((s) => s.type === 'hole'))) && song.measures.some((m) => m.items.some((it) => it.sounds.length));
 
@@ -109,6 +126,9 @@ export function FindBar() {
   if (hole && f.by.trim()) {
     if (!by) {
       change = 'Replace with: one hole';
+      canReplace = false;
+    } else if (sameHole(by, hole)) {
+      change = 'that’s the same hole';
       canReplace = false;
     } else if (offHarp(harp, by)) {
       change = `${f.by.trim()} isn’t on this harmonica`;
@@ -153,8 +173,11 @@ export function FindBar() {
       useApp.getState().notify('Nothing replaced: those chords would mix blow and draw (or hold a hole twice)');
       return;
     }
+    const before = useApp.getState().text;
     commitSong(r.song);
     const after = useApp.getState().text;
+    // (Nothing changed: nothing to say, and no Undo that would take back something else.)
+    if (after === before) return;
     const skipped = r.skipped ? `; ${r.skipped} chord${r.skipped === 1 ? '' : 's'} left as ${r.skipped === 1 ? 'it was' : 'they were'} (blow and draw would mix)` : '';
     useApp.getState().notify(`Replaced ${r.replaced} × ${f.query.trim()} with ${f.by.trim()}${where}${skipped}`, {
       label: 'Undo',
@@ -164,16 +187,18 @@ export function FindBar() {
       },
     });
   };
+  // (Only Enter and Esc are the bar's: Ctrl+S, Ctrl+H and the rest still reach the app.)
   const keys = (e: React.KeyboardEvent, enter: () => void) => {
     if (e.key === 'Enter') {
       e.preventDefault();
+      e.stopPropagation();
       if (e.shiftKey) step(-1);
       else enter();
     } else if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       closeFind();
     }
-    e.stopPropagation();
   };
 
   return (
