@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseHtab } from './htab/parser';
 import { buildScore, eventKey, harmonicaFromMeta } from './score';
-import { contourLayout, semitoneHeight } from './contourLayout';
+import { contourLayout, semitoneHeight, wrapRow } from './contourLayout';
 
 const layoutOf = (body: string, head = 'title: C') => {
   const { doc } = parseHtab(`---\n${head}\n---\n${body}\n`);
@@ -68,6 +68,33 @@ describe('the contour layout', () => {
       [2, 4, [1]],
       [4, 6, [2]],
     ]);
+  });
+
+  it('a row too long for the width: broken at its bar lines, each part from 0', () => {
+    const row = layoutOf('@ V\n[C] 4 4 4 4 | 5 5 5 5 | [G] 6 6 6 6 | -4 -4 -4 -4 |').rows[0];
+    const parts = wrapRow(row, 9);
+    expect(parts.map((p) => [p.section, p.beats, p.bars.length, p.bars[0].x])).toEqual([
+      ['V', 8, 8, 0],
+      [undefined, 8, 8, 0],
+    ]);
+    expect(parts[1].chords).toEqual([{ x: 0, text: 'G' }]);
+    expect(parts[0].barLines.map((b) => b.x)).toEqual([4, 8]);
+    expect(wrapRow(row, 99)).toEqual([row]);
+  });
+
+  it('broken inside an ending: its bracket carries on (no label again); a |: starts the next part', () => {
+    const row = layoutOf('4 4 4 4 |: 5 5 5 5 | [1.] 6 6 6 6 | 6 6 6 6 :| [2.] 4 4 4 4 |]').rows[0];
+    const parts = wrapRow(row, 4);
+    expect(parts).toHaveLength(5);
+    expect(parts[0].barLines.map((b) => b.style)).toEqual([]);
+    expect(parts[1].barLines.map((b) => [b.x, b.style])).toEqual([[0, 'repeat-start'], [4, 'single']]);
+    expect(parts[2].endings.map((e) => [e.from, e.to, e.continued, e.closed])).toEqual([[0, 4, false, false]]);
+    expect(parts[3].endings.map((e) => [e.from, e.to, e.continued, e.closed])).toEqual([[0, 4, true, true]]);
+  });
+
+  it('a line without bar lines: broken between notes', () => {
+    const row = layoutOf('4 5 6 7 4 5 6 7').rows[0];
+    expect(wrapRow(row, 3).map((p) => p.beats)).toEqual([3, 3, 2]);
   });
 
   it('a semitone is tall enough to read, short enough for a wide range', () => {

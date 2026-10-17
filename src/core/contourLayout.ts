@@ -109,6 +109,51 @@ export function contourLayout(doc: TabDoc, score: Score, indexByKey: Map<string,
 }
 
 /**
+ * A row too long for `fit` beats, in parts that fit: broken at bar lines (or, in a line
+ * without them, between notes). Each part starts at 0; the section heading goes on the first,
+ * an ending carried over to the next part continues there (no label again).
+ */
+export function wrapRow(row: ContourRow, fit: number): ContourRow[] {
+  if (row.beats <= fit + 1e-6) return [row];
+  const bars = row.barLines.map((b) => b.x).filter((x) => x > 1e-6 && x < row.beats - 1e-6);
+  const cuts = bars.length ? bars : row.slots.map((s) => s.x).filter((x) => x > 1e-6);
+  const parts: [number, number][] = [];
+  let from = 0;
+  while (row.beats - from > fit + 1e-6) {
+    // The furthest break that fits, else the nearest one (a bar longer than the width).
+    const fits = cuts.filter((x) => x > from + 1e-6 && x - from <= fit + 1e-6);
+    const next = fits.length ? fits[fits.length - 1] : cuts.find((x) => x > from + 1e-6);
+    if (next === undefined) break;
+    parts.push([from, next]);
+    from = next;
+  }
+  parts.push([from, row.beats]);
+  const inside = (x: number, a: number, b: number, last: boolean) => x >= a - 1e-6 && (last ? x <= b + 1e-6 : x < b - 1e-6);
+  return parts.map(([a, b], k) => {
+    const last = k === parts.length - 1;
+    return {
+      ...row,
+      section: k === 0 ? row.section : undefined,
+      beats: b - a,
+      bars: row.bars.filter((n) => inside(n.x, a, b, false)).map((n) => ({ ...n, x: n.x - a })),
+      // At a break: the bar line ends the part before (a |: starts the next one instead).
+      barLines: row.barLines
+        .filter((l) => {
+          if (k > 0 && Math.abs(l.x - a) < 1e-6) return l.style === 'repeat-start';
+          if (!last && Math.abs(l.x - b) < 1e-6) return l.style !== 'repeat-start';
+          return inside(l.x, a, b, true);
+        })
+        .map((l) => ({ ...l, x: l.x - a })),
+      chords: row.chords.filter((c) => inside(c.x, a, b, last)).map((c) => ({ ...c, x: c.x - a })),
+      endings: row.endings
+        .filter((e) => e.from < b - 1e-6 && e.to > a + 1e-6)
+        .map((e) => ({ ...e, from: Math.max(e.from, a) - a, to: Math.min(e.to, b) - a, continued: e.continued || e.from < a - 1e-6, closed: e.closed && e.to <= b + 1e-6 })),
+      slots: row.slots.filter((s) => inside(s.x, a, b, false)).map((s) => ({ ...s, x: s.x - a })),
+    };
+  });
+}
+
+/**
  * How tall a semitone is drawn: tall enough to read, short enough that a song with a wide range
  * still fits a row on the screen.
  */

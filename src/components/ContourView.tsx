@@ -4,7 +4,7 @@
 // playing note, the selection, a passage, a loop and play-along marks as in the other views.
 
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { contourLayout, semitoneHeight, type ContourLayout, type ContourRow } from '../core/contourLayout';
+import { contourLayout, semitoneHeight, wrapRow, type ContourLayout, type ContourRow } from '../core/contourLayout';
 import { endingLabel, ordinal } from '../core/endings';
 import { holeSoundText } from '../core/htab/serializer';
 import type { NoteEvent, RestEvent } from '../core/htab/types';
@@ -46,7 +46,8 @@ interface Props {
 /** Room for the lane names on the left, and the most room a beat gets. */
 const GUTTER = 66;
 const MAX_BEAT = 46;
-const MIN_BEAT = 14;
+// (Narrower than this, a row is broken at its bar lines instead, as the Tab view wraps.)
+const MIN_BEAT = 24;
 /** A note bar's height, and the rows above and below the lanes. */
 const BAR = 16;
 const CHORDS = 18;
@@ -69,11 +70,15 @@ export function ContourView({ parsed, activeEvents, selectedEvent, onSelect, pas
     setWidth(el.clientWidth || 760);
     return () => ro.disconnect();
   }, []);
-  const beat = Math.max(MIN_BEAT, Math.min(MAX_BEAT, (width - GUTTER - 10) / layout.maxBeats));
+  const room = Math.max(120, width - GUTTER - 10);
+  const beat = Math.max(MIN_BEAT, Math.min(MAX_BEAT, room / layout.maxBeats));
+  const parts = useMemo(() => layout.rows.flatMap((row) => wrapRow(row, room / beat).map((part, k) => ({ part, key: `${row.li}.${k}` }))), [layout, room, beat]);
 
   useEffect(() => {
     if (!activeEvents.length || !root.current) return;
-    followTo(root.current.querySelector(`[data-index="${activeEvents[activeEvents.length - 1]}"]`));
+    // (The whole row: its chords and words stay in view, and a page turns at its top.)
+    const note = root.current.querySelector(`[data-index="${activeEvents[activeEvents.length - 1]}"]`);
+    followTo(note?.closest('.ct-row') ?? note);
   }, [activeEvents]);
 
   if (!layout.rows.length) return <div className="tab-empty"><p>This tab is empty.</p></div>;
@@ -86,9 +91,9 @@ export function ContourView({ parsed, activeEvents, selectedEvent, onSelect, pas
   const selectedLine = selectedEvent !== null ? score.events[selectedEvent]?.line : undefined;
   return (
     <div className={`contourview ${readAs === 'notes' ? 'as-notes' : ''}`} ref={root}>
-      {layout.rows.map((row) => (
+      {parts.map(({ part: row, key }) => (
         <ContourLine
-          key={row.li}
+          key={key}
           parsed={parsed}
           layout={layout}
           row={row}
@@ -256,7 +261,8 @@ const ContourLine = memo(function ContourLine({ parsed, layout, row, beat, flats
                   if (event) onSelect(b.index, event, e.shiftKey);
                 }}
               >
-                <rect x={x} y={Y(b.midi)} width={w} height={BAR} rx={4} />
+                <rect className="ct-under" x={x} y={Y(b.midi)} width={w} height={BAR} rx={4} />
+                <rect className="ct-bar" x={x} y={Y(b.midi)} width={w} height={BAR} rx={4} />
                 {holes && w >= label.length * 6.6 + 4 && (
                   <text x={x + 4} y={Y(b.midi) + BAR - 4.5}>
                     {label}

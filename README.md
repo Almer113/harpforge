@@ -77,9 +77,10 @@ old one. No server answering: guest only (the account menu offers **Try again**)
   volume and a level for the tune (M mutes it), backing, drone, clicks and your playing.
 
 **Reading and performing**
-- **Five views of one song:** Simple tab, Tab (cards sized by length, with chords and
+- **Six views of one song:** Simple tab, Tab (cards sized by length, with chords and
   lyrics), Staff (standard notation with the holes and words under it), Numbers (jianpu),
-  Lyrics (the words with holes above, like a chord sheet), each following playback.
+  Lyrics (the words with holes above, like a chord sheet), Contour (the tune's shape: each
+  note as high as it sounds and as long as it lasts), each following playback.
   **Holes | Notes**: read the holes, or the note names with the holes small.
 - **Playback** with count-in, an accented metronome, speed, repeats and 1st/2nd endings
   played as written, verses sung in turn ("Play all verses"), and playing from any note.
@@ -139,6 +140,7 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `src/core/score.ts` | Timed, pitched view of a tab (what plays) |
 | `src/core/repeats.ts`, `endings.ts` | Repeats, endings and the order bars are played in |
 | `src/core/verses.ts`, `lyricsLayout.ts`, `syllables.ts` | Verses, held syllables, the Lyrics view's layout, syllable suggestions |
+| `src/core/contourLayout.ts` | The Contour view's layout: rows, lanes, wrapping at bar lines |
 | `src/core/timeline.ts`, `pitch.ts`, `lineDiff.ts` | The editor's one timeline, note names and spelling, comparing versions |
 | `src/core/suggest.worker.ts` | Ranking the harmonicas for an import, in the background |
 | `src/core/convert.ts` | Tab ↔ notes, re-tabbing, chord sheets, harmonica suggestions |
@@ -197,10 +199,10 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
   named in one place, with contrast tests.
 - **Phase 17:** editing tools — section tools (heading menu, Alt+↑/↓), find and replace
   holes (Ctrl+H).
+- **Phase 18:** the Contour view.
 
 **Planned**
 
-18. A contour view: the melody's shape, notes as bars by pitch and length.
 19. Chord sheets: warnings for chords played without their root, and fully playable
     nearby chords to pick instead.
 20. File formats: ABC `W:` verses and voice choice; MusicXML part choice and timewise
