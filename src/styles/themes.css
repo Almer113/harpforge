@@ -80,6 +80,104 @@
   --hole-shade: #000;
 }
 
+/* ---------- Light: white and cool grey; darker pens so they read on it ---------- */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f3f2ef;
+  --bg-2: #eae8e4;
+  --bg-glow: #fbf1e0;
+  --panel: #ffffff;
+  --panel-2: #f0eee9;
+  --menu: #ffffff;
+  --toast: #ffffff;
+  --sunk: #f7f6f3;
+  --sunk-2: #f5f4f0;
+  --lane-now: #ece9e3;
+  --dock: #fbfaf8;
+  --dock-2: #f1efea;
+  --backdrop: rgb(28 24 20 / 0.6);
+  --hover: #e7e4de;
+  --border: #dcd8d1;
+  --border-2: #c6c0b6;
+  --hover-edge: #a39a8d;
+  --field-hover-edge: #a39a8d;
+  --slim-edge: #bdb5a9;
+  --grid: #3d2f20;
+  --text: #1c1915;
+  --muted: #585047;
+  --faint: #6a6156;
+  --ink-strong: #1c1915;
+  --staff-ink: #1c1915;
+  --hl-value: #7a4b0c;
+  --hl-lyric: #6a6156;
+  --hl-group: #6b3fa0;
+  --brass: #8f5e14;
+  --brass-2: #8a5a12;
+  --blow: #a64b08;
+  --draw: #0f6390;
+  --pitch: #6b3fa0;
+  --danger: #b3352a;
+  --ok: #287035;
+  --warn: #8a6d00;
+  --on-brass: #ffffff;
+  --on-blow: #ffffff;
+  --on-draw: #ffffff;
+  --on-danger: #ffffff;
+  --focus: #1c1915;
+  --hilite: #3d2f20;
+  --contrast: #000;
+  --shadow: rgb(60 45 30 / 0.45);
+}
+
+/* ---------- Paper: warm cream and brown-black ink, like the printed sheet ---------- */
+:root[data-theme='paper'] {
+  color-scheme: light;
+  --bg: #f2ebdd;
+  --bg-2: #ebe2d1;
+  --bg-glow: #f8eedb;
+  --panel: #faf6ee;
+  --panel-2: #efe7d8;
+  --menu: #fbf8f1;
+  --toast: #fbf8f1;
+  --sunk: #f6f0e4;
+  --sunk-2: #f4eee2;
+  --lane-now: #ebe2d1;
+  --dock: #faf6ee;
+  --dock-2: #efe7d8;
+  --backdrop: rgb(42 33 24 / 0.6);
+  --hover: #e6dcc9;
+  --border: #d9cdb8;
+  --border-2: #c2b49c;
+  --hover-edge: #9e8e74;
+  --field-hover-edge: #9e8e74;
+  --slim-edge: #b9aa90;
+  --grid: #4a3520;
+  --text: #2a2118;
+  --muted: #5b4d3d;
+  --faint: #6b5c4a;
+  --ink-strong: #2a2118;
+  --staff-ink: #2a2118;
+  --hl-value: #74470b;
+  --hl-lyric: #6b5c4a;
+  --hl-group: #673c9a;
+  --brass: #8a5a12;
+  --brass-2: #83540f;
+  --blow: #9e4806;
+  --draw: #0f5f88;
+  --pitch: #673c9a;
+  --danger: #ad3328;
+  --ok: #266b33;
+  --warn: #8f7000;
+  --on-brass: #ffffff;
+  --on-blow: #ffffff;
+  --on-draw: #ffffff;
+  --on-danger: #ffffff;
+  --focus: #2a2118;
+  --hilite: #4a3520;
+  --contrast: #000;
+  --shadow: rgb(70 50 25 / 0.4);
+}
+
 /* ---------- Paper: ink on white (the print view; the sheet views draw with these) ---------- */
 .paper {
   --text: #1a1714; --muted: #4f463c; --faint: #6d6357; --border: #cfc6ba; --border-2: #a99e90;

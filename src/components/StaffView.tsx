@@ -9,6 +9,7 @@ import { eventKey } from '../core/score';
 import type { Parsed } from '../state/store';
 import { isHeld, lineShown, lyricOf, songVerses } from '../core/verses';
 import { followTo } from './follow';
+import { useShownTheme } from '../state/theme';
 
 interface Props {
   parsed: Parsed;
@@ -34,6 +35,8 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
   });
 
   const { holes, lyrics, chords, header } = show;
+  // (The staff is drawn in the theme's ink: a new theme draws it again.)
+  const theme = useShownTheme();
   const versesKey = verses?.join(',');
   const abc = useMemo(
     () => writeAbc(parsed.doc, parsed.harp, { tabLine: holes, lyrics, chords, header, verses: versesKey === undefined ? undefined : versesKey.split(',').map(Number) }),
@@ -42,7 +45,7 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
 
   useEffect(() => {
     if (!host.current) return;
-    // Ink colour from where the staff is shown (light on the dark app, black on paper).
+    // Ink colour from where the staff is shown (the theme's, or black on paper).
     const fg = getComputedStyle(host.current).getPropertyValue('--staff-ink').trim() || '#e9e1d6';
     const tunes = abcjs.renderAbc(host.current, abc.text, {
       add_classes: true,
@@ -110,7 +113,8 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
     // Syllables held over the notes after them ("_"): the extender line, which the staff
     // library doesn't draw.
     if (lyrics) drawHolds(elems, abc.order, parsed, holes, versesKey === undefined ? undefined : versesKey.split(',').map(Number));
-  }, [abc, parsed, oneSvgPerLine, holes, staffWidth, lyrics, versesKey]);
+    // oxlint-disable-next-line react/exhaustive-deps, react-hooks/exhaustive-deps
+  }, [abc, parsed, oneSvgPerLine, holes, staffWidth, lyrics, versesKey, theme]);
 
   // Highlight sounding + selected notes.
   useEffect(() => {
@@ -128,9 +132,9 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
       if (on && set[0]) lastActive = set[0];
     });
     followTo(lastActive);
-    // `abc`: after the staff is drawn again, its notes are new elements to highlight.
+    // `abc`, `theme`: after the staff is drawn again, its notes are new elements to highlight.
     // oxlint-disable-next-line react/exhaustive-deps, react-hooks/exhaustive-deps
-  }, [activeEvents, selectedEvent, abc]);
+  }, [activeEvents, selectedEvent, abc, theme]);
 
   return <div className="staffview" ref={host} />;
 }

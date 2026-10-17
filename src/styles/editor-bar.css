@@ -84,8 +84,9 @@
 .stage-head .now-playing { flex: 1; height: 30px; justify-content: flex-start; min-width: 0; }
 .stage-head .np-chip { padding: 2px 9px; }
 .stage-head .np-chip b { font-size: 14px; }
-.practice-start { background: var(--brass); border-color: var(--brass); color: var(--on-brass); font-weight: 700; }
-.practice-start:hover:not(:disabled) { background: var(--brass-2); }
+/* (As strong as the input cards' toggle colours, so its text is the one for brass.) */
+.input-card .t-btn.toggle.practice-start { background: var(--brass); border-color: var(--brass); color: var(--on-brass); font-weight: 700; }
+.input-card .t-btn.toggle.practice-start:hover:not(:disabled) { background: var(--brass-2); border-color: var(--brass-2); }
 .pb-hint { padding: 0 10px 6px 34px; }
 
 /* ---------- Focus, cards, printing from the browser ---------- */
