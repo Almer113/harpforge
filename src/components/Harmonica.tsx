@@ -31,8 +31,6 @@ export function Harmonica({ size = 'full' }: { size?: 'full' | 'slim' }) {
   const activeEvents = useApp((s) => s.activeEvents);
   const keyOffset = useApp((s) => s.keyOffset);
   const asNotes = useApp((s) => s.readAs === 'notes');
-  // Notes mode always labels the reeds with their notes.
-  const showNames = useApp((s) => s.showNoteNames) || asNotes;
   const slideLatch = useApp((s) => s.slideLatch);
   const practice = useApp((s) => s.practice);
   // Spelled for the song's key (D minor: B♭), else the harp's.
@@ -188,7 +186,8 @@ export function Harmonica({ size = 'full' }: { size?: 'full' | 'slim' }) {
               return (
                 <div key={h.hole} className="harp-label">
                   {keyIdx >= 0 && keyIdx < BLOW_LABELS.length && <kbd>{BLOW_LABELS[keyIdx]}</kbd>}
-                  {showNames && <span className="note">{midiToName(h.blow + (slideLatch && harp.hasSlide ? 1 : 0), flats)}</span>}
+                  {/* (Every reed is labelled with its note, always: the Tab view's "Note names" is about the tab.) */}
+                  <span className="note">{midiToName(h.blow + (slideLatch && harp.hasSlide ? 1 : 0), flats)}</span>
                 </div>
               );
             })}
@@ -210,7 +209,7 @@ export function Harmonica({ size = 'full' }: { size?: 'full' | 'slim' }) {
               const keyIdx = h.hole - 1 - keyOffset;
               return (
                 <div key={h.hole} className="harp-label">
-                  {showNames && <span className="note">{midiToName(h.draw + (slideLatch && harp.hasSlide ? 1 : 0), flats)}</span>}
+                  <span className="note">{midiToName(h.draw + (slideLatch && harp.hasSlide ? 1 : 0), flats)}</span>
                   {keyIdx >= 0 && keyIdx < DRAW_LABELS.length && <kbd>{DRAW_LABELS[keyIdx]}</kbd>}
                 </div>
               );
