@@ -84,23 +84,38 @@ export function cycleTheme() {
   setTheme(nextTheme());
 }
 
-let chosen: ThemeChoice = 'dark';
-let started = false;
-/** Shows this device's theme and follows changes: the computer's setting, another tab's pick. */
-export function startTheme() {
-  if (started || typeof document === 'undefined') return;
-  started = true;
+let chosen: ThemeChoice = themeChoice();
+let system: ThemeName = systemTheme();
+let stop: (() => void) | null = null;
+/**
+ * Shows this device's theme and follows changes: the computer's setting, another tab's pick.
+ * (Returns how to stop following them.)
+ */
+export function startTheme(): () => void {
+  if (stop || typeof document === 'undefined') return () => {};
   chosen = themeChoice();
+  system = systemTheme();
   show(chosen);
-  systemQuery()?.addEventListener('change', () => {
+  // (Kept: a media query nothing refers to may be thrown away, its listener with it.)
+  const query = systemQuery();
+  const onSystem = () => {
+    system = systemTheme();
     if (chosen === 'system') show(chosen);
     else changed();
-  });
-  window.addEventListener('storage', (e) => {
+  };
+  const onStorage = (e: StorageEvent) => {
     if (e.key !== THEME_KEY && e.key !== null) return;
     chosen = themeChoice();
     show(chosen);
-  });
+  };
+  query?.addEventListener('change', onSystem);
+  window.addEventListener('storage', onStorage);
+  stop = () => {
+    query?.removeEventListener('change', onSystem);
+    window.removeEventListener('storage', onStorage);
+    stop = null;
+  };
+  return stop;
 }
 
 function subscribe(fn: () => void) {
@@ -111,6 +126,11 @@ function subscribe(fn: () => void) {
 /** This device's choice; a component using it draws again when it changes. */
 export function useThemeChoice(): ThemeChoice {
   return useSyncExternalStore(subscribe, () => chosen, () => 'dark');
+}
+
+/** What the computer is set to; a component using it draws again when that changes. */
+export function useSystemTheme(): ThemeName {
+  return useSyncExternalStore(subscribe, () => system, () => 'dark');
 }
 
 function watch(fn: () => void) {

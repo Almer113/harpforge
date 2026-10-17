@@ -11,7 +11,11 @@
       try {
         var c = localStorage.getItem('harpforge:theme');
         var t = c === 'system' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : c;
-        if (t === 'light' || t === 'paper') document.documentElement.setAttribute('data-theme', t);
+        if (t === 'light' || t === 'paper') {
+          document.documentElement.setAttribute('data-theme', t);
+          // (The browser's bar in the theme's --bg, as theme.ts sets it once the app runs.)
+          document.querySelector('meta[name="theme-color"]').content = t === 'light' ? '#f3f2ef' : '#f2ebdd';
+        }
       } catch (e) {}
     </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />

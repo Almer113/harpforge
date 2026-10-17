@@ -10,7 +10,7 @@ import { keysTaken } from '../live/focus';
 import { ReadAsSwitch, ShowItems, ViewSwitch } from './Sheet';
 import { barAt, barStarts } from '../core/passage';
 import { exitPerform, performResize } from '../state/perform';
-import { cycleTheme, nextTheme, THEME_NAMES, useShownTheme } from '../state/theme';
+import { cycleTheme, nextTheme, THEME_NAMES, useShownTheme, useThemeChoice } from '../state/theme';
 import { setAlong } from '../state/playAlong';
 import { DEFAULT_PERFORM_SIZE, PERFORM_SIZES, setPartOff, useApp, useParsed } from '../state/store';
 
@@ -241,9 +241,11 @@ function useIdle(playing: boolean): { idle: boolean; hint: boolean } {
 /** ◐: the next theme (Dark → Light → Paper), for the stage's light; kept for this device. */
 function ThemeButton() {
   const shown = useShownTheme();
+  const matching = useThemeChoice() === 'system';
+  const name = `${THEME_NAMES[shown]}${matching ? ', matching the computer' : ''}`;
   const next = THEME_NAMES[nextTheme()];
   return (
-    <button className="t-btn pf-theme" onClick={cycleTheme} title={`Theme: ${THEME_NAMES[shown]} — click for ${next} (kept on this device; all four are in the account menu)`} aria-label={`Theme: ${THEME_NAMES[shown]}. Switch to ${next}`}>
+    <button className="t-btn pf-theme" onClick={cycleTheme} title={`Theme: ${name} — click for ${next} (kept on this device; all four are in the account menu)`} aria-label={`Theme: ${name}. Switch to ${next}`}>
       <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden>
         <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="2" />
         <path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" />

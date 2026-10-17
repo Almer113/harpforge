@@ -31,10 +31,10 @@
 
 /* Practice target on the harmonica */
 .hole.blow-target .reed.blow, .hole.draw-target .reed.draw {
-  outline: 2px dashed var(--brass-2); outline-offset: -3px; background: color-mix(in srgb, var(--brass) 18%, transparent);
+  outline: 2px dashed var(--reed-target-2); outline-offset: -3px; background: color-mix(in srgb, var(--reed-target) 18%, transparent);
   animation: target-pulse 1.1s ease-in-out infinite;
 }
-@keyframes target-pulse { 50% { background: color-mix(in srgb, var(--brass) 32%, transparent); } }
+@keyframes target-pulse { 50% { background: color-mix(in srgb, var(--reed-target) 32%, transparent); } }
 .input-card .t-btn.toggle:not(.on) { color: var(--text); }
 
 /* ---------- Numbered notation (jianpu) ---------- */

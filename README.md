@@ -188,10 +188,11 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
   library backends, practice and syllable data per account.
 - **Phase 15:** housekeeping — asking before closing with unsaved work, the harmonica's
   own labels, held syllables, this README and the format guide.
+- **Phase 16:** themes — Dark, Light, Paper and Match system, per device; every colour
+  named in one place, with contrast tests.
 
 **Planned**
 
-16. Themes: Light, Paper and Match system beside today's Dark, per device.
 17. Editing tools in the editor: section tools (duplicate, move, rename, repeat, delete),
     find and replace holes (Ctrl+H).
 18. A contour view: the melody's shape, notes as bars by pitch and length.

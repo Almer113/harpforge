@@ -49,6 +49,8 @@
   --on-blow: #22160a;
   --on-draw: #0c1d26;
   --on-danger: #fff;
+  /* Text on a light wash of --danger (Step entry when on). */
+  --on-danger-soft: #fff;
   --blow-soft: color-mix(in srgb, var(--blow) 16%, transparent);
   --draw-soft: color-mix(in srgb, var(--draw) 16%, transparent);
   /* Keyboard focus: a light ring, unlike the brass of "selected". */
@@ -78,6 +80,11 @@
   --comb-ink: #ffebd2;
   --hole: #0b0907;
   --hole-shade: #000;
+  /* Its lit reeds and the practice target: bright over the black holes in every theme. */
+  --reed-blow: #f39a3d;
+  --reed-draw: #45b4e0;
+  --reed-target: #e3a948;
+  --reed-target-2: #f5c46c;
 }
 
 /* ---------- Light: white and cool grey; darker pens so they read on it ---------- */
@@ -92,7 +99,7 @@
   --toast: #ffffff;
   --sunk: #f7f6f3;
   --sunk-2: #f5f4f0;
-  --lane-now: #ece9e3;
+  --lane-now: #f0eee9;
   --dock: #fbfaf8;
   --dock-2: #f1efea;
   --backdrop: rgb(28 24 20 / 0.6);
@@ -113,16 +120,17 @@
   --hl-group: #6b3fa0;
   --brass: #8f5e14;
   --brass-2: #8a5a12;
-  --blow: #a64b08;
+  --blow: #994505;
   --draw: #0f6390;
   --pitch: #6b3fa0;
   --danger: #b3352a;
   --ok: #287035;
-  --warn: #8a6d00;
+  --warn: #7d6200;
   --on-brass: #ffffff;
   --on-blow: #ffffff;
   --on-draw: #ffffff;
   --on-danger: #ffffff;
+  --on-danger-soft: #1c1915;
   --focus: #1c1915;
   --hilite: #3d2f20;
   --contrast: #000;
@@ -141,7 +149,7 @@
   --toast: #fbf8f1;
   --sunk: #f6f0e4;
   --sunk-2: #f4eee2;
-  --lane-now: #ebe2d1;
+  --lane-now: #efe7d8;
   --dock: #faf6ee;
   --dock-2: #efe7d8;
   --backdrop: rgb(42 33 24 / 0.6);
@@ -162,16 +170,17 @@
   --hl-group: #673c9a;
   --brass: #8a5a12;
   --brass-2: #83540f;
-  --blow: #9e4806;
+  --blow: #954305;
   --draw: #0f5f88;
   --pitch: #673c9a;
   --danger: #ad3328;
   --ok: #266b33;
-  --warn: #8f7000;
+  --warn: #7a5f00;
   --on-brass: #ffffff;
   --on-blow: #ffffff;
   --on-draw: #ffffff;
   --on-danger: #ffffff;
+  --on-danger-soft: #2a2118;
   --focus: #2a2118;
   --hilite: #4a3520;
   --contrast: #000;
@@ -184,14 +193,19 @@
   --panel: transparent; --panel-2: #f1ece5; --bg-2: #f6f2ec; --brass: #8a5a12; --brass-2: #8a5a12;
   --blow: #b8570a; --draw: #11638c; --pitch: #6b3fa0; --staff-ink: #111111;
   --ink-strong: #1a1714; --hilite: #1a1714; --contrast: #000;
+  --danger: #b3352a; --ok: #287035; --warn: #8a6d00; --focus: #1a1714; --shadow: #000;
+  --blow-soft: color-mix(in srgb, var(--blow) 16%, transparent); --draw-soft: color-mix(in srgb, var(--draw) 16%, transparent);
 }
 
-/* Printing from the browser's menu (not the print view): the same ink on paper. */
+/* Printing from the browser's menu (not the print view): the same ink on paper, whatever the
+   theme (the second selector outweighs a theme's :root[data-theme]). */
 @media print {
-  html:not(.printing) {
+  html:not(.printing), html[data-theme]:not(.printing) {
     --bg: #fff; --bg-2: #f6f2ec; --panel: transparent; --panel-2: #f1ece5; --border: #cfc6ba; --border-2: #a99e90;
     --text: #1a1714; --muted: #4f463c; --faint: #6d6357; --brass: #8a5a12; --brass-2: #8a5a12;
     --blow: #b8570a; --draw: #11638c; --pitch: #6b3fa0; --staff-ink: #111111; color-scheme: light;
     --ink-strong: #1a1714; --hilite: #1a1714; --contrast: #000;
+    --danger: #b3352a; --ok: #287035; --warn: #8a6d00; --focus: #1a1714; --shadow: #000;
+    --blow-soft: color-mix(in srgb, var(--blow) 16%, transparent); --draw-soft: color-mix(in srgb, var(--draw) 16%, transparent);
   }
 }

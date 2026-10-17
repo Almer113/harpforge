@@ -60,10 +60,10 @@
 .reed { position: absolute; left: 0; right: 0; height: 50%; transition: background 0.08s, box-shadow 0.08s; }
 .reed.blow { top: 0; }
 .reed.draw { bottom: 0; }
-.hole:hover .reed.blow { background: color-mix(in srgb, var(--blow) 10%, transparent); }
-.hole:hover .reed.draw { background: color-mix(in srgb, var(--draw) 10%, transparent); }
-.hole.blow-on .reed.blow { background: linear-gradient(180deg, var(--blow), color-mix(in srgb, var(--blow) 35%, transparent)); box-shadow: 0 0 18px var(--blow); animation: reed 0.09s linear infinite; }
-.hole.draw-on .reed.draw { background: linear-gradient(0deg, var(--draw), color-mix(in srgb, var(--draw) 35%, transparent)); box-shadow: 0 0 18px var(--draw); animation: reed 0.09s linear infinite; }
+.hole:hover .reed.blow { background: color-mix(in srgb, var(--reed-blow) 10%, transparent); }
+.hole:hover .reed.draw { background: color-mix(in srgb, var(--reed-draw) 10%, transparent); }
+.hole.blow-on .reed.blow { background: linear-gradient(180deg, var(--reed-blow), color-mix(in srgb, var(--reed-blow) 35%, transparent)); box-shadow: 0 0 18px var(--reed-blow); animation: reed 0.09s linear infinite; }
+.hole.draw-on .reed.draw { background: linear-gradient(0deg, var(--reed-draw), color-mix(in srgb, var(--reed-draw) 35%, transparent)); box-shadow: 0 0 18px var(--reed-draw); animation: reed 0.09s linear infinite; }
 .hole.blow-on .hole-num, .hole.draw-on .hole-num { color: var(--metal-sheen); text-shadow: 0 0 6px color-mix(in srgb, var(--hole-shade) 80%, transparent); }
 @keyframes reed { 50% { opacity: 0.82; } }
 /* Double-reed harmonicas: show the two rows of reeds in each hole. */

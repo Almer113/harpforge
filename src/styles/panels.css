@@ -41,12 +41,14 @@
 .seg button.on { background: var(--panel-2); color: var(--brass-2); box-shadow: inset 0 0 0 1px var(--border-2); }
 
 /* ---------- Staff view (abcjs) ---------- */
-.staffview { width: 100%; overflow-x: auto; }
+.staffview { width: 100%; overflow-x: auto; color: var(--staff-ink); }
 .staffview svg { display: block; }
 .staffview .abcjs-note, .staffview .abcjs-rest { cursor: pointer; }
 .staffview .abcjs-playing { fill: var(--brass-2) !important; stroke: var(--brass-2); }
 .staffview .abcjs-selected-note { fill: var(--draw) !important; }
 .staffview .abcjs-lyric { fill: var(--muted); }
+.staffview .abcjs-lyric tspan.st-holes-blow { fill: var(--blow); }
+.staffview .abcjs-lyric tspan.st-holes-draw { fill: var(--draw); }
 .staffview .abcjs-chord { fill: var(--brass-2); }
 .staffview .abcjs-title { fill: var(--text); }
 
@@ -61,7 +63,8 @@
 .menu-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; border: 0; background: transparent; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
 .menu-item:hover { background: var(--panel-2); }
 .mi-name { font-weight: 600; }
-/* One of a set to pick from (the theme): a dot by the one picked. */
+/* A named group in a menu (the theme), and one of a set to pick from: a dot by the one picked. */
+.menu-group { display: flex; flex-direction: column; }
 .menu-item[role='menuitemradio'] { padding-left: 26px; position: relative; }
 .menu-item[role='menuitemradio'].checked::before { content: ''; position: absolute; left: 10px; top: 13px; width: 7px; height: 7px; border-radius: 50%; background: var(--brass-2); }
 .menu-item[role='menuitemradio'].checked .mi-name { color: var(--brass-2); }

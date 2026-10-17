@@ -36,7 +36,7 @@
 .dur-sym { transform: translateY(-1px); }
 .step-btn { display: inline-flex; align-items: center; gap: 6px; }
 .step-btn .rec-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); }
-.step-btn.on { border-color: var(--danger); color: var(--on-danger); background: color-mix(in srgb, var(--danger) 22%, transparent); }
+.step-btn.on { border-color: var(--danger); color: var(--on-danger-soft); background: color-mix(in srgb, var(--danger) 22%, transparent); }
 .step-btn.on .rec-dot { background: var(--danger); box-shadow: 0 0 8px var(--danger); animation: pulse-rec 1.2s infinite; }
 .ve-toolbar input[type='range'] { width: 90px; accent-color: var(--brass); }
 .ve-notice { padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--warn) 8%, transparent); border-left: 3px solid var(--warn); color: var(--muted); font-size: 13px; }

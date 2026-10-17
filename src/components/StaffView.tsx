@@ -45,13 +45,13 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
 
   useEffect(() => {
     if (!host.current) return;
-    // Ink colour from where the staff is shown (the theme's, or black on paper).
-    const fg = getComputedStyle(host.current).getPropertyValue('--staff-ink').trim() || '#e9e1d6';
+    // Drawn in the text colour of where it's shown (the stylesheet sets it: the theme's
+    // ink, black on paper, and in print) — not a colour fixed when it's drawn.
     const tunes = abcjs.renderAbc(host.current, abc.text, {
       add_classes: true,
       oneSvgPerLine,
       responsive: 'resize',
-      foregroundColor: fg,
+      foregroundColor: 'currentColor',
       minPadding: 8,
       paddingtop: 4,
       paddingbottom: 8,
@@ -91,19 +91,17 @@ export function StaffView({ parsed, activeEvents, selectedEvent, onNoteClick, sh
     elems.forEach((set, k) => {
       if (scoreIndex[k] !== undefined) set[0]?.setAttribute('data-index', String(scoreIndex[k]));
     });
-    // The holes (the first line under each note) in the tab's blow/draw colours.
+    // The holes (the first line under each note) in the tab's blow/draw colours (the
+    // stylesheet's, by class, so they follow the theme and print too).
     if (holes) {
-      const css = getComputedStyle(host.current);
-      const blow = css.getPropertyValue('--blow').trim();
-      const draw = css.getPropertyValue('--draw').trim();
       for (const text of host.current.querySelectorAll('text.abcjs-lyric')) {
         const first = text.querySelector('tspan');
         const holesText = first?.textContent?.trim() ?? '';
         if (!first || !/^<?-?\d/.test(holesText)) continue;
         const parts = holesText.split(/\s+/);
         const draws = parts.filter((p) => /^<?-/.test(p)).length;
-        if (draws === parts.length) first.setAttribute('fill', draw);
-        else if (draws === 0) first.setAttribute('fill', blow);
+        if (draws === parts.length) first.classList.add('st-holes-draw');
+        else if (draws === 0) first.classList.add('st-holes-blow');
         first.setAttribute('font-weight', 'bold');
       }
     }
