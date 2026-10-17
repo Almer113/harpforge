@@ -80,7 +80,7 @@ export function parseChordPro(text: string): Imported {
       if (name === 'title' || name === 't') meta.title = value;
       else if (name === 'artist' || name === 'subtitle' || name === 'st' || name === 'composer') meta.artist ??= value;
       else if (name === 'key') meta.key = value;
-      else if (name === 'tempo') meta.tempo = Math.max(20, Math.min(300, parseFloat(value) || meta.tempo));
+      else if (name === 'tempo') meta.tempo = Math.max(20, Math.min(400, parseFloat(value) || meta.tempo));
       else if (name === 'time') meta.time = /^\d+\/\d+$/.test(value) ? value : meta.time;
       else if (name === 'capo') capo = parseInt(value, 10) || 0;
       else if (name === 'sot' || name === 'start_of_tab' || name === 'start_of_grid' || name === 'sog') inTab = true;
@@ -425,7 +425,8 @@ export function writeChordPro(doc: TabDoc): string {
             text += `[${ev.chord}]`;
             lastChord = ev.chord;
           }
-          const syl = isHeld(ev, lv) ? undefined : lyricOf(ev, lv);
+          // (Brackets in the words would read as chords: written as parentheses.)
+          const syl = isHeld(ev, lv) ? undefined : lyricOf(ev, lv)?.replace(/\[/g, '(').replace(/\]/g, ')');
           if (syl && !(ev.kind === 'note' && ev.tied)) text += syl.endsWith('-') ? syl.slice(0, -1) : syl + ' ';
         }
         if (text.trim()) out.push(text.trimEnd());

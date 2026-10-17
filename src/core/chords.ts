@@ -39,7 +39,7 @@ const QUALITIES: [string[], number[]][] = [
   [['7'], [0, 4, 7, 10]],
   [['6/9', '69'], [0, 4, 7, 9, 14]],
   [['6'], [0, 4, 7, 9]],
-  [['add9', 'add2', '(add9)'], [0, 4, 7, 14]],
+  [['add9', 'add2', '(add9)', '2'], [0, 4, 7, 14]],
   [['sus2'], [0, 2, 7]],
   [['sus4', 'sus'], [0, 5, 7]],
   [['dim', '°', 'o'], [0, 3, 6]],
@@ -49,11 +49,21 @@ const QUALITIES: [string[], number[]][] = [
   [['5'], [0, 7]],
 ];
 
+/** A root or bass note's pitch class, with a sharp or flat — or two ("Bbb", "F##"). */
+function rootPc(name: string): number | null {
+  const n = name.replace(/♯/g, '#').replace(/♭/g, 'b');
+  const pc = parsePitchClass(n[0]);
+  if (pc === null) return null;
+  const acc = n.slice(1);
+  return mod12(pc + (acc === 'x' ? 2 : [...acc].reduce((a, c) => a + (c === '#' ? 1 : c === 'b' ? -1 : 0), 0)));
+}
+
 export function parseChord(symbol: string): ChordInfo | null {
-  const s = symbol.trim();
-  const m = /^([A-G][#b♯♭]?)(.*?)(?:\/([A-G][#b♯♭]?))?$/.exec(s);
+  // (A root written in lower case, as some chord sheets do: "am" is Am.)
+  const s = symbol.trim().replace(/^[a-g](?=[#b♯♭]?(?:$|[^a-z]|m(?!aj)|maj|min|dim|aug|sus|add))/, (c) => c.toUpperCase());
+  const m = /^([A-G](?:##|bb|♯♯|♭♭|[#b♯♭])?)(.*?)(?:\/([A-G](?:##|bb|[#b♯♭])?))?$/.exec(s);
   if (!m) return null;
-  const root = parsePitchClass(m[1].replace('♯', '#').replace('♭', 'b'));
+  const root = rootPc(m[1]);
   if (root === null) return null;
   const suffix = m[2].trim();
   let intervals: number[] | null = null;
@@ -85,9 +95,12 @@ export function parseChord(symbol: string): ChordInfo | null {
     // An altered 5th ("(b5)", "#5", "+5"): in place of the 5th.
     if (/[b♭]5/.test(rest)) ivs = ivs.map((iv) => (iv === 7 ? 6 : iv));
     else if (/(#|♯|\+)5/.test(rest)) ivs = ivs.map((iv) => (iv === 7 ? 8 : iv));
+    // A note left out ("no3", "(no5)", "omit3").
+    if (/(no|omit)\s*3/.test(rest)) ivs = ivs.filter((iv) => iv !== 3 && iv !== 4);
+    if (/(no|omit)\s*5/.test(rest)) ivs = ivs.filter((iv) => iv !== 6 && iv !== 7 && iv !== 8);
     intervals = [...new Set(ivs)].sort((a, b) => a - b);
   }
-  const bass = m[3] ? parsePitchClass(m[3].replace('♯', '#').replace('♭', 'b')) ?? undefined : undefined;
+  const bass = m[3] ? (rootPc(m[3]) ?? undefined) : undefined;
   return { symbol: s, root, intervals, tones: intervals.map((i) => mod12(root + i)), bass };
 }
 

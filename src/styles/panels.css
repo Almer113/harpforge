@@ -228,4 +228,5 @@
 .chord-list li { display: flex; flex-direction: column; }
 .cl-play-as { display: flex; align-items: center; gap: 6px; padding: 0 8px 6px 30px; font-size: 12px; color: var(--muted); }
 .cl-play-as select { flex: 1; min-width: 0; font-size: 12px; padding: 2px 6px; }
+.cl-none { margin: 0; padding: 0 8px 6px 30px; font-size: 12px; }
 .cl-sub .cl-mark, .cl-sub .cl-missing { color: var(--brass-2); }

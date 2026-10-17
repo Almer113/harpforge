@@ -37,7 +37,7 @@ export function ChordList({ doc, harp, picks, onPicks, onHear }: Props) {
   // not one on the very holes it's played on already, under another name.)
   const subs = useMemo(() => {
     const holes = (list: { sounds: Parameters<typeof holeSoundText>[0][] }) => list.sounds.map((x) => holeSoundText(x)).join(' ');
-    return new Map(chordReport(doc, harp).map((l) => [l.symbol, l.level === 'full' || !l.info ? [] : substitutes(harp, l.info, flats).filter((o) => holes(o) !== holes(l))]));
+    return new Map(chordReport(doc, harp).map((l) => [l.symbol, l.level === 'full' || !l.info ? [] : substitutes(harp, l.info, flats, 4).filter((o) => holes(o) !== holes(l)).slice(0, 3)]));
   }, [doc, harp, flats]);
   if (!lines.length) return null;
   // (Picks for chords this text still has, among what's offered for them now.)
@@ -93,6 +93,8 @@ export function ChordList({ doc, harp, picks, onPicks, onHear }: Props) {
                   {picked ? `as ${picked.symbol}: ${picked.reason}` : l.level === 'none' ? 'no way to play it' : l.level === 'unknown' ? 'not a chord the app knows' : missingText(l.missing)}
                 </span>
               </button>
+              {/* (Missing what makes it, and nothing whole to play instead: said, so it's not looked for.) */}
+              {!options.length && (l.level === 'thin' || l.level === 'none') && <p className="cl-none hint">No chord this harmonica plays in full comes close enough to stand in for it.</p>}
               {options.length > 0 && (
                 <label className="cl-play-as">
                   <span>Play as</span>

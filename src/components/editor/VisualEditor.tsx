@@ -61,6 +61,7 @@ import { Glyph, NoteGlyph } from '../TabView';
 import { ReadAsSwitch } from '../Sheet';
 import { holeSoundText } from '../../core/htab/serializer';
 import { Inspector } from './Inspector';
+import { sectionRanges } from '../../core/edit/sections';
 import { moveSectionAt, sectionAtCaret, SectionGroup, SectionHeading } from './SectionTools';
 import { useFound } from './FindBar';
 import { isTyping, keysTaken, overlayOpen } from '../../live/focus';
@@ -322,7 +323,11 @@ export function VisualEditor() {
       if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
         e.preventDefault();
         const song = fromDoc(getParsed(useApp.getState().text).doc);
-        if (!moveSectionAt(sectionAtCaret(song), e.key === 'ArrowUp' ? -1 : 1)) useApp.getState().notify(e.key === 'ArrowUp' ? 'It can’t move up: it’s the first (the bars before the first heading stay at the top)' : 'It can’t move down: it’s the last section');
+        const k = sectionAtCaret(song);
+        // (The bars before the first heading have no heading to move by.)
+        const start = sectionRanges(song)[k]?.name === undefined;
+        if (!moveSectionAt(k, e.key === 'ArrowUp' ? -1 : 1))
+          useApp.getState().notify(start ? 'The bars before the first heading stay at the top: name them (the heading’s ▾ → Name this part…) to move them' : e.key === 'ArrowUp' ? 'It can’t move up: it’s the first (the bars before the first heading stay at the top)' : 'It can’t move down: it’s the last section');
         return;
       }
       if (e.altKey && e.key.startsWith('Arrow')) return;

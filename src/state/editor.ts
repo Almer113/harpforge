@@ -21,6 +21,8 @@ export function songText(song: Song, report?: SpliceReport): string {
   // Lines the edit didn't touch keep their own text, comments and blank lines.
   let text = current.slice(0, splitHeader(current).bodyStart) + spliceBody(current, song, report) + '\n';
   if (song.meta.time !== getParsed(current).doc.meta.time) text = setMetaFields(text, { time: song.meta.time });
+  // (Line endings as the text had them.)
+  if (current.includes('\r\n')) text = text.replace(/\r?\n/g, '\r\n');
   return text;
 }
 

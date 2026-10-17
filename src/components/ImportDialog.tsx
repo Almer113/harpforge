@@ -153,6 +153,9 @@ function ImportBody() {
   // best unless you move it, best first.
   const owned = useApp((st) => st.ownedHarps);
   const [shifts, setShifts] = useState<Record<string, number>>({});
+  // Chords picked to stand in for ones a harmonica can't play in full, for each harmonica (the
+  // same one in "Your harmonicas" and the suggestions shares them).
+  const [picks, setPicks] = useState<Record<string, Picks>>({});
   const mine = useMemo(() => {
     if (!analysis) return [];
     const specs = [current.harp.spec as HarmonicaSpec, ...owned].filter((sp, i, all) => all.findIndex((x) => specId(x) === specId(sp)) === i);
@@ -161,7 +164,9 @@ function ImportBody() {
         const harp = getHarmonica(spec);
         const id = `${MINE}:${specId(spec)}`;
         if (analysis.chordSheet) {
-          const stats = chordSheetToTab(analysis.doc, harp, 'hold').stats;
+          // (With the chords picked to play instead on it: its tags count them as played.)
+          const own = Object.fromEntries(Object.entries(picks[specId(spec)] ?? {}).map(([sym, p]) => [sym, p.sounds]));
+          const stats = chordSheetToTab(analysis.doc, harp, 'hold', own).stats;
           return { id, spec, shift: 0, stats, score: stats.cost, current: specId(spec) === specId(current.harp.spec) };
         }
         let best = 0;
@@ -178,7 +183,7 @@ function ImportBody() {
         return { id, spec, shift, stats, score: bestCost, current: specId(spec) === specId(current.harp.spec) };
       })
       .sort((x, y) => x.score - y.score);
-  }, [analysis, current.harp, owned, shifts]);
+  }, [analysis, current.harp, owned, shifts, picks]);
   const ownedIds = new Set(owned.map(specId));
 
   const choice = useMemo(() => {
@@ -194,9 +199,6 @@ function ImportBody() {
     return { id: specId(s.spec), spec: s.spec, shift: s.shift, position: s.position };
   }, [suggestions, picked, mine, owned.length]);
 
-  // Chords picked to stand in for ones a harmonica can't play in full, for each harmonica (the
-  // same one in "Your harmonicas" and the suggestions shares them).
-  const [picks, setPicks] = useState<Record<string, Picks>>({});
   const harpKey = choice ? specId(choice.spec) : '';
   const standIns = useMemo(() => picks[harpKey] ?? {}, [picks, harpKey]);
   const voicings = useMemo(() => Object.fromEntries(Object.entries(standIns).map(([sym, p]) => [sym, p.sounds])), [standIns]);

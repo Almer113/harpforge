@@ -2,7 +2,7 @@
 
 import { soundPitch, type Harmonica } from '../instruments';
 import { mod12 } from '../pitch';
-import type { NoteEvent, TabDoc, TabMeta } from '../htab/types';
+import type { NoteEvent, RestEvent, TabDoc, TabEvent, TabMeta } from '../htab/types';
 import { defaultMeta } from '../htab/types';
 
 /** Result of importing any format: an instrument-neutral document (pitches or chord-sheet rests). */
@@ -126,7 +126,52 @@ export function spell(midi: number, fifths: number): { letter: string; alter: nu
 }
 
 export function gcd(a: number, b: number): number {
-  return b === 0 ? a : gcd(b, a % b);
+  // (Only whole, finite numbers have one: anything else would go round for ever.)
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return 1;
+  for (let k = 0; b !== 0 && k < 200; k++) [a, b] = [b, a % b];
+  return a || 1;
+}
+
+/**
+ * An import made safe to open: a tempo and time signature the tab can play, and no note or
+ * rest of an impossible length or pitch (what a damaged file can hold) — each said.
+ */
+export function sanitizeImported<T extends Imported>(r: T): T {
+  const said: string[] = [];
+  const { meta } = r.doc;
+  if (!Number.isFinite(meta.tempo) || meta.tempo < 20 || meta.tempo > 400) {
+    const was = meta.tempo;
+    meta.tempo = Number.isFinite(was) ? Math.min(400, Math.max(20, Math.round(was))) : 120;
+    said.push(`The file’s tempo (${Number.isFinite(was) ? Math.round(was) : 'none'}) is out of range: ${meta.tempo} bpm.`);
+  }
+  const tm = /^(\d+)\/(\d+)$/.exec(meta.time ?? '');
+  if (!tm || +tm[1] < 1 || +tm[1] > 32 || ![1, 2, 4, 8, 16, 32].includes(+tm[2])) {
+    said.push(`The file’s time signature (${meta.time}) can’t be used: 4/4.`);
+    meta.time = '4/4';
+  }
+  let dropped = 0;
+  for (const line of r.doc.lines) {
+    line.events = line.events.flatMap((e): TabEvent[] => {
+      if (e.kind === 'bar') return [e];
+      // (Zero is a chord or ending marker's length; anything else needs to be a real, sane one.)
+      if (!Number.isFinite(e.beats) || e.beats < 0 || e.beats > 64) {
+        dropped++;
+        return [];
+      }
+      if (e.kind !== 'note') return [e];
+      const sounds = e.sounds.filter((s) => s.type !== 'pitch' || (Number.isInteger(s.midi) && s.midi >= 0 && s.midi <= 127));
+      if (sounds.length === e.sounds.length) return [e];
+      dropped++;
+      if (sounds.length) return [{ ...e, sounds }];
+      const rest: RestEvent = { kind: 'rest', beats: e.beats };
+      if (e.chord) rest.chord = e.chord;
+      return [rest];
+    });
+  }
+  if (dropped) said.push(`${dropped} note${dropped === 1 ? '' : 's'} or rest${dropped === 1 ? '' : 's'} with an impossible length or pitch were left out (the file may be damaged).`);
+  if (!said.length) return r;
+  const choosePart = r.choosePart;
+  return { ...r, warnings: [...r.warnings, ...said], ...(choosePart ? { choosePart: (id: string) => sanitizeImported(choosePart(id)) } : {}) };
 }
 
 /** Best rational approximation n/d of x with d from `dens`. */

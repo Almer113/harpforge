@@ -3,7 +3,7 @@
 // (named in the margin with the holes played on them). Blow and draw in their colours; the
 // playing note, the selection, a passage, a loop and play-along marks as in the other views.
 
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { contourLayout, namedLanes, semitoneHeight, wrapRow, type ContourLayout, type ContourRow } from '../core/contourLayout';
 import { endingLabel, ordinal } from '../core/endings';
 import { holeSoundText } from '../core/htab/serializer';
@@ -60,17 +60,21 @@ export function ContourView({ parsed, activeEvents, selectedEvent, onSelect, pas
   const { doc, score, harp, indexByKey } = parsed;
   const layout = useMemo(() => contourLayout(doc, score, indexByKey), [doc, score, indexByKey]);
   const flats = keySpelling(doc.meta.key ?? harp.spec.key);
-  const root = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement | null>(null);
   const click = useStableClick(onSelect);
   // A beat's width: the longest line fits the width there is (within limits).
   const [width, setWidth] = useState(760);
-  useLayoutEffect(() => {
-    const el = root.current;
+  // (Measured whenever the view's box appears: an empty tab draws none until notes come.)
+  const observer = useRef<ResizeObserver | null>(null);
+  const measure = useCallback((el: HTMLDivElement | null) => {
+    root.current = el;
+    observer.current?.disconnect();
+    observer.current = null;
     if (!el) return;
     const ro = new ResizeObserver(() => setWidth(el.clientWidth || 760));
     ro.observe(el);
+    observer.current = ro;
     setWidth(el.clientWidth || 760);
-    return () => ro.disconnect();
   }, []);
   const room = Math.max(120, width - GUTTER - 10);
   // The longest line fits the width if it can; but nearly every note (all but the shortest
@@ -93,7 +97,8 @@ export function ContourView({ parsed, activeEvents, selectedEvent, onSelect, pas
   // A note selected elsewhere (the editor's caret, an issue clicked): into view.
   useEffect(() => {
     if (selectedEvent === null || !root.current) return;
-    root.current.querySelector(`[data-index="${selectedEvent}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    root.current.querySelector(`[data-index="${selectedEvent}"]`)?.scrollIntoView({ block: 'nearest', behavior: calm ? 'auto' : 'smooth' });
   }, [selectedEvent]);
 
   if (!layout.rows.length) return <div className="tab-empty"><p>This tab is empty.</p></div>;
@@ -104,7 +109,7 @@ export function ContourView({ parsed, activeEvents, selectedEvent, onSelect, pas
   const marksByLine = marksPerLine(score, marks, marksPrev);
   const selectedLine = selectedEvent !== null ? score.events[selectedEvent]?.line : undefined;
   return (
-    <div className={`contourview ${readAs === 'notes' ? 'as-notes' : ''}`} ref={root}>
+    <div className={`contourview ${readAs === 'notes' ? 'as-notes' : ''}`} ref={measure}>
       {parts.map(({ part: row, key }) => (
         <ContourLine
           key={key}
@@ -255,6 +260,26 @@ const ContourLine = memo(function ContourLine({ parsed, layout, row, beat, flats
               </text>
             ))}
           {path && <path className="ct-outline" d={path} />}
+          {/* The rests: a place to click, and to light up while they pass. */}
+          {row.slots
+            .filter((sl) => line.events[sl.ei]?.kind === 'rest' && sl.w > 0)
+            .map((sl) => {
+              const cls = ['ct-rest', on.active.has(sl.index) ? 'active' : '', selected === sl.index ? 'selected' : '', on.passage.has(sl.index) ? 'in-passage' : '', on.loop.has(sl.index) ? 'in-loop' : ''].join(' ');
+              return (
+                <g
+                  key={`r${sl.index}`}
+                  className={cls}
+                  data-index={sl.index}
+                  onClick={(e) => {
+                    const event = ev(sl.index);
+                    if (event) onSelect(sl.index, event, e.shiftKey);
+                  }}
+                >
+                  <title>A rest</title>
+                  <rect x={X(sl.x) + 1} y={top} width={Math.max(3, sl.w * beat - 2)} height={plot} rx={4} />
+                </g>
+              );
+            })}
           {/* The notes. */}
           {row.bars.map((b, k) => {
             const sound = b.sound;
@@ -278,7 +303,7 @@ const ContourLine = memo(function ContourLine({ parsed, layout, row, beat, flats
               on.loop.has(b.index) ? 'in-loop' : '',
               mark.cls,
             ].join(' ');
-            const what = sound.type === 'hole' ? `${sound.hole} ${sound.breath}${sound.bend ? `, bent ${sound.bend === 1 ? 'a half step' : `${sound.bend} half steps`}` : ''}${sound.over ? ', overblow' : ''}` : name;
+            const what = sound.type === 'hole' ? `${sound.hole} ${sound.breath}${sound.bend ? `, bent ${sound.bend === 1 ? 'a half step' : `${sound.bend} half steps`}` : ''}${sound.over ? ', overblow' : ''}${sound.slide ? ', slide in' : ''}` : name;
             const first = !row.bars.some((o, j) => j < k && o.index === b.index);
             return (
               <g

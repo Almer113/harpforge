@@ -182,5 +182,11 @@ describe('the themes (Phase 16b)', () => {
     const css = sheets['./themes.css'];
     const print = css.slice(css.indexOf('@media print'));
     expect(print).toContain('html[data-theme]:not(.printing)');
+    // (Every colour a theme sets: none of Dark's left on the paper.)
+    const own = [...print.slice(0, print.indexOf('}')).matchAll(/(--[\w-]+):/g)].map((m) => m[1]);
+    const lightAt = css.indexOf(`${THEMES.light} {`);
+    const light = [...css.slice(lightAt, css.indexOf('}', lightAt)).matchAll(/(--[\w-]+):/g)].map((m) => m[1]);
+    expect(light.length).toBeGreaterThan(20);
+    expect(light.filter((k) => !own.includes(k))).toEqual([]);
   });
 });

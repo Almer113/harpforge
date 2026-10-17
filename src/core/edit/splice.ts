@@ -278,7 +278,8 @@ export function spliceBody(oldText: string, song: Song, report?: SpliceReport): 
       let glue = verbatim ? [...chunk.glue] : withoutChordRows(chunk.glue, chunk.glueStart);
       if (section !== oldDoc.lines[L!].section) {
         const h = glue.map(isHeading).lastIndexOf(true);
-        if (section === undefined) glue = glue.filter((_, i) => i !== h);
+        // (No heading now: every heading above it goes — one over no music would take its bars.)
+        if (section === undefined) glue = glue.filter((l) => !isHeading(l));
         else if (h >= 0) glue[h] = `@ ${section}`;
         else glue.push(...(out.length && glue[glue.length - 1]?.trim() !== '' ? [''] : []), `@ ${section}`);
       }

@@ -462,6 +462,12 @@ function parseTune(src: string, tune: string, wanted: string | null): Imported {
         const nums = m?.[2] ?? m?.[3];
         if (nums) pendingEnding = endingNumbers(nums);
         if (m?.[3]) continue; // an ending on its own
+        // A chord written just before the bar line: at the end of its bar (as HarpForge writes
+        // one there), not on the next bar's first note.
+        if (pendingChord && events.some((e) => e.kind !== 'bar')) {
+          events.push({ kind: 'rest', beats: 0, chord: pendingChord });
+          pendingChord = undefined;
+        }
         const bar = m?.[1] ?? tok;
         // ":|" with "^×3" over its bar's last note: played three times.
         const times = pendingTimes;

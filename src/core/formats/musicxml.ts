@@ -206,7 +206,7 @@ function parsePart(dom: Document, part: Element, wanted: string | null): Importe
     const endingNums = endingEl
       ? [...new Set((endingEl.getAttribute('number') ?? '').split(/[,\s]+/).map(Number).filter((n) => Number.isInteger(n) && n >= 1))].sort((a, b) => a - b)
       : [];
-    const measureFrom = events.length;
+    let measureFrom = events.length;
     // (How long the measure is: as far as any voice in it goes.)
     let measureLen = 0;
     for (const el of measure.children) {
@@ -261,11 +261,21 @@ function parsePart(dom: Document, part: Element, wanted: string | null): Importe
           // A rehearsal mark starts a section, on a new line wherever it falls.
           const words = el.nodeName === 'direction' ? text(el, 'rehearsal') : undefined;
           if (words) {
+            // (A "|:" starting this measure starts the section's line, not the line before it.)
+            const carry: TabEvent[] = [];
+            const tail = events.at(-1);
+            if (tail?.kind === 'bar' && tail.style === 'repeat-start') {
+              if (events.length > 1) events[events.length - 1] = { kind: 'bar', style: 'single' };
+              else events.pop();
+              carry.push({ kind: 'bar', style: 'repeat-start' });
+            }
             if (events.length) {
               lines.push({ events });
-              events = [];
               measuresInLine = 0;
             }
+            events = carry;
+            // (This measure's music starts the new line.)
+            measureFrom = events.length;
             lines.push({ section: words, events: [] });
           }
           break;

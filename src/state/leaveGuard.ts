@@ -11,7 +11,7 @@
 // copy is still kept in the browser when the page closes.)
 
 import { useEffect, useId } from 'react';
-import { BLANK } from '../demo/songs';
+import { isBlankSong } from '../demo/songs';
 import { unsentChanges, watchUnsent } from '../storage/userData';
 import { isDirty, useApp, type AppState } from './store';
 
@@ -23,7 +23,7 @@ export function wouldLose(
   s: Pick<AppState, 'text' | 'savedText' | 'savesPending' | 'recording' | 'fillLyricsOpen' | 'fillDraft'>,
   unsent = unsentChanges(),
 ): 'changes' | 'recording' | 'draft' | 'saving' | 'practice' | null {
-  if (isDirty(s) && s.text.trim() !== BLANK.trim()) return 'changes';
+  if (isDirty(s) && !isBlankSong(s.text)) return 'changes';
   // (A recording's notes go into the song only when it stops.)
   if (s.recording) return 'recording';
   if (drafts.size || (s.fillLyricsOpen && s.fillDraft.trim())) return 'draft';

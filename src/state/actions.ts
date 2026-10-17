@@ -6,7 +6,7 @@ import { splitHeader } from '../core/htab/parser';
 import { keptMessage, replaceLines, type SpliceReport } from '../core/edit/splice';
 import { keyUsesFlats } from '../core/pitch';
 import { getHarmonica, specId, type HarmonicaSpec } from '../core/instruments';
-import { BLANK } from '../demo/songs';
+import { BLANK, isBlankSong } from '../demo/songs';
 import { isChordSheet, octaveOptions } from '../core/convert';
 import type { Imported } from '../core/formats';
 import { FORMAT_NAMES, IMPORT_ACCEPT, type ExportKind } from '../core/formats/catalog';
@@ -120,7 +120,7 @@ export function confirmDiscard(): boolean {
   // A recording in progress is written into the current tab first, so the question covers it.
   finishRecording();
   const s = useApp.getState();
-  if (!isDirty(s) || s.text.trim() === BLANK.trim()) return true;
+  if (!isDirty(s) || isBlankSong(s.text)) return true;
   return window.confirm('Your current tab has unsaved changes. Discard them?');
 }
 

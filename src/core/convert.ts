@@ -528,7 +528,8 @@ export function chordSheetToTab(doc: TabDoc, harp: Harmonica, pattern: StrumPatt
       stats.cost += found.cost;
       if (found.sounds.length === 1) stats.reducedChords++;
       const info = parseChord(e.chord);
-      if (info && !thin.has(e.chord) && missingTones(harp, info, found.sounds).some((m) => m.strong)) thin.add(e.chord);
+      // (Played as another chord, in full: not counted as missing anything.)
+      if (info && !voicings[e.chord] && !thin.has(e.chord) && missingTones(harp, info, found.sounds).some((m) => m.strong)) thin.add(e.chord);
       if (found.sounds.some((s) => s.slide)) stats.slides++;
       patternBeats(e.beats, pattern).forEach((beats, k) => {
         events.push({

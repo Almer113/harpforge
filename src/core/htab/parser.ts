@@ -123,6 +123,10 @@ function readMeta(header: { key: string; value: string }[]): TabMeta {
     if (field === 'tempo') {
       const n = parseFloat(value);
       if (n > 0) meta.tempo = Math.min(400, Math.max(20, n));
+    } else if (field === 'time') {
+      // (Only a time signature that can be played: "4/0" or "abc" leaves 4/4.)
+      const t = /^\s*(\d{1,2})\s*\/\s*(1|2|4|8|16|32)\s*$/.exec(value);
+      if (t && +t[1] > 0) meta.time = `${+t[1]}/${t[2]}`;
     } else if (field === 'harmonica') {
       meta.harmonica = value.toLowerCase();
     } else if (field === 'harpKey') {

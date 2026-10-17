@@ -10,7 +10,7 @@ import { isChordLine, looksLikeChordPro, looksLikeChordSheet, parseChordPro, par
 import { countTabLines, looksLikeGuitarTab, parseGuitarTab } from './guitartab';
 import { looksLikeJianpu, parseJianpu, writeJianpu } from './jianpu';
 import type { Imported } from './common';
-import { slugify } from './common';
+import { sanitizeImported, slugify } from './common';
 import { parseMidi, writeMidi, type MidiExportOptions } from './midi';
 import { parseMusicXml, unzipMxl, writeMusicXml } from './musicxml';
 import { isGp345, parseGp345 } from './gp345';
@@ -20,7 +20,7 @@ import { unzipSync } from 'fflate';
 
 export type { Imported } from './common';
 export * from './catalog';
-import { EXPORTS, type ExportKind, type ImportKind } from './catalog';
+import { EXPORTS, FORMAT_NAMES, type ExportKind, type ImportKind } from './catalog';
 
 /** Normalises pasted text: line endings, non-breaking/odd spaces, zero-width characters. */
 export function normalizeText(text: string): string {
@@ -34,14 +34,21 @@ export function normalizeText(text: string): string {
 /** Guesses the format of text content. */
 export function sniffText(text: string): ImportKind {
   const t = normalizeText(text).trimStart();
-  if (/^X:\s*\d*/m.test(t) && /^K:/m.test(t)) return 'abc';
+  // (A tab with its header is a tab, whatever its words say — "1=C" in a lyric, say.)
+  if (t.startsWith('---')) return 'htab';
+  // ABC: a tune number ("X:1") and, after it, its key — not any line that starts "X:".
+  const x = /^X:[ \t]*\d+[ \t]*$/m.exec(t);
+  if (x && /^K:[ \t]*\S/m.test(t.slice(x.index))) return 'abc';
   if (/<museScore[\s>]/.test(t.slice(0, 2000))) return 'mscx';
   if (t.startsWith('<?xml') || /<score-partwise|<score-timewise/.test(t.slice(0, 2000))) return 'musicxml';
   if (looksLikeJianpu(t)) return 'jianpu';
-  if (t.startsWith('---')) return 'htab';
   if (looksLikeChordPro(t)) return 'chordpro';
   const tabLines = countTabLines(t);
   const chordLines = t.split('\n').filter((l) => isChordLine(l)).length;
+  // Notes by name with bar lines ("C4 E4 G4 | A4~ |"): a tab, not chords.
+  const NOTE = /^\(?[A-G][#b]?-?\d[~]*\)?$/;
+  const noteLines = t.split('\n').filter((l) => l.includes('|') && l.split(/[\s|]+/).filter((w) => NOTE.test(w)).length >= 2).length;
+  if (noteLines && noteLines >= chordLines) return 'htab';
   if (looksLikeGuitarTab(t) && tabLines >= chordLines) return 'guitartab';
   if (looksLikeChordSheet(t)) return 'chordsheet';
   return 'htab';
@@ -89,7 +96,10 @@ export function decodeText(bytes: Uint8Array): string {
 }
 
 export function importText(raw: string, kind: ImportKind = sniffText(raw)): Imported {
-  const text = normalizeText(raw);
+  return sanitizeImported(readText(normalizeText(raw), kind));
+}
+
+function readText(text: string, kind: ImportKind): Imported {
   switch (kind) {
     case 'abc':
       return parseAbc(text);
@@ -113,12 +123,25 @@ export function importText(raw: string, kind: ImportKind = sniffText(raw)): Impo
 }
 
 export function importBytes(filename: string, bytes: Uint8Array): Imported & { kind: ImportKind } {
+  return sanitizeImported(readBytes(filename, bytes));
+}
+
+function readBytes(filename: string, bytes: Uint8Array): Imported & { kind: ImportKind } {
   if (/\.gpx$/i.test(filename)) throw new Error('Guitar Pro 6 files (.gpx) aren’t read: save the song from Guitar Pro 7 or 8 as .gp, or export it as MusicXML.');
   const kind = detectKind(filename, bytes);
   if (kind === 'midi') return { ...parseMidi(bytes), kind };
-  if (kind === 'mxl') return { ...parseMusicXml(unzipMxl(bytes)), kind };
-  if (kind === 'mscz') return { ...parseMuseScore(unzipMscz(bytes)), kind };
-  if (kind === 'gp') return { ...parseGuitarPro(unzipGp(bytes)), kind };
+  // (A zipped score that isn't a zip, or is cut short: said plainly.)
+  const unzip = (read: (b: Uint8Array) => string) => {
+    try {
+      return read(bytes);
+    } catch (e) {
+      if (/zip|EOF|invalid|unexpected/i.test(String((e as Error)?.message)) && !/No score/.test(String((e as Error)?.message))) throw new Error(`This ${FORMAT_NAMES[kind]} file is damaged or isn’t one (it should be a zip archive).`, { cause: e });
+      throw e;
+    }
+  };
+  if (kind === 'mxl') return { ...parseMusicXml(unzip(unzipMxl)), kind };
+  if (kind === 'mscz') return { ...parseMuseScore(unzip(unzipMscz)), kind };
+  if (kind === 'gp') return { ...parseGuitarPro(unzip(unzipGp)), kind };
   if (kind === 'gp3to5') return { ...parseGp345(bytes), kind };
   if (kind === 'pdf') throw new Error('PDFs are read asynchronously — use importPdf().');
   return { ...importText(decodeText(bytes), kind), kind };

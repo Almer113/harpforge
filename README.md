@@ -149,7 +149,7 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `src/core/convert.ts` | Tab ↔ notes, re-tabbing, chord sheets, harmonica suggestions |
 | `src/core/chords.ts`, `backing.ts` | Chord symbols, the harmonica chord finder, backing chords |
 | `src/core/playAlong.ts`, `report.ts`, `passage.ts` | Play-along marking, the practice report, passages |
-| `src/core/formats` | ABC, ChordPro / chord sheets, guitar tab, MusicXML, MIDI, numbered notation, plain text |
+| `src/core/formats` | ABC, ChordPro / chord sheets, guitar tab, MusicXML, MIDI, numbered notation, plain text; MuseScore (`musescore.ts`) and Guitar Pro (`guitarpro.ts` 7–8, `gp345.ts` 3–5, `gpsong.ts` shared) imports |
 | `src/core/formats/pdf*.ts` | PDF text layer / OCR → positioned words → column-aligned chord sheet |
 | `src/core/edit` | The visual editor's measure model, lyrics typing, clipboard, section tools, find and replace |
 | `src/audio/engine.ts` | What the app calls for sound; loads `engineImpl.ts` in the background |

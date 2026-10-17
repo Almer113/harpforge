@@ -275,6 +275,11 @@
 .ct-note.selected .ct-bar { stroke: var(--text); stroke-width: 2.5; }
 .ct-note.active .ct-bar { fill: color-mix(in srgb, var(--brass-2) 45%, transparent); stroke: var(--brass-2); stroke-width: 2.5; }
 .ct-note.active text { fill: var(--text); }
+.ct-rest rect { fill: transparent; }
+.ct-rest.in-passage rect { fill: color-mix(in srgb, var(--hilite) 10%, transparent); }
+.ct-rest.in-loop rect { stroke: var(--border-2); stroke-dasharray: 4 2; }
+.ct-rest.selected rect { stroke: var(--text); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.ct-rest.active rect { fill: color-mix(in srgb, var(--brass-2) 14%, transparent); }
 .ct-note.mark-hit .ct-bar { stroke: var(--ok); stroke-width: 2.5; }
 .ct-note:is(.mark-early, .mark-late) .ct-bar { stroke: var(--warn); stroke-width: 2.5; }
 .ct-note.mark-missed .ct-bar { stroke: var(--danger); stroke-width: 2.5; stroke-dasharray: 3 2; }

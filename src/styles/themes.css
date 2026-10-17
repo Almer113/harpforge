@@ -207,5 +207,11 @@
     --ink-strong: #1a1714; --hilite: #1a1714; --contrast: #000;
     --danger: #b3352a; --ok: #287035; --warn: #8a6d00; --focus: #1a1714; --shadow: #000;
     --blow-soft: color-mix(in srgb, var(--blow) 16%, transparent); --draw-soft: color-mix(in srgb, var(--draw) 16%, transparent);
+    /* (And everything else a theme sets, so nothing dark is left on the paper.) */
+    --bg-glow: #fff; --menu: #fff; --toast: #fff; --sunk: #fff; --sunk-2: #fff; --lane-now: #f1ece5;
+    --dock: #fff; --dock-2: #f6f2ec; --backdrop: transparent; --hover: #f1ece5;
+    --hover-edge: #a99e90; --field-hover-edge: #a99e90; --slim-edge: #a99e90; --grid: #3d2f20;
+    --hl-value: #7a4b0c; --hl-lyric: #4f463c; --hl-group: #6b3fa0;
+    --on-brass: #fff; --on-blow: #fff; --on-draw: #fff; --on-danger: #fff; --on-danger-soft: #1a1714;
   }
 }

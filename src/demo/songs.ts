@@ -1,5 +1,8 @@
 // Built-in demo tabs (traditional / public-domain melodies and original riffs).
 
+import { parseHtab, splitHeader } from '../core/htab/parser';
+import { hasWords } from '../core/verses';
+
 export const TWINKLE = `---
 title: Twinkle, Twinkle, Little Star
 artist: Traditional
@@ -208,3 +211,18 @@ tempo: 100
 time: 4/4
 ---
 `;
+
+/**
+ * Whether a song holds nothing anyone wrote: no notes, words, chords, sections or comments,
+ * and no title or artist of its own. (Its harmonica, key, tempo and time are only settings:
+ * a new tab emptied again, or with its harp key changed, has nothing to lose.)
+ */
+export function isBlankSong(text: string): boolean {
+  if (text.trim() === BLANK.trim()) return true;
+  const { doc, issues } = parseHtab(text);
+  if (issues.some((i) => i.severity === 'error')) return false;
+  // (Comments, and words with no note to go on, aren't in the document: looked for in the text.)
+  const body = text.slice(splitHeader(text).bodyStart);
+  if (/^\s*#/m.test(body) || /^\s*w\s*:\s*\S/im.test(body) || doc.comments?.length || (doc.meta.title && doc.meta.title !== 'Untitled') || doc.meta.artist) return false;
+  return doc.lines.every((l) => l.section === undefined && l.events.every((e) => e.kind === 'bar' || (e.kind === 'rest' && !e.chord && !hasWords(e))));
+}

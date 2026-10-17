@@ -248,7 +248,8 @@ function readStaff(score: Element, staff: Element, voiceNo: number, top: Element
             for (const [v, left] of holding) {
               // (Held over each note starting before the syllable's end — or right at it: the last note held.)
               if (left > -1e-6) {
-                setHeld(ev, v, true);
+                // (A tied note goes on with the one before it: nothing to hold on it.)
+                if (!ev.tied) setHeld(ev, v, true);
                 held.add(v);
                 holding.set(v, left - beats);
               } else holding.delete(v);

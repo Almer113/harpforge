@@ -23,7 +23,8 @@ export function openFind() {
   const song = fromDoc(getParsed(st.text).doc);
   const sel = st.ve.selection;
   const at = sel[0]?.m ?? st.ve.caret.m;
-  const r = sectionRanges(song)[sectionAt(song, Math.min(at, song.measures.length - 1))];
+  const k = sectionAt(song, Math.min(at, song.measures.length - 1));
+  const r = sectionRanges(song)[k];
   // One note selected (all of it, if it's tied over): its hole to start with.
   const chain = sel.length ? chainAt(song, sel[0]) : [];
   const single = sel.length > 0 && (sel.length === 1 || (chain.length === sel.length && sel.every((p) => chain.some((c) => samePos(c, p)))));
@@ -31,7 +32,7 @@ export function openFind() {
   const query = one?.sounds.length === 1 && one.sounds[0].type === 'hole' ? holeSoundText(one.sounds[0]) : lastQuery;
   const several = sel.length > 1 && !single;
   st.setVe({
-    find: { query, by: lastBy, chords: lastChords, scope: several ? 'selection' : 'song', section: [r.from, r.to], notes: several ? sel : [] },
+    find: { query, by: lastBy, chords: lastChords, scope: several ? 'selection' : 'song', section: [r.from, r.to], sectionNo: k, sectionName: r.name, notes: several ? sel : [] },
   });
 }
 // (What was asked last, for the next time the bar opens.)
@@ -43,9 +44,18 @@ export function closeFind() {
   useApp.getState().setVe({ find: undefined });
 }
 
-/** The section the bar looks in: the one holding the bar it started on (bars added or taken away since included). */
+/**
+ * The section the bar looks in: the one it started in, found by its name (and, of parts with
+ * the same name, its place) — bars added before it, or the parts moved, don't change which.
+ */
 function sectionOf(song: Song, f: FindState) {
-  return sectionRanges(song)[sectionAt(song, Math.min(f.section[0], song.measures.length - 1))];
+  const ranges = sectionRanges(song);
+  if (f.sectionNo !== undefined) {
+    const same = ranges.map((r, k) => ({ r, k })).filter((x) => x.r.name === f.sectionName);
+    const hit = same.find((x) => x.k === f.sectionNo) ?? (same.length === 1 ? same[0] : undefined);
+    if (hit) return hit.r;
+  }
+  return ranges[sectionAt(song, Math.min(f.section[0], song.measures.length - 1))];
 }
 const scopeOf = (song: Song, f: FindState): FindScope => {
   if (f.scope === 'section') {

@@ -85,6 +85,9 @@ export interface FindState {
   scope: 'song' | 'section' | 'selection';
   /** The section's bars (from, to) and the selected notes, as they were when the bar opened. */
   section: [number, number];
+  /** Which section that is (its place among the parts, and its name): found again after edits move its bars. */
+  sectionNo?: number;
+  sectionName?: string;
   notes: import('../core/edit/model').Pos[];
 }
 
@@ -361,9 +364,9 @@ export interface AppState {
   setPage(p: Page): void;
   /** The page before this one (where the print view's Back goes). */
   prevPage: Page;
-  /** Changes the tab text and records an undo step ('typing' groups quick keystrokes). */
+  /** Changes the tab text and records an undo step ('typing' groups quick keystrokes; a name typed for a 'placeholder' joins its step). */
   /** `kind`: 'typing…' edits of the same kind in quick succession make one undo step (typing the title, then the artist, makes two). */
-  setText(t: string, opts?: { kind?: 'typing' | `typing:${string}` | 'edit' }): void;
+  setText(t: string, opts?: { kind?: 'typing' | `typing:${string}` | 'edit' | 'placeholder' | 'naming' }): void;
   undo(): void;
   redo(): void;
   history: { past: HistoryEntry[]; future: HistoryEntry[]; lastKind: string; lastAt: number; groupAt: number };
@@ -639,7 +642,7 @@ export const useApp = create<AppState>((set) => ({
       const now = Date.now();
       const h = s.history;
       // Quick keystrokes make one undo step, but not forever: a step covers at most a few seconds.
-      const merge = kind.startsWith('typing') && h.lastKind === kind && now - h.lastAt < 1200 && now - h.groupAt < 5000;
+      const merge = (kind.startsWith('typing') && h.lastKind === kind && now - h.lastAt < 1200 && now - h.groupAt < 5000) || (kind === 'naming' && h.lastKind === 'placeholder');
       return {
         text,
         selectedEvent: null,

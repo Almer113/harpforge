@@ -81,6 +81,12 @@ export function shownLyric(song: Song, pos: Pos, verse: number): { text: string;
 export function setLyric(song: Song, pos: Pos, verse: number, text: string | undefined): Song {
   const it = findItem(song, pos);
   if (!it) return song;
+  // (What the lyrics line would read another way: "Oh_" a hold after it, "*" no words, "~"
+  // a space — written as the syllable itself, so it reads back as typed.)
+  if (text !== undefined && text !== HOLD) {
+    text = text.replace(/~/g, ' ').replace(/(?<=[^_])_+$/, '').trim();
+    if (!text || text === '*' || /^_+$/.test(text)) text = undefined;
+  }
   const copy = { lyric: it.lyric, verses: it.verses, holds: it.holds };
   if (text === HOLD) setHeld(copy, verse, true);
   else {

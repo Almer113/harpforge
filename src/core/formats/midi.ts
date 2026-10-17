@@ -55,7 +55,8 @@ class Reader {
     return this.pos >= this.data.length;
   }
   u8() {
-    return this.data[this.pos++];
+    // (Past the end — a file cut short — reads as 0, and the reading stops at the end.)
+    return this.data[this.pos++] ?? 0;
   }
   u16() {
     return (this.u8() << 8) | this.u8();
@@ -97,6 +98,7 @@ export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Impor
   r.u16(); // format
   const ntrks = r.u16();
   let division = r.u16();
+  if (!division) throw new Error('This MIDI file has no timing (its division is 0), so its notes can’t be placed.');
   r.pos = 8 + hlen;
   if (division & 0x8000) {
     warnings.push('SMPTE-timed MIDI: timing may be approximate.');
@@ -117,7 +119,8 @@ export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Impor
   for (let t = 0; t < ntrks && !r.eof; t++) {
     const id = r.str(4);
     const len = r.u32();
-    const end = r.pos + len;
+    // (A length past the end of the file, as a damaged one may have, stops at the end.)
+    const end = Math.min(r.pos + len, data.length);
     if (id !== 'MTrk') {
       r.pos = end;
       continue;
@@ -126,17 +129,21 @@ export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Impor
     const open = new Map<number, { start: number; channel: number }[]>();
     let tick = 0;
     let status = 0;
-    while (r.pos < end) {
+    while (r.pos < end && !r.eof) {
       tick += r.varlen();
       let b = r.u8();
       if (b === 0xff) {
         const type = r.u8();
         const l = r.varlen();
         const d = r.bytes(l);
-        if (type === 0x51) tempos.push({ tick, us: (d[0] << 16) | (d[1] << 8) | d[2] });
+        if (type === 0x51) {
+          const us = (d[0] << 16) | (d[1] << 8) | d[2];
+          // (Only a tempo that can be played: 20–400 beats a minute.)
+          if (us >= 150_000 && us <= 3_000_000) tempos.push({ tick, us });
+        }
         else if (type === 0x05) lyricEvents.push({ tick, text: decodeText(d) });
         else if (type === 0x01) textEvents.push({ tick, text: decodeText(d), track: String(t) });
-        else if (type === 0x58 && timeSig === null) timeSig = `${d[0]}/${Math.pow(2, d[1])}`;
+        else if (type === 0x58 && timeSig === null && d[0] > 0 && d[0] <= 32 && d[1] <= 6) timeSig = `${d[0]}/${Math.pow(2, d[1])}`;
         else if (type === 0x59 && keySig === null) {
           const sf = (d[0] << 24) >> 24;
           keySig = keyFromSignature(sf, d[1] === 1 ? 'minor' : 'major');
@@ -199,12 +206,20 @@ export function parseMidi(data: Uint8Array, opts: { part?: string } = {}): Impor
     let mono = 0;
     for (let i = 1; i < sorted.length; i++) if (sorted[i].start >= sorted[i - 1].end - division / 8) mono++;
     const avg = sorted.reduce((a, n) => a + n.midi, 0) / sorted.length;
-    const named = /harmonica|harp|melody|lead|vocal|voice|solo|tune/i.test(tr.name) ? 1000 : /bass|accomp|drum|perc|chord|rhythm|pad/i.test(tr.name) ? -500 : 0;
+    const named = /harmonica|harp|melody|lead|vocal|voice|solo|tune/i.test(tr.name) ? 1000 : /bass|accomp|drum|perc|chord|rhythm|pad|backing/i.test(tr.name) ? -500 : 0;
     return named + mono + avg / 10;
   };
   candidates.sort((a, b) => score(b) - score(a));
   const chosen = candidates.find((c) => c.id === opts.part) ?? candidates[0];
   if (candidates.length > 1) warnings.push(`Imported “${chosen.label}” as the melody (${candidates.length} parts with notes: pick another under Part).`);
+  else if (chosen.name.startsWith('Backing (')) warnings.push('This file has only HarpForge’s backing chords (its song had no notes): they came in as the tune.');
+  // (A song can't go on for ever: notes after a very long silence — a damaged file — are left out.)
+  const MAX_BEATS = 8000;
+  const far = chosen.notes.filter((n) => n.start / division > MAX_BEATS).length;
+  if (far) {
+    chosen.notes = chosen.notes.filter((n) => n.start / division <= MAX_BEATS);
+    warnings.push(`${far} note${far === 1 ? '' : 's'} more than ${MAX_BEATS} beats in were left out (the file may be damaged).`);
+  }
 
   // One tempo: the one the song is played at longest (from each change to the next, or the end).
   // (120 until the first tempo given; one given after the last note isn't played at.)

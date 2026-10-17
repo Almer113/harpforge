@@ -185,7 +185,10 @@ export function sectionRepeat(song: Song, k: number): number | null {
   if (!r) return null;
   const first = song.measures[r.from];
   const last = song.measures[r.to - 1];
-  return first.startBar === 'repeat-start' && last.endBar === 'repeat-end' ? (last.endTimes ?? 2) : null;
+  // (One repeat, start to end: not two in a row, nor one with endings.)
+  const inside = song.measures.slice(r.from, r.to);
+  const one = inside.every((m, i) => (i === 0 || m.startBar !== 'repeat-start') && (i === inside.length - 1 || m.endBar !== 'repeat-end') && !m.ending?.length);
+  return one && first.startBar === 'repeat-start' && last.endBar === 'repeat-end' ? (last.endTimes ?? 2) : null;
 }
 
 /**
@@ -269,7 +272,9 @@ export function sectionPositions(song: Song, k: number): { m: number; start: num
 
 /** Two songs with the same music (bars, notes, words, bar lines), wherever their text came from. */
 export function sameMusic(a: Song, b: Song): boolean {
-  const plain = (s: Song) => JSON.stringify(s.measures.map((m) => tidy({ ...cloneMeasure(m), src: undefined })));
+  // (Keys in one order: a measure an edit gave a key to reads the same as one parsed with it.)
+  const sorted = (_: string, v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, (v as Record<string, unknown>)[k]])) : v);
+  const plain = (s: Song) => JSON.stringify(s.measures.map((m) => tidy({ ...cloneMeasure(m), src: undefined })), sorted);
   return a.cap === b.cap && plain(a) === plain(b);
 }
 

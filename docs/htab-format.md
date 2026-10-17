@@ -102,7 +102,7 @@ A tie takes its sound from the note it continues, plays as one unbroken note,
 gets no lyric syllable, and is skipped in practice mode. A tie after a rest just
 lengthens the rest. Imports and exports keep ties: ABC (`-`), MusicXML (`<tie>`),
 MIDI (one long note, split at bar lines on import) and numbered notation
-(a dash after the bar line: `5 - | - 3`).
+(a dash after the bar line: `5 - | - 3`); MuseScore and Guitar Pro imports keep them too.
 
 Rhythm is optional: with no `~` or `{}`, every note is one beat, so tabs copied
 from the internet play back evenly.

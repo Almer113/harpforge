@@ -13,6 +13,7 @@ import {
   moveSection,
   newSectionAfter,
   removeHeading,
+  sameMusic,
   renameSection,
   repeatSection,
   sectionAt,
@@ -31,11 +32,16 @@ import { Popover } from '../Popover';
 const songNow = (): Song => fromDoc(getParsed(useApp.getState().text).doc);
 
 /** Writes a section change: the text's own blocks of lines when they fit, else as any edit. */
-function commit(edit: SectionEdit | Song, caretAt?: number) {
+function commit(edit: SectionEdit | Song, caretAt?: number, kind: 'edit' | 'placeholder' | 'naming' = 'edit') {
   const e = 'song' in edit ? edit : { song: edit };
   const st = useApp.getState();
   const text = sectionText(st.text, e) ?? songText(e.song);
-  st.setText(text, { kind: 'edit' });
+  // (Written as any edit: checked it reads back as the change, else the tab is left alone.)
+  if (!sameMusic(fromDoc(getParsed(text).doc), e.song)) {
+    st.notify('That change couldn’t be written without upsetting the rest of the tab, so nothing was changed.');
+    return st.text;
+  }
+  st.setText(text, { kind });
   if (caretAt !== undefined) {
     const m = Math.max(0, Math.min(caretAt, e.song.measures.length - 1));
     st.setVe({ selection: [], anchor: undefined, caret: { m, start: 0 }, measure: m });
@@ -89,7 +95,7 @@ function actions(song: Song, k: number, sel: Pos[]): { items: Action[]; repeat: 
   const items: Action[] = [];
   if (named) items.push({ name: 'Rename…', run: () => useApp.getState().setVe({ naming: r.from }) });
   else items.push({ name: 'Name this part…', hint: 'The bars before the first heading: a heading makes them a section like the others', run: () => {
-    commit(renameSection(songNow(), k, 'Intro'));
+    commit(renameSection(songNow(), k, 'Intro'), undefined, 'placeholder');
     useApp.getState().setVe({ naming: r.from });
   } });
   if (named) {
@@ -117,14 +123,14 @@ function actions(song: Song, k: number, sel: Pos[]): { items: Action[]; repeat: 
     );
   }
   items.push({ name: '+ New section after it', run: () => {
-    commit(newSectionAfter(songNow(), k, 'New section'), r.to);
+    commit(newSectionAfter(songNow(), k, 'New section'), r.to, 'placeholder');
     useApp.getState().setVe({ naming: r.to });
   } });
   if (sel.length) {
     const from = Math.min(...sel.map((p) => p.m));
     const to = Math.max(...sel.map((p) => p.m));
     items.push({ name: 'Make a section from the selection…', hint: `Bars ${from + 1}${to > from ? `–${to + 1}` : ''} under a heading of their own`, run: () => {
-      commit(makeSection(songNow(), from, to, 'New section'), from);
+      commit(makeSection(songNow(), from, to, 'New section'), from, 'placeholder');
       useApp.getState().setVe({ naming: from });
     } });
   }
@@ -228,10 +234,14 @@ function NameBox({ m, name }: { m: number; name: string }) {
     finished.current = true;
     useApp.getState().setVe({ naming: undefined });
     const v = value.trim();
+    // (A name typed for a new heading is one undo step with it; Esc takes the heading away again.)
+    const st = useApp.getState();
     if (keep && v && v !== name) {
       const song = songNow();
-      commit(renameSection(song, sectionAt(song, m), v));
-    }
+      commit(renameSection(song, sectionAt(song, m), v), undefined, 'naming');
+    } else if (!keep && st.history.lastKind === 'placeholder') st.undo();
+    // (Its name kept as it was: the step is done — a rename later is a step of its own.)
+    else if (st.history.lastKind === 'placeholder') useApp.setState((s) => ({ history: { ...s.history, lastKind: 'edit' } }));
   };
   return (
     <input
