@@ -142,7 +142,7 @@ describe('working copies', () => {
   it('an account’s tabs aren’t this browser’s to recover (they’re on the server)', () => {
     const store = memory();
     writeWorking(store, 'a', { text: 'x', docId: 'd1', savedText: 'mine', owner: 'browser' }, 1000);
-    writeWorking(store, 'b', { text: 'y', docId: 'd2', savedText: 'theirs', owner: 'account:almer' }, 2000);
+    writeWorking(store, 'b', { text: 'y', docId: 'd2', savedText: 'theirs', owner: 'account:ayu' }, 2000);
     expect(savedCopies(store).map((c) => c.docId)).toEqual(['d1']);
   });
 

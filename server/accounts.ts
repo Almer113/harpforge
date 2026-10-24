@@ -46,7 +46,7 @@ export class UserError extends Error {
 
 // (Names Windows won't have as a folder.)
 
-/** A name as shown ("Almer") and its key ("almer"), or why it can't be used. */
+/** A name as shown ("Ayu") and its key ("ayu"), or why it can't be used. */
 export function checkName(raw: unknown): { name: string; key: string } {
   const name = typeof raw === 'string' ? raw.normalize('NFC').trim().replace(/\s+/g, ' ') : '';
   if (name.length < 2 || name.length > 32) throw new UserError(400, 'A name is 2 to 32 characters.');

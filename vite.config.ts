@@ -33,6 +33,9 @@ function harpforgeApi(): Plugin {
 }
 
 export default defineConfig({
+  // Where the app is served from: "/" on the HarpForge server, "/harpforge/" on GitHub Pages
+  // (set by .github/workflows/pages.yml).
+  base: process.env.HARPFORGE_BASE || '/',
   plugins: [react(), harpforgeApi()],
   server: {
     // (Accounts and songs: not files Vite may hand out by any path, nor watch.)
@@ -41,5 +44,8 @@ export default defineConfig({
   },
   test: {
     include: ['src/**/*.test.{ts,tsx}', 'server/**/*.test.ts'],
+    // (Tests that talk to a real server, or draw a long song, can take a few seconds on a
+    // busy machine or a CI runner: room for that, short of a test that hangs.)
+    testTimeout: 20_000,
   },
 } as any);

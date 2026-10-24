@@ -133,8 +133,10 @@ export async function withLock<T>(dir: string, fn: () => Promise<T>): Promise<T>
       return await fn();
     } finally {
       clearInterval(beat);
-      const owner = await readFile(path.join(lock, 'owner'), 'utf8').catch(() => null);
-      if (owner === token) await rm(lock, { recursive: true, force: true }).catch(() => undefined);
+      // (Windows may hold a just-written file a moment — a virus scan: asked again, or the lock
+      // would stay behind and the next change wait 15 s for it to go stale.)
+      const owner = await readText(path.join(lock, 'owner')).catch(() => null);
+      if (owner === token) await removeDir(lock);
     }
   });
   chains.set(
@@ -142,6 +144,19 @@ export async function withLock<T>(dir: string, fn: () => Promise<T>): Promise<T>
     run.catch(() => undefined),
   );
   return run;
+}
+
+/** Removes a folder and what's in it. (Windows may hold a file in it a moment: tried again.) */
+async function removeDir(dir: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await rm(dir, { recursive: true, force: true });
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (attempt >= 8 || (code !== 'EBUSY' && code !== 'EPERM' && code !== 'EACCES' && code !== 'ENOTEMPTY')) return;
+      await sleep(25 * (attempt + 1));
+    }
+  }
 }
 
 /** A file's text; null only if it isn't there. (Windows may hold a file a moment: asked again.) */

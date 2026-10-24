@@ -1,0 +1,51 @@
+# The web version on GitHub Pages: on every push to main, check the code (types, lint,
+# tests), build the app for https://almer113.github.io/harpforge/ and publish it.
+# (Turned on once in the repo: Settings → Pages → Source: GitHub Actions.)
+name: Publish the web version
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One publish at a time; a newer push waits rather than cutting one short.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Check (types, lint, tests)
+        run: npm run typecheck && npm run lint && npm test
+      - name: Build the web version
+        run: npx vite build
+        env:
+          HARPFORGE_BASE: /harpforge/
+          VITE_HARPFORGE_WEB: '1'
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

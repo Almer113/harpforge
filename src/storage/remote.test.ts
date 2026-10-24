@@ -16,8 +16,8 @@ let base: string;
 let cookie: string;
 
 const tab = (title: string, body = '4 5 6 |') => `---\ntitle: ${title}\n---\n${body}\n`;
-const file = (p: string) => fs.readFile(`${dir}/users/almer/${p}`, 'utf8');
-const ls = (p: string) => fs.readdir(`${dir}/users/almer/${p}`).catch(() => [] as string[]);
+const file = (p: string) => fs.readFile(`${dir}/users/ayu/${p}`, 'utf8');
+const ls = (p: string) => fs.readdir(`${dir}/users/ayu/${p}`).catch(() => [] as string[]);
 
 beforeAll(async () => {
   fs = await load('node:fs/promises');
@@ -30,7 +30,7 @@ beforeAll(async () => {
   await new Promise<void>((r) => s.listen(0, '127.0.0.1', r));
   server = s;
   base = `http://127.0.0.1:${s.address().port}`;
-  const signup = await fetch(`${base}/api/account/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Almer', password: 'harmonica' }) });
+  const signup = await fetch(`${base}/api/account/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Ayu', password: 'harmonica' }) });
   cookie = /hf_session=[^;]+/.exec(signup.headers.get('set-cookie') ?? '')![0];
   lib.setLibraryBackend(accountBackend({ base, headers: { Cookie: cookie } }));
 });
@@ -128,7 +128,7 @@ describe('an account’s library', () => {
     await expect(nobody.tabs.all()).rejects.toThrow(/signed out/);
     const evil = await fetch(`${base}/api/library/tabs/x`, { method: 'DELETE', headers: { Cookie: cookie, Origin: 'http://evil.example' } });
     expect(evil.status).toBe(403);
-    const sneaky = await fetch(`${base}/api/library/versions?tab=..%2F..%2Faccounts%2Falmer`, { headers: { Cookie: cookie } });
+    const sneaky = await fetch(`${base}/api/library/versions?tab=..%2F..%2Faccounts%2Fayu`, { headers: { Cookie: cookie } });
     expect(sneaky.status).toBe(400);
   });
 });

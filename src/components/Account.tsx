@@ -4,6 +4,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { bringSongs, continueAsGuest, createAccount, declineSongs, offerSongs, postponeSongs, signInAs, signOutNow, startAccount } from '../account/session';
+import { REPO_URL, WEB_ONLY } from '../account/web';
 import { useApp } from '../state/store';
 import { setTheme, THEME_NAMES, useSystemTheme, useThemeChoice, type ThemeChoice } from '../state/theme';
 import { Dialog } from './Dialog';
@@ -122,8 +123,15 @@ export function AccountMenu() {
   if (account.status === 'checking') return null;
   const signedIn = account.status === 'signed-in';
   const label = signedIn ? account.name! : account.status === 'signed-out' ? `${account.name} (signed out)` : account.status === 'offline' ? 'Guest (offline)' : 'Guest';
-  const items =
-    account.status === 'offline'
+  const items = WEB_ONLY
+    ? [
+        {
+          label: 'About this web version…',
+          hint: 'Your songs are kept in this browser. Accounts — one library for all your devices — come with running HarpForge on your own computer: see how on GitHub.',
+          onClick: () => void window.open(REPO_URL, '_blank', 'noopener'),
+        },
+      ]
+    : account.status === 'offline'
       ? [
           {
             label: 'Try again',

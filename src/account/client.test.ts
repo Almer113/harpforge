@@ -8,8 +8,8 @@ afterEach(() => vi.unstubAllGlobals());
 const answer = (status: number, body: unknown) => vi.fn(async () => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status }));
 
 it('who’s signed in: the account, or no one', async () => {
-  vi.stubGlobal('fetch', answer(200, { user: { name: 'Almer' } }));
-  expect(await currentAccount()).toEqual({ ok: true, user: { name: 'Almer' } });
+  vi.stubGlobal('fetch', answer(200, { user: { name: 'Ayu' } }));
+  expect(await currentAccount()).toEqual({ ok: true, user: { name: 'Ayu' } });
   vi.stubGlobal('fetch', answer(200, { user: null }));
   expect(await currentAccount()).toEqual({ ok: true, user: null });
 });

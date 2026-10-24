@@ -51,17 +51,17 @@ function browser() {
 describe('signing up', () => {
   it('makes the account, signed in at once; the password is kept only as a hash', async () => {
     const b = browser();
-    const r = await b.call('/api/account/signup', { name: '  Almer  Dansa ', password: 'harmonica1' });
+    const r = await b.call('/api/account/signup', { name: '  Ayu  Lestari ', password: 'harmonica1' });
     expect(r.status).toBe(201);
-    expect(r.body).toEqual({ user: { name: 'Almer Dansa' } });
+    expect(r.body).toEqual({ user: { name: 'Ayu Lestari' } });
     expect(r.cookie).toMatch(/HttpOnly/);
     expect(r.cookie).toMatch(/SameSite=Lax/);
     expect(r.cookie).toMatch(/Max-Age=2592000/);
-    expect((await b.call('/api/account')).body).toEqual({ user: { name: 'Almer Dansa' } });
-    const file = await readFile(path.join(dir, 'accounts', 'almer-dansa.json'), 'utf8');
+    expect((await b.call('/api/account')).body).toEqual({ user: { name: 'Ayu Lestari' } });
+    const file = await readFile(path.join(dir, 'accounts', 'ayu-lestari.json'), 'utf8');
     expect(file).not.toContain('harmonica1');
-    expect(JSON.parse(file)).toMatchObject({ name: 'Almer Dansa', key: 'almer-dansa' });
-    expect((await stat(path.join(dir, 'users', 'almer-dansa'))).isDirectory()).toBe(true);
+    expect(JSON.parse(file)).toMatchObject({ name: 'Ayu Lestari', key: 'ayu-lestari' });
+    expect((await stat(path.join(dir, 'users', 'ayu-lestari'))).isDirectory()).toBe(true);
     // (The session's token isn't on disk either: only its hash.)
     const sessions = await readdir(path.join(dir, 'sessions'));
     expect(sessions.some((f) => f.includes(b.token()))).toBe(false);

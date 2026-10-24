@@ -12,6 +12,7 @@ import { isDirty, ownerOf, useApp } from '../state/store';
 import { libraryChanged } from '../state/trash';
 import { accountData, bringBrowserData, browserData } from '../storage/userData';
 import { currentAccount, signIn, signOut, signUp, type AccountAnswer } from './client';
+import { WEB_ONLY } from './web';
 
 export { ownerOf };
 
@@ -68,7 +69,9 @@ export function startAccount(): Promise<void> {
   let decide!: () => void;
   libraryWaitsFor(new Promise<void>((r) => (decide = r)));
   useApp.setState({ account: { status: 'checking' } });
-  return currentAccount()
+  // (The web version has no server to ask: a guest, straight away.)
+  const asked: Promise<AccountAnswer> = WEB_ONLY ? Promise.resolve({ ok: true, user: null }) : currentAccount();
+  return asked
     .then(async (a) => {
       if (a.ok && a.user) {
         setLibraryBackend(accountBackend({ account: a.user.name }));
@@ -83,7 +86,7 @@ export function startAccount(): Promise<void> {
       // (No server answering — maybe only for now: the open song keeps its link, for when it's back.)
       if (!a.ok) return useApp.setState({ account: { status: 'offline' } });
       nowIn('browser');
-      useApp.setState({ account: { status: 'guest' }, accountGate: remembered(GUEST_KEY) ? null : 'signin' });
+      useApp.setState({ account: { status: 'guest' }, accountGate: WEB_ONLY || remembered(GUEST_KEY) ? null : 'signin' });
     })
     .finally(() => {
       decide();

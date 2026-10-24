@@ -7,6 +7,25 @@ and convert between notes and tabs for diatonic, chromatic, tremolo and octave h
 Songs live in your browser as a guest, or in your account on the computer running the
 HarpForge server, reachable from every device on your network.
 
+**Try it online:** https://almer113.github.io/harpforge/ — the web version: everything but
+accounts, with your songs kept in your browser (export them to keep a copy elsewhere).
+
+## Getting started
+
+You need [Node.js](https://nodejs.org/) **22.12 or newer** and [git](https://git-scm.com/).
+
+```bash
+git clone https://github.com/Almer113/harpforge.git
+cd harpforge
+npm install
+npm run deploy   # build it and start it: open http://localhost:5280
+```
+
+**Getting updates:** in the project folder, `git pull`, then `npm install` (in case the
+dependencies changed), `npm run undeploy` and `npm run deploy`.
+
+## Developing
+
 ```bash
 npm install      # also turns on the pre-commit check (.githooks)
 npm run dev      # http://localhost:5173
@@ -161,7 +180,7 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `src/audio/pitch.ts` | Pitch detection (YIN) for the microphone |
 | `src/live` | Keyboard, mouse, microphone and MIDI input; recording; clipboard |
 | `src/storage` | The library (`library.ts`) on two backends: this browser (`local.ts`, IndexedDB) or an account (`remote.ts`); version thinning, practice and syllable data |
-| `src/account` | Signing in and out, whose library is in use |
+| `src/account` | Signing in and out, whose library is in use; `web.ts`: the web version (no server, no accounts) |
 | `src/state` | Zustand store (incl. undo history), playback, practice, the trash, actions, the theme |
 | `src/pages`, `src/components` | UI |
 | `src/demo/songs.ts` | The demo songs (and their older versions, for updating unchanged copies) |
@@ -170,6 +189,7 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `scripts/server.mjs` | `npm run deploy` / `undeploy` / `deploy:status` |
 | `scripts/prepare-samples.py` | Turns the VCSL recordings into web-ready, looped samples |
 | `docs/htab-format.md` | The tab format (its examples are checked by a test) |
+| `.github/workflows/pages.yml` | On each push to `main`: check, then build and publish the web version to GitHub Pages (`HARPFORGE_BASE=/harpforge/`, `VITE_HARPFORGE_WEB=1`) |
 
 ## Roadmap
 
@@ -218,9 +238,14 @@ Nothing more is planned for now.
 
 **Deferred** (for later, by choice): set lists; folders and tags; a bend trainer; phone
 and tablet layouts; HTTPS for other devices (microphone and clipboard there); starting the
-server with Windows; publishing online or as an offline app; online sync.
+server with Windows; an offline (installable) app; online sync.
 
 **Decided against:** choosing a passage by dragging; the Play page's harmonica docked at
 the bottom; sampling your own harmonica; real-instrument backing samples; a per-song
 backing setting; saving a .pdf without the print dialog; replacing the text editor with
 CodeMirror; Notes-mode extras (melody-only documents, solfège, letter names).
+
+## License
+
+[MIT](LICENSE) © 2026 Almer Akbar. The harmonica samples are from the Versilian Community
+Sample Library (CC0, public domain): see [public/samples/harmonica/README.md](public/samples/harmonica/README.md).

@@ -46,7 +46,7 @@ describe('over HTTP', () => {
     server = createServer((req, res) => void api(req, res).then((h) => h || res.writeHead(404).end()));
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-    const r = await fetch(`${base}/api/account/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Almer', password: 'harmonica' }) });
+    const r = await fetch(`${base}/api/account/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Ayu', password: 'harmonica' }) });
     cookie = /hf_session=[^;]+/.exec(r.headers.get('set-cookie') ?? '')![0];
   });
   afterAll(async () => {
@@ -62,7 +62,7 @@ describe('over HTTP', () => {
     await put('practice', { s: [{ at: 1, accuracy: 80 }] });
     const second = (await (await put('practice', { s: [{ at: 2, accuracy: 90 }] })).json()) as { value: string };
     expect(JSON.parse(second.value).s.map((e: { at: number }) => e.at)).toEqual([1, 2]);
-    expect(JSON.parse(await readFile(path.join(dir, 'users', 'almer', 'practice.json'), 'utf8')).s).toHaveLength(2);
+    expect(JSON.parse(await readFile(path.join(dir, 'users', 'ayu', 'practice.json'), 'utf8')).s).toHaveLength(2);
   });
 
   it('only practice and syllables; signed in only', async () => {
@@ -93,7 +93,7 @@ describe('two tabs, one sign-in', () => {
     const ask = (account?: string) => fetch(`${base}/api/library/tabs`, { headers: { Cookie: cookie, ...(account ? { 'X-HarpForge-Account': encodeURIComponent(account) } : {}) } });
     expect((await ask('Siti Nur')).status).toBe(200);
     expect((await ask('siti nur')).status).toBe(200);
-    expect((await ask('Almer')).status).toBe(401);
+    expect((await ask('Ayu')).status).toBe(401);
     expect((await ask()).status).toBe(200);
   });
 });

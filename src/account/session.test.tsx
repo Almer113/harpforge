@@ -63,9 +63,9 @@ describe('at startup', () => {
   });
 
   it('signed in: the account’s library, no start screen', async () => {
-    signedIn = 'Almer';
+    signedIn = 'Ayu';
     await startAccount();
-    expect(s().account).toEqual({ status: 'signed-in', name: 'Almer' });
+    expect(s().account).toEqual({ status: 'signed-in', name: 'Ayu' });
     expect(s().accountGate).toBeNull();
     expect(await libraryKind()).toBe('account');
   });
@@ -84,26 +84,26 @@ describe('signing in and out', () => {
     await startAccount();
     const id = await saveTab('---\ntitle: Mine\n---\n4 |\n');
     s().loadText('---\ntitle: Mine\n---\n4 |\n', id, true);
-    const a = await signInAs('Almer', 'right-one');
+    const a = await signInAs('Ayu', 'right-one');
     expect(a.ok).toBe(true);
     expect(await libraryKind()).toBe('account');
     expect(s().docId).toBeNull();
     expect(s().savedText).toBe(s().text);
     expect(s().accountGate).toBeNull();
     // This browser has a song of yours: the offer to bring it.
-    expect(s().bringOffer).toEqual({ name: 'Almer', songs: 1, trashed: 0 });
+    expect(s().bringOffer).toEqual({ name: 'Ayu', songs: 1, trashed: 0 });
   });
 
   it('a wrong password: still a guest, the reason to show', async () => {
     await startAccount();
-    const a = await signInAs('Almer', 'nope');
+    const a = await signInAs('Ayu', 'nope');
     expect(a).toMatchObject({ ok: false, message: 'That name and password don’t match an account.' });
     expect(s().account.status).toBe('guest');
     expect(await libraryKind()).toBe('browser');
   });
 
   it('signing out: this browser’s library and the start screen; an edited open song stays, unsaved', async () => {
-    signedIn = 'Almer';
+    signedIn = 'Ayu';
     await startAccount();
     s().loadText('---\ntitle: A\n---\n4 |\n', 'remote-id', true);
     s().setText('---\ntitle: A\n---\n5 |\n');
@@ -117,14 +117,14 @@ describe('signing in and out', () => {
   });
 
   it('the session ended (the server says so): signed out, asked to sign in again; back in as the same one, the song stays linked', async () => {
-    signedIn = 'Almer';
+    signedIn = 'Ayu';
     await startAccount();
     s().loadText('---\ntitle: A\n---\n4 |\n', 'remote-id', true);
     signedIn = null;
     await expect(accountBackend().tabs.all()).rejects.toThrow(/signed out/);
-    expect(s().account).toEqual({ status: 'signed-out', name: 'Almer' });
+    expect(s().account).toEqual({ status: 'signed-out', name: 'Ayu' });
     expect(s().accountGate).toBe('signin');
-    await signInAs('Almer', 'right-one');
+    await signInAs('Ayu', 'right-one');
     expect(s().docId).toBe('remote-id');
   });
 });
@@ -154,7 +154,7 @@ describe('the start screen', () => {
     const [name, password] = [...host.querySelectorAll<HTMLInputElement>('.account-form input:not([type=checkbox])')];
     expect(name.autocomplete).toBe('username');
     expect(password.type).toBe('password');
-    await type(name, 'Almer');
+    await type(name, 'Ayu');
     await type(password, 'nope');
     await act(async () => host.querySelector<HTMLFormElement>('.account-form')!.requestSubmit());
     await act(async () => new Promise((r) => setTimeout(r, 20)));
@@ -162,7 +162,7 @@ describe('the start screen', () => {
     await type(password, 'right-one');
     await act(async () => host.querySelector<HTMLFormElement>('.account-form')!.requestSubmit());
     await act(async () => new Promise((r) => setTimeout(r, 20)));
-    expect(s().account).toEqual({ status: 'signed-in', name: 'Almer' });
+    expect(s().account).toEqual({ status: 'signed-in', name: 'Ayu' });
     expect(host.querySelector('.account-form')).toBeNull();
   });
 
@@ -177,12 +177,12 @@ describe('the start screen', () => {
 
 describe('a song left open from the other library', () => {
   it('reopened signed in, a guest’s song left open isn’t linked to the account’s library (nor the other way)', async () => {
-    signedIn = 'Almer';
+    signedIn = 'Ayu';
     useApp.setState({ libraryOwner: 'browser' });
     s().loadText('---\ntitle: G\n---\n4 |\n', 'guest-id', true);
     await startAccount();
     expect(s().docId).toBeNull();
-    expect(s().libraryOwner).toBe('account:almer');
+    expect(s().libraryOwner).toBe('account:ayu');
     // Same account again: its song stays linked.
     s().loadText('---\ntitle: A\n---\n4 |\n', 'account-id', true);
     await startAccount();
@@ -225,16 +225,16 @@ describe('the review’s cases', () => {
   });
 
   it('signing out with the server unreachable: still signed in (said so)', async () => {
-    signedIn = 'Almer';
+    signedIn = 'Ayu';
     await startAccount();
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))));
     await signOutNow();
-    expect(s().account).toEqual({ status: 'signed-in', name: 'Almer' });
+    expect(s().account).toEqual({ status: 'signed-in', name: 'Ayu' });
     expect(s().toast?.message).toMatch(/Couldn’t sign out/);
   });
 
   it('a library switch clears an Undo meant for the old one', async () => {
-    signedIn = 'Almer';
+    signedIn = 'Ayu';
     await startAccount();
     s().notify('Moved “X” to the trash', { label: 'Undo', run: () => undefined });
     await signOutNow();
@@ -244,7 +244,7 @@ describe('the review’s cases', () => {
   it('while it’s still asked whose library it is, the open song isn’t checked against this browser’s', async () => {
     const { checkOpenTab } = await import('../state/trash');
     localStorage.setItem('harpforge:deleted', JSON.stringify(['shared-id']));
-    useApp.setState({ account: { status: 'checking' }, libraryOwner: 'account:almer' });
+    useApp.setState({ account: { status: 'checking' }, libraryOwner: 'account:ayu' });
     s().loadText('---\ntitle: A\n---\n4 |\n', 'shared-id', true);
     await checkOpenTab();
     expect(s().docId).toBe('shared-id');
@@ -263,9 +263,9 @@ describe('practice and syllables per account', () => {
         return json(200, { value: JSON.stringify({ songA: [{ at: 1 }] }) });
       }),
     );
-    await data.accountData('Almer');
+    await data.accountData('Ayu');
     data.writeData('harpforge:practice-log', JSON.stringify({ songA: [{ at: 1 }] }));
-    await data.accountData('Almer');
+    await data.accountData('Ayu');
     release();
     await new Promise((r) => setTimeout(r, 10));
     expect(data.readData('harpforge:practice-log')).toBeNull();
@@ -283,7 +283,7 @@ describe('practice and syllables per account', () => {
         return json(200, url === '/api/library/data' ? { practice: null, syllables: JSON.stringify({ en: { river: 'riv-er' } }) } : { value: '{}' });
       }),
     );
-    await data.accountData('Almer');
+    await data.accountData('Ayu');
     saveSyllableFix('en', 'ev-er-y');
     expect(JSON.parse(sent[0])).toEqual({ en: { every: 'ev-er-y' } });
     data.browserData();
@@ -319,7 +319,7 @@ describe('the second review’s cases', () => {
   }
 
   it('a save made while it’s still being asked whose library it is: into the account’s, linked (no duplicate on the next)', async () => {
-    signedIn = 'Almer';
+    signedIn = 'Ayu';
     const tabs = serverWithLibrary(30);
     const { saveCurrent } = await import('../state/actions');
     useApp.setState({ libraryOwner: 'browser' });
@@ -330,14 +330,14 @@ describe('the second review’s cases', () => {
     await saved;
     expect(tabs.size).toBe(1);
     expect(s().docId).toBe([...tabs.keys()][0]);
-    expect(s().libraryOwner).toBe('account:almer');
+    expect(s().libraryOwner).toBe('account:ayu');
     s().setText('---\ntitle: Early\n---\n5 |\n');
     await saveCurrent();
     expect(tabs.size).toBe(1);
   });
 
   it('a song opened from the library is that library’s (even while the account’s server is away)', () => {
-    useApp.setState({ account: { status: 'offline' }, libraryOwner: 'account:almer' });
+    useApp.setState({ account: { status: 'offline' }, libraryOwner: 'account:ayu' });
     s().loadText('---\ntitle: B\n---\n4 |\n', 'browser-id', true);
     expect(s().libraryOwner).toBe('browser');
   });
@@ -355,13 +355,13 @@ describe('the second review’s cases', () => {
         return json(200, { value: JSON.parse(String(init!.body)).value });
       }),
     );
-    await data.accountData('Almer');
+    await data.accountData('Ayu');
     allowed = false;
     data.writeData('harpforge:practice-log', JSON.stringify({ s: [{ at: 5 }] }));
     await new Promise((r) => setTimeout(r, 10));
     expect(puts).toEqual([]);
     allowed = true;
-    await data.accountData('Almer', true);
+    await data.accountData('Ayu', true);
     await new Promise((r) => setTimeout(r, 10));
     expect(puts).toEqual([JSON.stringify({ s: [{ at: 5 }] })]);
     data.browserData();
