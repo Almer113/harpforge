@@ -10,6 +10,8 @@ HarpForge server, reachable from every device on your network.
 **Try it online:** https://almer113.github.io/harpforge/ — the web version: everything but
 accounts, with your songs kept in your browser (export them to keep a copy elsewhere).
 
+![HarpForge's Play page: the harmonica, and a song's tab with chords and lyrics](docs/images/screenshot-play.png)
+
 ## Getting started
 
 You need [Node.js](https://nodejs.org/) **22.12 or newer** and [git](https://git-scm.com/).
