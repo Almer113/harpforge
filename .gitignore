@@ -5,3 +5,6 @@ dist
 *.traineddata
 # Accounts and their libraries, the server's log (Phase 14)
 /data/
+# TypeScript's build cache, and Claude Code's settings on this computer
+*.tsbuildinfo
+/.claude/

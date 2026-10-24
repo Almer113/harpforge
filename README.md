@@ -27,6 +27,10 @@ npm run deploy:status   # running? and the addresses to open
 npm run undeploy        # stop it
 ```
 
+On Windows, the same three can be double-clicked in the project folder: **Start HarpForge.cmd**,
+**HarpForge Status.cmd** and **Stop HarpForge.cmd** (each waits for a key before closing). In
+PowerShell, where running scripts may be turned off, type `npm.cmd` in place of `npm`.
+
 The server (`server/`) serves the built app on port **5280**, on this computer
 (`http://localhost:5280`) and the local network (`http://<this computer's address>:5280`,
 printed by deploy). It keeps running after the terminal closes, until `npm run undeploy`
