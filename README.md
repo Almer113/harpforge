@@ -62,14 +62,9 @@ busy it says so and stops (another port: `HARPFORGE_PORT=5281 npm run deploy`).
 `npm run deploy -- --no-build` starts it with the build already there. After a code
 change: `npm run undeploy`, then `npm run deploy`.
 
-**The Home Server Hub** (a separate project that starts, stops and opens this PC's web
-apps) uses `hub.json` (this PC's own file, with its paths and Tailscale name: left out of
-git, like `data/`): it runs the same three commands with `node scripts/server.mjs
-deploy | undeploy | status --json` (no npm, no shell). `status --json` prints one line
+For scripts and process managers: `node scripts/server.mjs status --json` prints one line
 (`{"running":true,"ours":true,"pid":…,"since":…,"version":…}`, `{"running":false}`, or
-`"ours":false` when another program has the port); with `HUB_RUN=1`, deploy prints
-`::hub-step` lines and leaves out the hints. If `HARPFORGE_PORT` is ever changed, change
-`hub.json`'s `port` and URLs to match.
+`"ours":false` when another program has the port).
 
 - Its files are in `data/` (left out of git, never served as files):
   - `accounts/<name>.json` — each account (the password only as a scrypt hash),
@@ -220,7 +215,7 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `src/demo/songs.ts` | The demo songs (and their older versions, for updating unchanged copies) |
 | `src/styles/` | Stylesheets by area; `index.css` imports them in cascade order (keep it). Every colour is named in `themes.css` (Dark, Light, Paper); the others use the names only (a test checks) |
 | `server/` | The HarpForge server: the built app, accounts, account libraries (run by Node directly) |
-| `scripts/server.mjs`, `hub.json` | `npm run deploy` / `undeploy` / `deploy:status`; the same for the Home Server Hub (`status --json`) |
+| `scripts/server.mjs` | `npm run deploy` / `undeploy` / `deploy:status` (and `status --json`) |
 | `src/pwa`, `server/pwa.ts`, `public/manifest.webmanifest` | Installing it as an app: the service worker (kept copy, offline), the build step that writes `dist/sw.js`, the app's name and icons (`scripts/make-icons.py`) |
 | `scripts/prepare-samples.py` | Turns the VCSL recordings into web-ready, looped samples |
 | `docs/htab-format.md` | The tab format (its examples are checked by a test) |

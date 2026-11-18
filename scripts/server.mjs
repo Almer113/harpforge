@@ -4,13 +4,13 @@
 //              (--no-build: start it with the build that's there)
 //   undeploy   stops it
 //   status     says whether it's running, and where
-//              (--json: one line of JSON, for the Home Server Hub — see hub.json)
+//              (--json: one line of JSON, for scripts and process managers)
 //
 // The server runs on its own: closing this terminal doesn't stop it (restarting the computer does).
 //
-// The Home Server Hub (hub.json) runs these same commands, with HUB_RUN=1: then deploy marks
-// its steps (::hub-step lines) and leaves out the hints meant for people. On failure, the last
-// line printed is always the reason, in one line.
+// Run by a process manager (with HUB_RUN=1 set): deploy marks its steps as `::hub-step <id>
+// <label>` lines and leaves out the hints meant for people. On failure, the last line printed
+// is always the reason, in one line.
 
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
@@ -24,13 +24,14 @@ const PORT = Number(process.env.HARPFORGE_PORT) || 5280;
 const PID_FILE = path.join(DATA_DIR, 'server.pid');
 const LOG_FILE = path.join(DATA_DIR, 'server.log');
 
-const HUB = process.env.HUB_RUN === '1';
+/** Run by a process manager, not a person. */
+const MANAGED = process.env.HUB_RUN === '1';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** The start of a step, for the hub's step tracker (only when the hub runs it). */
+/** The start of a step, for a process manager's progress display (only when run by one). */
 const step = (id, label) => {
-  if (HUB) console.log(`::hub-step ${id} ${label}`);
+  if (MANAGED) console.log(`::hub-step ${id} ${label}`);
 };
 
 /** Fails with this reason: printed last, in one line. */
@@ -115,7 +116,7 @@ async function deploy() {
   if (!process.argv.includes('--no-build')) {
     step('build', 'Build');
     console.log('Building the app…');
-    // (Through a shell, for npm; its window hidden — the hub runs this with none.)
+    // (Through a shell, for npm; its window hidden — this may be run with no window of its own.)
     const build = spawnSync('npm run build', { cwd: ROOT, stdio: 'inherit', shell: true, windowsHide: true });
     if (build.status !== 0) fail('The build failed (the errors are above), so HarpForge wasn’t started.');
   } else if (!existsSync(path.join(ROOT, 'dist', 'index.html'))) {
@@ -144,7 +145,7 @@ async function deploy() {
     const h = await health();
     if (h) {
       show(h);
-      if (!HUB) {
+      if (!MANAGED) {
         console.log(`(Its log: ${path.relative(ROOT, LOG_FILE)}. Stop it with: npm run undeploy)`);
         console.log('Other devices: the first time, Windows may ask whether Node may use private networks — allow it for them to connect.');
       }
@@ -218,7 +219,7 @@ async function status() {
 }
 
 /**
- * status --json: one line, for the Home Server Hub. Running (ours, answering or stuck);
+ * status --json: one line, for scripts and process managers. Running (ours, answering or stuck);
  * stopped; or stopped with the port used by another program ("ours": false).
  */
 async function statusJson() {
