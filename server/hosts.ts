@@ -21,6 +21,8 @@ export function allowedHost(host: string | undefined): boolean {
   const name = host.replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase();
   const me = hostname().toLowerCase();
   if (['localhost', '127.0.0.1', '::1', me, `${me}.local`, `${me}.lan`].includes(name)) return true;
+  // Its Tailscale name (MagicDNS): this computer's name in a tailnet, "<name>.<tailnet>.ts.net".
+  if (name.startsWith(`${me}.`) && /^[a-z0-9-]+\.ts\.net$/.test(name.slice(me.length + 1))) return true;
   for (const list of Object.values(networkInterfaces())) for (const a of list ?? []) if (a.address.toLowerCase() === name) return true;
   return false;
 }

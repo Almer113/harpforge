@@ -71,8 +71,27 @@ change: `npm run undeploy`, then `npm run deploy`.
   allow it. On other devices (plain `http://`), browsers turn off the microphone and the
   clipboard API — copying falls back to an older way. The server answers only to
   `localhost`, this computer's addresses and its name (`<name>`, `<name>.local`,
-  `<name>.lan`); other names get 421.
+  `<name>.lan`, and its Tailscale name `<name>.<tailnet>.ts.net`); other names get 421.
 - In development, `npm run dev` serves the same API (`/api/…`) from the same `data/`.
+
+### Installing it as an app
+
+HarpForge can be installed like an app, with its own window, icon and name, and it opens
+without a connection once it has been opened once:
+- **Chrome or Edge (Windows, Mac, Android):** the install icon at the right of the address
+  bar, or the menu's **Install HarpForge** (Edge: **Apps → Install this site as an app**).
+- **iPhone and iPad (Safari):** **Share → Add to Home Screen**.
+
+Browsers allow installing only from `https://` or from this computer itself
+(`http://localhost:5280`), so on another device use the web version
+(https://almer113.github.io/harpforge/) or serve the HarpForge server over `https`
+(e.g. `tailscale serve`); a plain `http://192.168…` or Tailscale address opens it in the
+browser only. Offline, a guest's library works as usual; an account's needs the server.
+
+How it works: `public/manifest.webmanifest` (name, colours, icons) and `public/icons/`
+(drawn by `python scripts/make-icons.py` from the favicon's shapes); the service worker
+`src/pwa/sw.js` keeps a copy of the built app (written into `dist/sw.js` with the build's
+file list by `server/pwa.ts`), never the account API's answers. The dev server doesn't use it.
 
 ### Accounts and guests
 
@@ -189,6 +208,7 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
 | `src/styles/` | Stylesheets by area; `index.css` imports them in cascade order (keep it). Every colour is named in `themes.css` (Dark, Light, Paper); the others use the names only (a test checks) |
 | `server/` | The HarpForge server: the built app, accounts, account libraries (run by Node directly) |
 | `scripts/server.mjs` | `npm run deploy` / `undeploy` / `deploy:status` |
+| `src/pwa`, `server/pwa.ts`, `public/manifest.webmanifest` | Installing it as an app: the service worker (kept copy, offline), the build step that writes `dist/sw.js`, the app's name and icons (`scripts/make-icons.py`) |
 | `scripts/prepare-samples.py` | Turns the VCSL recordings into web-ready, looped samples |
 | `docs/htab-format.md` | The tab format (its examples are checked by a test) |
 | `.github/workflows/pages.yml` | On each push to `main`: check, then build and publish the web version to GitHub Pages (`HARPFORGE_BASE=/harpforge/`, `VITE_HARPFORGE_WEB=1`) |
@@ -235,12 +255,13 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
   MusicXML, MIDI, MuseScore, Guitar Pro); ABC `W:` verses; MIDI words, tempo changes, and
   export with repeats played out and the backing; ChordPro `{chorus}`; every verse in the
   ChordPro, numbered-notation and plain-text exports; MuseScore 3–4 and Guitar Pro 3–8 import.
+- **Since:** installable as an app (name, icons, opening offline); the Tailscale name.
 
 Nothing more is planned for now.
 
 **Deferred** (for later, by choice): set lists; folders and tags; a bend trainer; phone
 and tablet layouts; HTTPS for other devices (microphone and clipboard there); starting the
-server with Windows; an offline (installable) app; online sync.
+server with Windows; online sync.
 
 **Decided against:** choosing a passage by dragging; the Play page's harmonica docked at
 the bottom; sampling your own harmonica; real-instrument backing samples; a per-song

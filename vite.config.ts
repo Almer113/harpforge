@@ -2,6 +2,7 @@ import { defineConfig, type Connect, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { createApi } from './server/api.ts';
 import { DATA_DIR } from './server/config.ts';
+import { harpforgeServiceWorker } from './server/pwa.ts';
 
 /**
  * The HarpForge server's API in the dev server and Vite's preview too (the same data folder).
@@ -36,7 +37,7 @@ export default defineConfig({
   // Where the app is served from: "/" on the HarpForge server, "/harpforge/" on GitHub Pages
   // (set by .github/workflows/pages.yml).
   base: process.env.HARPFORGE_BASE || '/',
-  plugins: [react(), harpforgeApi()],
+  plugins: [react(), harpforgeApi(), harpforgeServiceWorker()],
   server: {
     // (Accounts and songs: not files Vite may hand out by any path, nor watch.)
     fs: { deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/data/**'] },

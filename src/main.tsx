@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { startAccount } from './account/session';
 import { App } from './App';
 import { preloadAudio } from './audio/engine';
+import { registerServiceWorker } from './pwa/register';
 import { preloadFormats } from './state/actions';
 import { startTheme } from './state/theme';
 import './styles/index.css';
@@ -28,3 +29,6 @@ const preload = () => {
 const idle = (window as Window & { requestIdleCallback?: (fn: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
 if (idle) idle(preload, { timeout: 1500 });
 else setTimeout(preload, 500);
+
+// Installable as an app, and opening offline: a kept copy of the app (builds only).
+registerServiceWorker();

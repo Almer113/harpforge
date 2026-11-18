@@ -24,7 +24,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** The deployed server's answer ({ pid, urls }), or null. (Not the dev server, which answers too.) */
 async function health() {
   try {
-    const res = await fetch(`http://127.0.0.1:${PORT}/api/health`, { signal: AbortSignal.timeout(1500) });
+    const res = await fetch(`http://127.0.0.1:${PORT}/api/health`, { signal: AbortSignal.timeout(5000) });
     const body = await res.json();
     return body?.app === 'HarpForge' && body.mode === 'server' ? body : null;
   } catch {
