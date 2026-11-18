@@ -1,6 +1,4 @@
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/lockup-horizontal-dark.svg"><img src="docs/images/lockup-horizontal.svg" alt="HarpForge" height="64"></picture>
-
-# HarpForge
+<h1><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/lockup-horizontal-dark.svg"><img src="docs/images/lockup-horizontal.svg" alt="HarpForge" width="360"></picture></h1>
 
 A harmonica tab studio in the browser: play a virtual harmonica with mouse, keyboard,
 MIDI or your real harmonica through the microphone; write and edit tabs with lyrics,
