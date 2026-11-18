@@ -4,6 +4,7 @@
 
 import { connect, createServer } from 'node:net';
 import { networkInterfaces } from 'node:os';
+import { isTailscale, tailscaleServeUrl } from './hosts.ts';
 
 function answers(host: string, port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -35,9 +36,14 @@ export function localHosts(): string[] {
   return hosts;
 }
 
-/** True if anything uses the port (nothing is touched: it's only asked, and let go). */
-export async function portInUse(port: number): Promise<boolean> {
-  const hosts = localHosts();
+/**
+ * True if anything uses the port (nothing is touched: it's only asked, and let go). Tailscale
+ * Serve answering it on this computer's Tailscale address, handing on to this same port here
+ * (`serveUrl`), doesn't count: that's this server's own https front, not another program.
+ */
+export async function portInUse(port: number, serveUrl: string | null = tailscaleServeUrl(port)): Promise<boolean> {
+  const servePort = serveUrl ? Number(new URL(serveUrl).port || 443) : 0;
+  const hosts = localHosts().filter((h) => !(servePort === port && isTailscale(h)));
   const answered = await Promise.all(hosts.map((h) => answers(h, port)));
   if (answered.some(Boolean)) return true;
   return !(await canListen('::', port)) || !(await canListen('0.0.0.0', port));

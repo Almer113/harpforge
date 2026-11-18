@@ -3,8 +3,8 @@
 import { execFileSync } from 'node:child_process';
 import { hostname, networkInterfaces } from 'node:os';
 
-/** A Tailscale address (100.64.0.0/10). */
-const isTailscale = (ip: string) => /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip);
+/** A Tailscale address: 100.64.0.0/10, or IPv6 fd7a:115c:a1e0::/48. */
+export const isTailscale = (ip: string) => /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip) || /^fd7a:115c:a1e0:/i.test(ip);
 
 /**
  * The addresses the app can be opened at: this computer, then the local network. With

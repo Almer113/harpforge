@@ -8,7 +8,7 @@ import { hostname, tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApi, ipOf, isLocal, viaServe } from './api.ts';
-import { addresses, serveUrlFrom } from './hosts.ts';
+import { addresses, isTailscale, serveUrlFrom } from './hosts.ts';
 
 const TS_HOST = `${hostname().toLowerCase()}.tail734df4.ts.net:5280`;
 /** What Serve sends on: its own headers, under the computer's Tailscale name. */
@@ -55,6 +55,11 @@ describe('Serve’s address', () => {
     expect(serveUrlFrom(status, 5281)).toBeNull();
     expect(serveUrlFrom(null, 5280)).toBeNull();
     expect(serveUrlFrom({ Web: { 'pc.tail734df4.ts.net:5280': { Handlers: { '/': { Proxy: 'http://192.168.1.5:5280' } } } } }, 5280)).toBeNull();
+  });
+
+  it('Tailscale’s addresses, IPv4 and IPv6 (Serve answers on both: not "another program")', () => {
+    for (const ip of ['100.64.0.1', '100.85.105.99', '100.127.255.254', 'fd7a:115c:a1e0::a438:6963']) expect(isTailscale(ip)).toBe(true);
+    for (const ip of ['100.63.255.255', '100.128.0.1', '192.168.1.10', '127.0.0.1', 'fd7a:115c:a1e1::1', '::1']) expect(isTailscale(ip)).toBe(false);
   });
 
   it('is listed, in place of the plain http Tailscale address on the same port', () => {
