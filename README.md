@@ -76,6 +76,13 @@ For scripts and process managers: `node scripts/server.mjs status --json` prints
   clipboard API — copying falls back to an older way. The server answers only to
   `localhost`, this computer's addresses and its name (`<name>`, `<name>.local`,
   `<name>.lan`, and its Tailscale name `<name>.<tailnet>.ts.net`); other names get 421.
+- Over Tailscale with `https` (installing as an app, the microphone, the clipboard): once,
+  `tailscale serve --bg --https=5280 http://127.0.0.1:5280` (HTTPS certificates turned on
+  for the tailnet; undo: `tailscale serve --https=5280 off`). It opens at
+  `https://<name>.<tailnet>.ts.net:5280`, on the tailnet only, and deploy lists that address
+  in place of the plain `http://100.…:5280` one (which Serve then answers instead). Such
+  requests count as the device that sent them, not this computer, and the sign-in cookie
+  is `Secure` there. Restart the server after setting it up for the list to show it.
 - In development, `npm run dev` serves the same API (`/api/…`) from the same `data/`.
 
 ### Installing it as an app
@@ -88,9 +95,8 @@ without a connection once it has been opened once:
 
 Browsers allow installing only from `https://` or from this computer itself
 (`http://localhost:5280`), so on another device use the web version
-(https://almer113.github.io/harpforge/) or serve the HarpForge server over `https`
-(e.g. `tailscale serve`); a plain `http://192.168…` or Tailscale address opens it in the
-browser only. Offline, a guest's library works as usual; an account's needs the server.
+(https://almer113.github.io/harpforge/) or the server over `https` through Tailscale Serve
+(above); a plain `http://192.168…` address opens it in the browser only. Offline, a guest's library works as usual; an account's needs the server.
 
 How it works: `public/manifest.webmanifest` (name, colours, icons) and `public/icons/`
 (the HarpForge mark from the logo kit, which `python scripts/make-icons.py` redraws the same);

@@ -8,6 +8,7 @@
 //   POST /api/account/signout
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { isIP } from 'node:net';
 import { gzipSync } from 'node:zlib';
 import { checkName, createAccounts, createLimits, SESSION_DAYS, UserError, type User } from './accounts.ts';
 
@@ -74,9 +75,41 @@ export function cookie(req: IncomingMessage, name: string): string | undefined {
   return undefined;
 }
 
-/** The session cookie: scripts can't read it, other sites' forms don't send it. (Plain http: not Secure.) */
-const sessionCookie = (token: string) => `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_DAYS * 86400}`;
-const clearCookie = `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
+const LOOPBACK = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+
+/**
+ * Came through Tailscale Serve (https on the tailnet, handed on to this server from this
+ * computer): from loopback, under the computer's Tailscale name (allowedHost has checked it's
+ * this computer's). Not this computer, then: someone on the tailnet.
+ */
+export function viaServe(req: IncomingMessage): boolean {
+  if (!LOOPBACK.includes(req.socket.remoteAddress ?? '')) return false;
+  const name = (req.headers.host ?? '').replace(/:\d+$/, '').toLowerCase();
+  return name.endsWith('.ts.net') || typeof req.headers['tailscale-user-login'] === 'string';
+}
+
+/**
+ * Who's asking, for the sign-in and sign-up limits: the address it came from — through
+ * Serve, the tailnet device's (the last X-Forwarded-For entry, the one Serve added).
+ */
+export function ipOf(req: IncomingMessage): string {
+  if (viaServe(req)) {
+    const forwarded = String(req.headers['x-forwarded-for'] ?? '').split(',').map((s) => s.trim()).filter(Boolean).at(-1);
+    if (forwarded && isIP(forwarded)) return forwarded;
+    return 'tailnet';
+  }
+  return req.socket.remoteAddress ?? '?';
+}
+
+/** Asked from this computer itself (not through Serve, which also comes from here). */
+export const isLocal = (req: IncomingMessage) => LOOPBACK.includes(req.socket.remoteAddress ?? '') && !viaServe(req);
+
+/** Over https: through Serve, which says so (X-Forwarded-Proto). The cookie is Secure then. */
+const isHttps = (req: IncomingMessage) => viaServe(req) && String(req.headers['x-forwarded-proto'] ?? 'https').toLowerCase() === 'https';
+
+/** The session cookie: scripts can't read it, other sites' forms don't send it; Secure over https (plain http: can't be). */
+const sessionCookie = (req: IncomingMessage, token: string) => `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_DAYS * 86400}${isHttps(req) ? '; Secure' : ''}`;
+const clearCookie = (req: IncomingMessage) => `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${isHttps(req) ? '; Secure' : ''}`;
 
 /**
  * A change asked from another site's page is refused: its Origin must be this server's.
@@ -92,9 +125,6 @@ function sameOrigin(req: IncomingMessage): boolean {
   }
 }
 
-const ipOf = (req: IncomingMessage) => req.socket.remoteAddress ?? '?';
-/** Asked from this computer itself. */
-const isLocal = (req: IncomingMessage) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ipOf(req));
 
 /** Handles a request if it's for the API (true), else leaves it (false). */
 export function createApi(opts: ApiOptions) {
@@ -105,7 +135,7 @@ export function createApi(opts: ApiOptions) {
   async function whoIs(req: IncomingMessage, headers: Record<string, string>): Promise<User | null> {
     const token = cookie(req, COOKIE);
     const found = await accounts.sessionUser(token);
-    if (found?.renewed && token) headers['Set-Cookie'] = sessionCookie(token);
+    if (found?.renewed && token) headers['Set-Cookie'] = sessionCookie(req, token);
     return found?.user ?? null;
   }
 
@@ -135,7 +165,7 @@ export function createApi(opts: ApiOptions) {
         // (Only an account made counts toward the limit — not a name taken, or one that can't be used.)
         limits.signedUp(ipOf(req));
         const token = await accounts.startSession(user);
-        return sendJson(res, 201, { user: { name: user.name } }, { 'Set-Cookie': sessionCookie(token) });
+        return sendJson(res, 201, { user: { name: user.name } }, { 'Set-Cookie': sessionCookie(req, token) });
       }
       if (pathname === '/api/account/signin' && method === 'POST') {
         const body = (await readBody<{ name?: unknown; password?: unknown }>(req, 10000)) ?? {};
@@ -154,11 +184,11 @@ export function createApi(opts: ApiOptions) {
         }
         limits.succeeded(ip);
         const token = await accounts.startSession(user);
-        return sendJson(res, 200, { user: { name: user.name } }, { 'Set-Cookie': sessionCookie(token) });
+        return sendJson(res, 200, { user: { name: user.name } }, { 'Set-Cookie': sessionCookie(req, token) });
       }
       if (pathname === '/api/account/signout' && method === 'POST') {
         await accounts.endSession(cookie(req, COOKIE));
-        return sendJson(res, 200, { user: null }, { 'Set-Cookie': clearCookie });
+        return sendJson(res, 200, { user: null }, { 'Set-Cookie': clearCookie(req) });
       }
     }
 
