@@ -4,8 +4,13 @@
 //              (--no-build: start it with the build that's there)
 //   undeploy   stops it
 //   status     says whether it's running, and where
+//              (--json: one line of JSON, for the Home Server Hub — see hub.json)
 //
 // The server runs on its own: closing this terminal doesn't stop it (restarting the computer does).
+//
+// The Home Server Hub (hub.json) runs these same commands, with HUB_RUN=1: then deploy marks
+// its steps (::hub-step lines) and leaves out the hints meant for people. On failure, the last
+// line printed is always the reason, in one line.
 
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
@@ -19,12 +24,25 @@ const PORT = Number(process.env.HARPFORGE_PORT) || 5280;
 const PID_FILE = path.join(DATA_DIR, 'server.pid');
 const LOG_FILE = path.join(DATA_DIR, 'server.log');
 
+const HUB = process.env.HUB_RUN === '1';
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** The deployed server's answer ({ pid, urls }), or null. (Not the dev server, which answers too.) */
-async function health() {
+/** The start of a step, for the hub's step tracker (only when the hub runs it). */
+const step = (id, label) => {
+  if (HUB) console.log(`::hub-step ${id} ${label}`);
+};
+
+/** Fails with this reason: printed last, in one line. */
+function fail(reason) {
+  console.error(reason);
+  process.exit(1);
+}
+
+/** The deployed server's answer ({ pid, startedAt, version, urls }), or null. (Not the dev server, which answers too.) */
+async function health(timeoutMs = 5000) {
   try {
-    const res = await fetch(`http://127.0.0.1:${PORT}/api/health`, { signal: AbortSignal.timeout(5000) });
+    const res = await fetch(`http://127.0.0.1:${PORT}/api/health`, { signal: AbortSignal.timeout(timeoutMs) });
     const body = await res.json();
     return body?.app === 'HarpForge' && body.mode === 'server' ? body : null;
   } catch {
@@ -48,9 +66,10 @@ function savedRun() {
  * (A process id left in an old pid file may belong to anything since — never stopped then.)
  */
 function isOurServer(pid) {
+  if (!isAlive(pid)) return false;
   let line = '';
   if (process.platform === 'win32') {
-    const r = spawnSync('powershell', ['-NoProfile', '-Command', `(Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}").CommandLine`], { encoding: 'utf8' });
+    const r = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', `(Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}").CommandLine`], { encoding: 'utf8', windowsHide: true, timeout: 8000 });
     line = r.stdout ?? '';
   } else {
     try {
@@ -60,6 +79,22 @@ function isOurServer(pid) {
     }
   }
   return /server[\\/]main\.ts/.test(line);
+}
+
+/** Whether a process with this id exists at all (asked only; nothing is sent to it). */
+function isAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === 'EPERM';
+  }
+}
+
+/** Waits (up to `ms`) until nothing uses the port. True if it's free. */
+async function portFreed(ms) {
+  for (const end = Date.now() + ms; Date.now() < end; await sleep(250)) if (!(await portInUse(PORT))) return true;
+  return !(await portInUse(PORT));
 }
 
 function show(h) {
@@ -75,21 +110,18 @@ async function deploy() {
     return;
   }
   if (await portInUse(PORT)) {
-    console.error(`Port ${PORT} is in use by another program, so HarpForge wasn't started (nothing was changed).`);
-    console.error('To use another port: set HARPFORGE_PORT, e.g.  HARPFORGE_PORT=5281 npm run deploy');
-    process.exit(1);
+    fail(`Port ${PORT} is in use by another program, so HarpForge wasn't started (nothing was changed; for another port set HARPFORGE_PORT, e.g. HARPFORGE_PORT=5281 npm run deploy).`);
   }
   if (!process.argv.includes('--no-build')) {
+    step('build', 'Build');
     console.log('Building the app…');
-    const build = spawnSync('npm run build', { cwd: ROOT, stdio: 'inherit', shell: true });
-    if (build.status !== 0) {
-      console.error('The build failed, so HarpForge wasn’t started.');
-      process.exit(1);
-    }
+    // (Through a shell, for npm; its window hidden — the hub runs this with none.)
+    const build = spawnSync('npm run build', { cwd: ROOT, stdio: 'inherit', shell: true, windowsHide: true });
+    if (build.status !== 0) fail('The build failed (the errors are above), so HarpForge wasn’t started.');
   } else if (!existsSync(path.join(ROOT, 'dist', 'index.html'))) {
-    console.error('There’s no build yet: run npm run deploy (without --no-build).');
-    process.exit(1);
+    fail('There’s no build yet: run npm run deploy (without --no-build).');
   }
+  step('start', 'Start');
   mkdirSync(DATA_DIR, { recursive: true });
   // (The log kept small: past 1 MB the old one becomes server.log.1.)
   try {
@@ -112,15 +144,20 @@ async function deploy() {
     const h = await health();
     if (h) {
       show(h);
-      console.log(`(Its log: ${path.relative(ROOT, LOG_FILE)}. Stop it with: npm run undeploy)`);
-      console.log('Other devices: the first time, Windows may ask whether Node may use private networks — allow it for them to connect.');
+      if (!HUB) {
+        console.log(`(Its log: ${path.relative(ROOT, LOG_FILE)}. Stop it with: npm run undeploy)`);
+        console.log('Other devices: the first time, Windows may ask whether Node may use private networks — allow it for them to connect.');
+      }
       return;
     }
     if (child.exitCode !== null) break;
   }
-  console.error(`HarpForge didn’t start. See ${path.relative(ROOT, LOG_FILE)}:`);
-  console.error(readFileSync(LOG_FILE, 'utf8').split('\n').slice(-12).join('\n'));
-  process.exit(1);
+  // The log's end, then the reason last: its last line, if it says anything.
+  const tail = readFileSync(LOG_FILE, 'utf8').split(/\r?\n/).filter((l) => l.trim()).slice(-12);
+  console.error(`The end of ${path.relative(ROOT, LOG_FILE)}:`);
+  console.error(tail.join('\n'));
+  const last = tail.at(-1)?.trim().replace(/^\S+Z\s+/, '');
+  fail(`HarpForge didn’t start${last ? `: ${last.slice(0, 160)}` : ''} (see ${path.relative(ROOT, LOG_FILE)}).`);
 }
 
 async function undeploy() {
@@ -134,14 +171,16 @@ async function undeploy() {
         .then((r) => r.ok)
         .catch(() => false);
     }
-    if (!asked) {
+    // (Asked, it finishes what's under way — ten seconds at most; then, or if it couldn't be asked, it's ended.)
+    if (asked) for (let i = 0; i < 48 && isAlive(h.pid); i++) await sleep(250);
+    if (isAlive(h.pid)) {
       try {
         process.kill(h.pid);
       } catch {
         /* already gone */
       }
     }
-    for (let i = 0; i < 20 && (await health()); i++) await sleep(250);
+    await gone(h.pid);
     rmSync(PID_FILE, { force: true });
     console.log(`HarpForge stopped (process ${h.pid}).`);
     return;
@@ -153,6 +192,7 @@ async function undeploy() {
     } catch {
       /* already gone */
     }
+    await gone(run.pid);
     rmSync(PID_FILE, { force: true });
     console.log(`HarpForge stopped (process ${run.pid}, which wasn’t answering).`);
     return;
@@ -161,17 +201,44 @@ async function undeploy() {
   console.log('HarpForge isn’t running.');
 }
 
+/** After stopping it: its process gone and the port let go (or a one-line reason, and exit 1). */
+async function gone(pid) {
+  for (let i = 0; i < 20 && isAlive(pid); i++) await sleep(250);
+  if (isAlive(pid)) fail(`HarpForge (process ${pid}) didn’t stop.`);
+  if (!(await portFreed(5000))) {
+    if (await health(2000)) fail(`HarpForge stopped (process ${pid}), but another HarpForge server is answering on port ${PORT}.`);
+    console.log(`(Port ${PORT} is still in use, by another program.)`);
+  }
+}
+
 async function status() {
   const h = await health();
   if (h) show(h);
   else console.log(`HarpForge isn’t running. (Start it with: npm run deploy)`);
 }
 
+/**
+ * status --json: one line, for the Home Server Hub. Running (ours, answering or stuck);
+ * stopped; or stopped with the port used by another program ("ours": false).
+ */
+async function statusJson() {
+  const line = (v) => console.log(JSON.stringify(v));
+  const h = await health(1500);
+  if (h) {
+    const since = Number.isFinite(h.startedAt) ? new Date(h.startedAt).toISOString() : undefined;
+    return line({ running: true, ours: true, pid: h.pid, since, version: h.version });
+  }
+  const run = savedRun();
+  if (run && isOurServer(run.pid)) return line({ running: true, ours: true, pid: run.pid, message: 'Its process is there, but it isn’t answering.' });
+  if (await portInUse(PORT)) return line({ running: false, ours: false, message: `Port ${PORT} is in use by another program.` });
+  return line({ running: false });
+}
+
 const command = process.argv[2];
 if (command === 'deploy') await deploy();
 else if (command === 'undeploy') await undeploy();
-else if (command === 'status') await status();
-else {
-  console.error('Usage: node scripts/server.mjs deploy [--no-build] | undeploy | status');
-  process.exit(1);
-}
+else if (command === 'status' && process.argv.includes('--json')) {
+  // (Something went wrong in finding out: exit 1, the reason last — not "stopped".)
+  await statusJson().catch((e) => fail(`Couldn’t tell whether HarpForge is running: ${e?.message ?? e}`));
+} else if (command === 'status') await status();
+else fail('Usage: node scripts/server.mjs deploy [--no-build] | undeploy | status [--json]');

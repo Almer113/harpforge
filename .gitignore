@@ -8,3 +8,6 @@ dist
 # TypeScript's build cache, and Claude Code's settings on this computer
 *.tsbuildinfo
 /.claude/
+
+# The Home Server Hub's file for this PC (its own paths and Tailscale name): kept local
+/hub.json

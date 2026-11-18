@@ -1,19 +1,41 @@
 // The HarpForge server: the built app and its API, on this computer and the local network.
 // Started in the background by `npm run deploy`, stopped by `npm run undeploy`.
 
+import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createApi } from './api.ts';
 import { addresses, allowedHost } from './hosts.ts';
-import { DATA_DIR, DIST_DIR, PID_FILE, PORT } from './config.ts';
+import { DATA_DIR, DIST_DIR, PID_FILE, PORT, ROOT } from './config.ts';
 import { portInUse } from './port.ts';
 import { serveStatic } from './static.ts';
 
 /** This run's token: in the pid file (this computer only), for undeploy to ask it to stop. */
 const token = randomBytes(24).toString('hex');
 const urls = addresses(PORT);
+
+/**
+ * What's running: the package's version and the commit it was started from, e.g.
+ * "0.1.0+3365639" (in /api/health on this computer, for `status --json`).
+ */
+const version = (() => {
+  let v = '0.0.0';
+  try {
+    v = String(JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version ?? v);
+  } catch {
+    /* no package.json: the bare default */
+  }
+  try {
+    const commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT, encoding: 'utf8', timeout: 3000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    if (/^[0-9a-f]{4,40}$/.test(commit)) v += `+${commit}`;
+  } catch {
+    /* not a git checkout, or no git: the version alone */
+  }
+  return v;
+})();
 
 /** Requests being answered now; and whether it's stopping (new ones are turned away). */
 let inFlight = 0;
@@ -58,7 +80,7 @@ const server = createServer((req, res) => {
         return;
       }
       // ("server": this deployed one, which deploy / undeploy may start and stop; not the dev server.)
-      if (await api(req, res, { urls, mode: 'server' })) return;
+      if (await api(req, res, { urls, mode: 'server', version })) return;
       if (await serveStatic(req, res, DIST_DIR)) return;
       res.writeHead(405).end();
     } catch (e) {
