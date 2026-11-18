@@ -18,6 +18,9 @@
         }
       } catch (e) {}
     </script>
+    <!-- The HarpForge mark (from the logo kit): the ICO for browsers without SVG favicons;
+         the SVG is deep brass on light browser chrome, brass on dark. -->
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <!-- Installing it as an app: its name, icons and colours (public/manifest.webmanifest,
          public/icons/ — drawn by scripts/make-icons.py). -->
@@ -27,6 +30,15 @@
     <meta name="apple-mobile-web-app-title" content="HarpForge" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <!-- Link previews (chats, social sites): the image's address in full, as previewers need
+         it — the web version's, public/og-image.png. -->
+    <meta property="og:title" content="HarpForge" />
+    <meta property="og:description" content="A harmonica tab studio: play, write, practise and perform harmonica tabs." />
+    <meta property="og:image" content="https://almer113.github.io/harpforge/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="HarpForge" />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />

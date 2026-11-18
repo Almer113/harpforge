@@ -28,9 +28,15 @@ export function precacheList(built: string[], publicFiles: string[]): string[] {
   return [...new Set(all)].sort();
 }
 
-/** The service worker's code for these files; its version changes whenever they do. */
-export function serviceWorkerSource(template: string, files: string[]): string {
-  const version = createHash('sha256').update(files.join('\n')).digest('hex').slice(0, 12);
+/**
+ * The service worker's code for these files. Its version changes whenever their names or
+ * `contents` do — public/'s files keep their names when they change (a new icon), so
+ * their contents count too: a new version is what makes installed copies fetch them again.
+ */
+export function serviceWorkerSource(template: string, files: string[], contents: (string | Uint8Array)[] = []): string {
+  const hash = createHash('sha256').update(files.join('\n'));
+  for (const c of contents) hash.update('\0').update(c);
+  const version = hash.digest('hex').slice(0, 12);
   return template.replace('self.HF_BUILD_FILES', JSON.stringify(files)).replace('HF_BUILD_VERSION', version);
 }
 
@@ -48,8 +54,18 @@ export function harpforgeServiceWorker() {
       _options: unknown,
       bundle: Record<string, unknown>,
     ) {
-      const files = precacheList(Object.keys(bundle), publicDir ? filesIn(publicDir) : []);
-      this.emitFile({ type: 'asset', fileName: 'sw.js', source: serviceWorkerSource(readFileSync(TEMPLATE, 'utf8'), files) });
+      const fromPublic = publicDir ? filesIn(publicDir) : [];
+      const files = precacheList(Object.keys(bundle), fromPublic);
+      const contents = [
+        ...Object.keys(bundle)
+          .sort()
+          .map((name) => {
+            const out = bundle[name] as { code?: string; source?: string | Uint8Array };
+            return out.code ?? out.source ?? '';
+          }),
+        ...fromPublic.filter((f) => files.includes(f)).map((f) => readFileSync(path.join(publicDir, f))),
+      ];
+      this.emitFile({ type: 'asset', fileName: 'sw.js', source: serviceWorkerSource(readFileSync(TEMPLATE, 'utf8'), files, contents) });
     },
   };
 }

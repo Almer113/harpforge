@@ -1,3 +1,5 @@
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/lockup-horizontal-dark.svg"><img src="docs/images/lockup-horizontal.svg" alt="HarpForge" height="64"></picture>
+
 # HarpForge
 
 A harmonica tab studio in the browser: play a virtual harmonica with mouse, keyboard,
@@ -89,7 +91,9 @@ Browsers allow installing only from `https://` or from this computer itself
 browser only. Offline, a guest's library works as usual; an account's needs the server.
 
 How it works: `public/manifest.webmanifest` (name, colours, icons) and `public/icons/`
-(drawn by `python scripts/make-icons.py` from the favicon's shapes); the service worker
+(the HarpForge mark from the logo kit, which `python scripts/make-icons.py` redraws the same);
+the favicon (`public/favicon.svg`, `.ico`) and the link-preview image (`public/og-image.png`)
+are the kit's too. The service worker
 `src/pwa/sw.js` keeps a copy of the built app (written into `dist/sw.js` with the build's
 file list by `server/pwa.ts`), never the account API's answers. The dev server doesn't use it.
 
@@ -255,7 +259,8 @@ See [docs/htab-format.md](docs/htab-format.md) for the tab format.
   MusicXML, MIDI, MuseScore, Guitar Pro); ABC `W:` verses; MIDI words, tempo changes, and
   export with repeats played out and the backing; ChordPro `{chorus}`; every verse in the
   ChordPro, numbered-notation and plain-text exports; MuseScore 3–4 and Guitar Pro 3–8 import.
-- **Since:** installable as an app (name, icons, opening offline); the Tailscale name.
+- **Since:** installable as an app (name, icons, opening offline); the Tailscale name; the
+  new logo (five-hole mark, favicon, icons, link previews).
 
 Nothing more is planned for now.
 

@@ -267,12 +267,12 @@ export function App() {
     <div className="app">
       <nav className="topbar" ref={topbar}>
         <div className="brand">
-          <svg viewBox="0 0 64 64" width="28" height="28" aria-hidden>
-            <rect x="4" y="18" width="56" height="28" rx="6" fill="var(--brass)" />
-            <rect x="8" y="27" width="48" height="10" rx="2" fill="var(--bg)" />
-            <g fill="var(--brass)">
-              {[15, 23, 31, 39, 47].map((x) => <rect key={x} x={x} y="27" width="2" height="10" />)}
-            </g>
+          {/* The HarpForge mark (as public/favicon.svg): five holes cut out of the body. */}
+          <svg viewBox="0 0 256 256" width="28" height="28" aria-hidden>
+            <path
+              fill="var(--brass)"
+              d="M40 80H216C229.25 80 240 90.75 240 104V152C240 165.25 229.25 176 216 176H40C26.75 176 16 165.25 16 152V104C16 90.75 26.75 80 40 80ZM36 112V144H60V112ZM76 112V144H100V112ZM116 112V144H140V112ZM156 112V144H180V112ZM196 112V144H220V112Z"
+            />
           </svg>
           <span>HarpForge</span>
         </div>

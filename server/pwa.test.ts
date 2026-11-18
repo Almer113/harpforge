@@ -55,6 +55,36 @@ describe('the service worker', () => {
     const version = (s: string) => /const VERSION = '([0-9a-f]{12})'/.exec(s)?.[1];
     expect(version(a)).toBeDefined();
     expect(version(a)).not.toBe(version(b));
+    // A file that changes under the same name (a new icon) gives a new version too.
+    const files = ['index.html', 'icons/icon-192.png'];
+    expect(version(serviceWorkerSource(template, files, ['old icon']))).not.toBe(version(serviceWorkerSource(template, files, ['new icon'])));
+    expect(version(serviceWorkerSource(template, files, ['same']))).toBe(version(serviceWorkerSource(template, files, ['same'])));
+  });
+});
+
+describe('the HarpForge mark', () => {
+  const holes = (d: string) => (d.match(/M\d+ 112V144H\d+V112Z/g) ?? []).length;
+
+  it('five holes, in the favicon and the header (never more: they blur when small)', () => {
+    const svg = read('public/favicon.svg').toString();
+    const app = read('src/App.tsx').toString();
+    expect(holes(svg)).toBe(5);
+    expect(holes(/<svg viewBox="0 0 256 256"[\s\S]*?d="([^"]+)"/.exec(app)?.[1] ?? '')).toBe(5);
+  });
+
+  it('the favicon: deep brass on light browser chrome, the bright brass only on dark', () => {
+    const svg = read('public/favicon.svg').toString();
+    expect(svg).toMatch(/^<svg[^>]*><title>HarpForge<\/title><style>path\{fill:#8f5e14\}@media \(prefers-color-scheme:dark\)\{path\{fill:#e3a948\}\}<\/style>/);
+  });
+
+  it('the page links the ICO before the SVG, and a 1200×630 link-preview image', () => {
+    const html = read('index.html').toString();
+    expect(html.indexOf('href="/favicon.ico"')).toBeGreaterThan(0);
+    expect(html.indexOf('href="/favicon.ico"')).toBeLessThan(html.indexOf('href="/favicon.svg"'));
+    expect(html).toContain('<meta property="og:image" content="https://almer113.github.io/harpforge/og-image.png" />');
+    expect(html).toContain('<meta name="twitter:card" content="summary_large_image" />');
+    expect(pngSize('public/og-image.png')).toEqual([1200, 630]);
+    expect(read('public/favicon.ico').readUInt16LE(2)).toBe(1); // an icon file
   });
 });
 
